@@ -37,6 +37,7 @@ namespace UI.WinUi.Negocio
             this.txtTelefono = new System.Windows.Forms.TextBox();
             this.lblTelefono = new System.Windows.Forms.Label();
             this.txtDNI = new System.Windows.Forms.TextBox();
+            this.btnCopiarDNI = new System.Windows.Forms.Button();
             this.lblDNI = new System.Windows.Forms.Label();
             this.txtApellido = new System.Windows.Forms.TextBox();
             this.lblApellido = new System.Windows.Forms.Label();
@@ -72,19 +73,21 @@ namespace UI.WinUi.Negocio
             this.groupBoxDatosCliente.Controls.Add(this.lblEmail);
             this.groupBoxDatosCliente.Controls.Add(this.txtTelefono);
             this.groupBoxDatosCliente.Controls.Add(this.lblTelefono);
+            this.groupBoxDatosCliente.Controls.Add(this.btnCopiarDNI);
             this.groupBoxDatosCliente.Controls.Add(this.txtDNI);
             this.groupBoxDatosCliente.Controls.Add(this.lblDNI);
             this.groupBoxDatosCliente.Controls.Add(this.txtApellido);
             this.groupBoxDatosCliente.Controls.Add(this.lblApellido);
             this.groupBoxDatosCliente.Controls.Add(this.txtNombre);
             this.groupBoxDatosCliente.Controls.Add(this.lblNombre);
-            this.groupBoxDatosCliente.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.groupBoxDatosCliente.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Bold);
+            this.groupBoxDatosCliente.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(73)))), ((int)(((byte)(94)))));
             this.groupBoxDatosCliente.Location = new System.Drawing.Point(12, 70);
             this.groupBoxDatosCliente.Name = "groupBoxDatosCliente";
-            this.groupBoxDatosCliente.Size = new System.Drawing.Size(400, 350);
+            this.groupBoxDatosCliente.Size = new System.Drawing.Size(400, 410);
             this.groupBoxDatosCliente.TabIndex = 0;
             this.groupBoxDatosCliente.TabStop = false;
-            this.groupBoxDatosCliente.Text = "Datos del Cliente";
+            this.groupBoxDatosCliente.Text = "📋 Datos del Cliente";
             //
             // chkActivo
             //
@@ -157,8 +160,18 @@ namespace UI.WinUi.Negocio
             this.txtDNI.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.txtDNI.Location = new System.Drawing.Point(120, 145);
             this.txtDNI.Name = "txtDNI";
-            this.txtDNI.Size = new System.Drawing.Size(260, 27);
+            this.txtDNI.Size = new System.Drawing.Size(180, 27);
             this.txtDNI.TabIndex = 5;
+            //
+            // btnCopiarDNI
+            //
+            this.btnCopiarDNI.Font = new System.Drawing.Font("Segoe UI", 8F);
+            this.btnCopiarDNI.Location = new System.Drawing.Point(305, 145);
+            this.btnCopiarDNI.Name = "btnCopiarDNI";
+            this.btnCopiarDNI.Size = new System.Drawing.Size(75, 27);
+            this.btnCopiarDNI.TabIndex = 14;
+            this.btnCopiarDNI.Text = "📋 Copiar";
+            this.btnCopiarDNI.UseVisualStyleBackColor = true;
             //
             // lblDNI
             //
@@ -190,10 +203,11 @@ namespace UI.WinUi.Negocio
             //
             // txtNombre
             //
-            this.txtNombre.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.txtNombre.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.txtNombre.Font = new System.Drawing.Font("Segoe UI", 10F);
             this.txtNombre.Location = new System.Drawing.Point(120, 25);
             this.txtNombre.Name = "txtNombre";
-            this.txtNombre.Size = new System.Drawing.Size(260, 27);
+            this.txtNombre.Size = new System.Drawing.Size(260, 30);
             this.txtNombre.TabIndex = 1;
             //
             // lblNombre
@@ -213,113 +227,124 @@ namespace UI.WinUi.Negocio
             this.groupBoxAcciones.Controls.Add(this.btnModificar);
             this.groupBoxAcciones.Controls.Add(this.btnGuardar);
             this.groupBoxAcciones.Controls.Add(this.btnNuevo);
-            this.groupBoxAcciones.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
-            this.groupBoxAcciones.Location = new System.Drawing.Point(12, 430);
+            this.groupBoxAcciones.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Bold);
+            this.groupBoxAcciones.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(73)))), ((int)(((byte)(94)))));
+            this.groupBoxAcciones.Location = new System.Drawing.Point(12, 490);
             this.groupBoxAcciones.Name = "groupBoxAcciones";
-            this.groupBoxAcciones.Size = new System.Drawing.Size(400, 100);
+            this.groupBoxAcciones.Size = new System.Drawing.Size(400, 225);
             this.groupBoxAcciones.TabIndex = 1;
             this.groupBoxAcciones.TabStop = false;
-            this.groupBoxAcciones.Text = "Acciones";
+            this.groupBoxAcciones.Text = "⚙️ Acciones";
             //
             // btnVolver
             //
-            this.btnVolver.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(236)))), ((int)(((byte)(240)))), ((int)(((byte)(241)))));
+            this.btnVolver.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(149)))), ((int)(((byte)(165)))), ((int)(((byte)(166)))));
             this.btnVolver.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnVolver.FlatAppearance.BorderSize = 0;
             this.btnVolver.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnVolver.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.btnVolver.Location = new System.Drawing.Point(300, 30);
+            this.btnVolver.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
+            this.btnVolver.ForeColor = System.Drawing.Color.White;
+            this.btnVolver.Location = new System.Drawing.Point(20, 160);
             this.btnVolver.Name = "btnVolver";
-            this.btnVolver.Size = new System.Drawing.Size(80, 50);
+            this.btnVolver.Size = new System.Drawing.Size(360, 50);
             this.btnVolver.TabIndex = 4;
-            this.btnVolver.Text = "Volver";
+            this.btnVolver.Text = "🔙 Volver al Menú";
             this.btnVolver.UseVisualStyleBackColor = false;
             //
             // btnEliminar
             //
             this.btnEliminar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(231)))), ((int)(((byte)(76)))), ((int)(((byte)(60)))));
             this.btnEliminar.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnEliminar.FlatAppearance.BorderSize = 0;
             this.btnEliminar.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnEliminar.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnEliminar.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.btnEliminar.ForeColor = System.Drawing.Color.White;
-            this.btnEliminar.Location = new System.Drawing.Point(228, 30);
+            this.btnEliminar.Location = new System.Drawing.Point(200, 100);
             this.btnEliminar.Name = "btnEliminar";
-            this.btnEliminar.Size = new System.Drawing.Size(66, 50);
+            this.btnEliminar.Size = new System.Drawing.Size(180, 50);
             this.btnEliminar.TabIndex = 3;
-            this.btnEliminar.Text = "Eliminar";
+            this.btnEliminar.Text = "🗑️ Eliminar";
             this.btnEliminar.UseVisualStyleBackColor = false;
             //
             // btnModificar
             //
             this.btnModificar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(241)))), ((int)(((byte)(196)))), ((int)(((byte)(15)))));
             this.btnModificar.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnModificar.FlatAppearance.BorderSize = 0;
             this.btnModificar.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnModificar.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnModificar.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.btnModificar.ForeColor = System.Drawing.Color.White;
-            this.btnModificar.Location = new System.Drawing.Point(152, 30);
+            this.btnModificar.Location = new System.Drawing.Point(20, 100);
             this.btnModificar.Name = "btnModificar";
-            this.btnModificar.Size = new System.Drawing.Size(70, 50);
+            this.btnModificar.Size = new System.Drawing.Size(170, 50);
             this.btnModificar.TabIndex = 2;
-            this.btnModificar.Text = "Modificar";
+            this.btnModificar.Text = "✏️ Modificar";
             this.btnModificar.UseVisualStyleBackColor = false;
             //
             // btnGuardar
             //
-            this.btnGuardar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(38)))), ((int)(((byte)(166)))), ((int)(((byte)(154)))));
+            this.btnGuardar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(46)))), ((int)(((byte)(204)))), ((int)(((byte)(113)))));
             this.btnGuardar.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnGuardar.FlatAppearance.BorderSize = 0;
             this.btnGuardar.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnGuardar.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnGuardar.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.btnGuardar.ForeColor = System.Drawing.Color.White;
-            this.btnGuardar.Location = new System.Drawing.Point(76, 30);
+            this.btnGuardar.Location = new System.Drawing.Point(200, 40);
             this.btnGuardar.Name = "btnGuardar";
-            this.btnGuardar.Size = new System.Drawing.Size(70, 50);
+            this.btnGuardar.Size = new System.Drawing.Size(180, 50);
             this.btnGuardar.TabIndex = 1;
-            this.btnGuardar.Text = "Guardar";
+            this.btnGuardar.Text = "💾 Guardar";
             this.btnGuardar.UseVisualStyleBackColor = false;
             //
             // btnNuevo
             //
             this.btnNuevo.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(152)))), ((int)(((byte)(219)))));
             this.btnNuevo.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnNuevo.FlatAppearance.BorderSize = 0;
             this.btnNuevo.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnNuevo.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnNuevo.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.btnNuevo.ForeColor = System.Drawing.Color.White;
-            this.btnNuevo.Location = new System.Drawing.Point(6, 30);
+            this.btnNuevo.Location = new System.Drawing.Point(20, 40);
             this.btnNuevo.Name = "btnNuevo";
-            this.btnNuevo.Size = new System.Drawing.Size(64, 50);
+            this.btnNuevo.Size = new System.Drawing.Size(170, 50);
             this.btnNuevo.TabIndex = 0;
-            this.btnNuevo.Text = "Nuevo";
+            this.btnNuevo.Text = "➕ Nuevo Cliente";
             this.btnNuevo.UseVisualStyleBackColor = false;
             //
             // dgvClientes
             //
+            this.dgvClientes.BackgroundColor = System.Drawing.Color.White;
+            this.dgvClientes.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.dgvClientes.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.dgvClientes.Location = new System.Drawing.Point(420, 70);
             this.dgvClientes.Name = "dgvClientes";
             this.dgvClientes.RowHeadersWidth = 51;
-            this.dgvClientes.RowTemplate.Height = 24;
-            this.dgvClientes.Size = new System.Drawing.Size(660, 240);
+            this.dgvClientes.RowTemplate.Height = 28;
+            this.dgvClientes.Size = new System.Drawing.Size(910, 300);
             this.dgvClientes.TabIndex = 2;
             //
             // txtBuscar
             //
-            this.txtBuscar.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.txtBuscar.Location = new System.Drawing.Point(540, 25);
+            this.txtBuscar.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.txtBuscar.Font = new System.Drawing.Font("Segoe UI", 10F);
+            this.txtBuscar.Location = new System.Drawing.Point(540, 23);
             this.txtBuscar.Name = "txtBuscar";
-            this.txtBuscar.Size = new System.Drawing.Size(420, 27);
+            this.txtBuscar.Size = new System.Drawing.Size(660, 30);
             this.txtBuscar.TabIndex = 3;
             //
             // btnBuscar
             //
             this.btnBuscar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(152)))), ((int)(((byte)(219)))));
             this.btnBuscar.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnBuscar.FlatAppearance.BorderSize = 0;
             this.btnBuscar.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnBuscar.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnBuscar.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Bold);
             this.btnBuscar.ForeColor = System.Drawing.Color.White;
-            this.btnBuscar.Location = new System.Drawing.Point(970, 20);
+            this.btnBuscar.Location = new System.Drawing.Point(1210, 20);
             this.btnBuscar.Name = "btnBuscar";
-            this.btnBuscar.Size = new System.Drawing.Size(110, 35);
+            this.btnBuscar.Size = new System.Drawing.Size(120, 35);
             this.btnBuscar.TabIndex = 4;
-            this.btnBuscar.Text = "Buscar";
+            this.btnBuscar.Text = "🔍 Buscar";
             this.btnBuscar.UseVisualStyleBackColor = false;
             //
             // label1
@@ -337,58 +362,63 @@ namespace UI.WinUi.Negocio
             this.groupBoxMascotas.Controls.Add(this.btnEliminarMascota);
             this.groupBoxMascotas.Controls.Add(this.btnAgregarMascota);
             this.groupBoxMascotas.Controls.Add(this.dgvMascotas);
-            this.groupBoxMascotas.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
-            this.groupBoxMascotas.Location = new System.Drawing.Point(420, 320);
+            this.groupBoxMascotas.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Bold);
+            this.groupBoxMascotas.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(73)))), ((int)(((byte)(94)))));
+            this.groupBoxMascotas.Location = new System.Drawing.Point(420, 385);
             this.groupBoxMascotas.Name = "groupBoxMascotas";
-            this.groupBoxMascotas.Size = new System.Drawing.Size(660, 210);
+            this.groupBoxMascotas.Size = new System.Drawing.Size(910, 330);
             this.groupBoxMascotas.TabIndex = 6;
             this.groupBoxMascotas.TabStop = false;
-            this.groupBoxMascotas.Text = "Mascotas del Cliente";
+            this.groupBoxMascotas.Text = "🐾 Mascotas del Cliente";
             //
             // btnEliminarMascota
             //
             this.btnEliminarMascota.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(231)))), ((int)(((byte)(76)))), ((int)(((byte)(60)))));
             this.btnEliminarMascota.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnEliminarMascota.FlatAppearance.BorderSize = 0;
             this.btnEliminarMascota.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnEliminarMascota.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnEliminarMascota.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Bold);
             this.btnEliminarMascota.ForeColor = System.Drawing.Color.White;
-            this.btnEliminarMascota.Location = new System.Drawing.Point(490, 160);
+            this.btnEliminarMascota.Location = new System.Drawing.Point(710, 270);
             this.btnEliminarMascota.Name = "btnEliminarMascota";
-            this.btnEliminarMascota.Size = new System.Drawing.Size(150, 35);
+            this.btnEliminarMascota.Size = new System.Drawing.Size(180, 45);
             this.btnEliminarMascota.TabIndex = 2;
-            this.btnEliminarMascota.Text = "Eliminar Mascota";
+            this.btnEliminarMascota.Text = "❌ Eliminar Mascota";
             this.btnEliminarMascota.UseVisualStyleBackColor = false;
             //
             // btnAgregarMascota
             //
-            this.btnAgregarMascota.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(38)))), ((int)(((byte)(166)))), ((int)(((byte)(154)))));
+            this.btnAgregarMascota.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(46)))), ((int)(((byte)(204)))), ((int)(((byte)(113)))));
             this.btnAgregarMascota.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnAgregarMascota.FlatAppearance.BorderSize = 0;
             this.btnAgregarMascota.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnAgregarMascota.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.btnAgregarMascota.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Bold);
             this.btnAgregarMascota.ForeColor = System.Drawing.Color.White;
-            this.btnAgregarMascota.Location = new System.Drawing.Point(20, 160);
+            this.btnAgregarMascota.Location = new System.Drawing.Point(20, 270);
             this.btnAgregarMascota.Name = "btnAgregarMascota";
-            this.btnAgregarMascota.Size = new System.Drawing.Size(150, 35);
+            this.btnAgregarMascota.Size = new System.Drawing.Size(180, 45);
             this.btnAgregarMascota.TabIndex = 1;
-            this.btnAgregarMascota.Text = "Agregar Mascota";
+            this.btnAgregarMascota.Text = "➕ Agregar Mascota";
             this.btnAgregarMascota.UseVisualStyleBackColor = false;
             //
             // dgvMascotas
             //
+            this.dgvMascotas.BackgroundColor = System.Drawing.Color.White;
+            this.dgvMascotas.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.dgvMascotas.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.dgvMascotas.Location = new System.Drawing.Point(20, 30);
+            this.dgvMascotas.Location = new System.Drawing.Point(20, 35);
             this.dgvMascotas.Name = "dgvMascotas";
             this.dgvMascotas.RowHeadersWidth = 51;
-            this.dgvMascotas.RowTemplate.Height = 24;
-            this.dgvMascotas.Size = new System.Drawing.Size(620, 120);
+            this.dgvMascotas.RowTemplate.Height = 28;
+            this.dgvMascotas.Size = new System.Drawing.Size(870, 220);
             this.dgvMascotas.TabIndex = 0;
             //
             // gestionClientes
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(224)))), ((int)(((byte)(242)))), ((int)(((byte)(241)))));
-            this.ClientSize = new System.Drawing.Size(1100, 545);
+            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(236)))), ((int)(((byte)(240)))), ((int)(((byte)(245)))));
+            this.ClientSize = new System.Drawing.Size(1350, 750);
             this.Controls.Add(this.groupBoxMascotas);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.btnBuscar);
@@ -396,11 +426,11 @@ namespace UI.WinUi.Negocio
             this.Controls.Add(this.dgvClientes);
             this.Controls.Add(this.groupBoxAcciones);
             this.Controls.Add(this.groupBoxDatosCliente);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
+            this.MinimumSize = new System.Drawing.Size(1350, 750);
             this.Name = "gestionClientes";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Gestión de Clientes";
+            this.Text = "Gestión de Clientes - VetCare";
             this.groupBoxDatosCliente.ResumeLayout(false);
             this.groupBoxDatosCliente.PerformLayout();
             this.groupBoxAcciones.ResumeLayout(false);
@@ -442,5 +472,6 @@ namespace UI.WinUi.Negocio
         private System.Windows.Forms.DataGridView dgvMascotas;
         private System.Windows.Forms.Button btnAgregarMascota;
         private System.Windows.Forms.Button btnEliminarMascota;
+        private System.Windows.Forms.Button btnCopiarDNI;
     }
 }

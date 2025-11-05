@@ -72,12 +72,35 @@ namespace ServicesSecurity.DAL.Implementations
 
         public void Insert(UsuarioFamilia obj)
         {
+            Insert(obj, null);
+        }
+
+        /// <summary>
+        /// Inserta una relación UsuarioFamilia con soporte para Unit of Work
+        /// </summary>
+        public void Insert(UsuarioFamilia obj, ServicesSecurity.DAL.Contracts.IUnitOfWork unitOfWork)
+        {
             try
             {
-                SqlHelper.ExecuteNonQuery(InsertStatement, System.Data.CommandType.Text, new SqlParameter[] {
-                    new SqlParameter("@IdUsuario", obj.idUsuario),
-                    new SqlParameter("@IdFamilia", obj.idFamilia)
-                });
+                if (unitOfWork != null && unitOfWork.Transaction != null)
+                {
+                    SqlHelper.ExecuteNonQuery(
+                        unitOfWork.Connection,
+                        unitOfWork.Transaction,
+                        InsertStatement,
+                        System.Data.CommandType.Text,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdUsuario", obj.idUsuario),
+                            new SqlParameter("@IdFamilia", obj.idFamilia)
+                        });
+                }
+                else
+                {
+                    SqlHelper.ExecuteNonQuery(InsertStatement, System.Data.CommandType.Text, new SqlParameter[] {
+                        new SqlParameter("@IdUsuario", obj.idUsuario),
+                        new SqlParameter("@IdFamilia", obj.idFamilia)
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -105,12 +128,35 @@ namespace ServicesSecurity.DAL.Implementations
 
         public void DeleteRelacion(UsuarioFamilia obj)
         {
+            DeleteRelacion(obj, null);
+        }
+
+        /// <summary>
+        /// Elimina una relación UsuarioFamilia con soporte para Unit of Work
+        /// </summary>
+        public void DeleteRelacion(UsuarioFamilia obj, ServicesSecurity.DAL.Contracts.IUnitOfWork unitOfWork)
+        {
             try
             {
-                SqlHelper.ExecuteNonQuery(DeleteStatement, System.Data.CommandType.Text, new SqlParameter[] {
-                    new SqlParameter("@IdUsuario", obj.idUsuario),
-                    new SqlParameter("@IdFamilia", obj.idFamilia)
-                });
+                if (unitOfWork != null && unitOfWork.Transaction != null)
+                {
+                    SqlHelper.ExecuteNonQuery(
+                        unitOfWork.Connection,
+                        unitOfWork.Transaction,
+                        DeleteStatement,
+                        System.Data.CommandType.Text,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdUsuario", obj.idUsuario),
+                            new SqlParameter("@IdFamilia", obj.idFamilia)
+                        });
+                }
+                else
+                {
+                    SqlHelper.ExecuteNonQuery(DeleteStatement, System.Data.CommandType.Text, new SqlParameter[] {
+                        new SqlParameter("@IdUsuario", obj.idUsuario),
+                        new SqlParameter("@IdFamilia", obj.idFamilia)
+                    });
+                }
             }
             catch (Exception ex)
             {

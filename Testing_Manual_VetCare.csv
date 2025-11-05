@@ -1,0 +1,486 @@
+Column1;Column2;Column3;Column4;Column5;Column6;Column7;Column8;Column9;Column10;Column11;Column12;Column13
+ID;Módulo;Funcionalidad;Caso de Prueba;Pre-Condición;Pasos;Resultado Esperado;Prioridad;Severidad;Estado;Probado Por;Fecha;Comentarios
+TC-001;Login;Carga Inicial;Verificar carga correcta del formulario;Aplicación iniciada;"1. Abrir aplicación
+2. Observar pantalla de login";"- Logo VetCare visible
+- Campos vacíos
+- Botón Ingresar habilitado
+- Links de idioma visibles
+- Contraseña oculta (????)";Crítico;Alta;Ejecutado;;;Correcto
+TC-002;Login;Validación;Usuario vacío;Aplicación abierta;"1. Dejar campo usuario vacío
+2. Ingresar contraseña: ""test""
+3. Click Ingresar";"Debe mostrar error: ""El nombre de usuario es obligatorio""";Crítico;Alta;Pendiente;;;
+TC-003;Login;Validación;Contraseña vacía;Aplicación abierta;"1. Ingresar usuario: ""admin""
+2. Dejar contraseña vacía
+3. Click Ingresar";"Debe mostrar error: ""La contraseña es obligatoria""";Crítico;Alta;Pendiente;;;
+TC-004;Login;Autenticación;Usuario no existente;"Usuario """"usuarioInventado123"""" NO existe en BD";"1. Usuario: ""usuarioInventado123""
+2. Contraseña: ""cualquiera""
+3. Click Ingresar";"Debe mostrar: ""Usuario no encontrado""";Crítico;Alta;Pendiente;;;
+TC-005;Login;Autenticación;Contraseña incorrecta;Usuario admin existe con contraseña admin123;"1. Usuario: ""admin""
+2. Contraseña: ""incorrecta""
+3. Click Ingresar";"- Error: ""Contraseña inválida""
+- Campo contraseña se limpia
+- Foco va a contraseña";Crítico;Alta;Pendiente;;;
+TC-006;Login;Autenticación;Login exitoso - Admin;Usuario admin con rol Administrador existe;"1. Usuario: ""admin""
+2. Contraseña: ""admin123""
+3. Click Ingresar";"- Redirige a menú principal
+- Login se oculta
+- Menú muestra opciones de admin";Crítico;Alta;Pendiente;;;
+TC-007;Login;Autenticación;Login exitoso - Veterinario;Usuario veterinario existe en BD;"1. Usuario: veterinario
+2. Contraseña: [correcta]
+3. Click Ingresar";"- Redirige a menú
+- Crea registro automático en tabla Veterinario de VetCareDB
+- Muestra opciones de veterinario";Crítico;Alta;Pendiente;;;
+TC-008;Login;Autenticación;Usuario sin rol asignado;Usuario existe pero sin Familia (rol) en BD;"1. Login con usuario sin rol
+2. Click Ingresar";"- Error: ""El usuario no tiene un rol asignado""
+- No redirige al menú";Alto;Media;Pendiente;;;
+TC-009;Login;Funcionalidad;Mostrar/Ocultar contraseña;Pantalla login abierta;"1. Ingresar contraseña: ""test123""
+2. Click botón ??
+3. Click nuevamente";"- Primera vez: muestra texto plano
+- Segunda vez: vuelve a ocultar";Medio;Baja;Pendiente;;;
+TC-010;Login;Funcionalidad;Enter en campo contraseña;Pantalla login abierta;"1. Ingresar usuario y contraseña
+2. Presionar Enter en campo contraseña";Debe ejecutar login (igual que click en botón);Medio;Baja;Pendiente;;;
+TC-011;Login;Internacionalización;Cambio a Español;Pantalla login abierta;"1. Click link ""Español""
+2. Observar textos";Todos los labels cambian a español;Medio;Baja;Pendiente;;;
+TC-012;Login;Internacionalización;Cambio a Inglés;Pantalla login abierta;"1. Click link ""English""
+2. Observar textos";Todos los labels cambian a inglés;Medio;Baja;Pendiente;;;
+TC-013;Login;Funcionalidad;Recuperar contraseña;Pantalla login abierta;"1. Click ""Recuperar contraseña""";"- Muestra mensaje: ""Contactar con administrador...""
+- No cierra ventana";Bajo;Baja;Pendiente;;;
+TC-014;Menú Principal;Carga Inicial;Verificar carga del menú;Login exitoso como admin;"1. Login exitoso
+2. Observar menú principal";"- Logo VetCare visible
+- MenuStrip con opciones según permisos
+- Label bienvenida con nombre y rol
+- Botón Cerrar Sesión visible";Crítico;Alta;Pendiente;;;
+TC-015;Menú Principal;Permisos;Menú dinámico - Administrador;Login como usuario con rol Administrador;"1. Login como admin
+2. Observar opciones del menú";"- Muestra: Gestión Usuarios
+- Muestra: Gestión Permisos
+- Muestra: Gestión Clientes
+- Muestra: Gestión Mascotas
+- Muestra: Gestión Citas
+- Sin duplicados";Crítico;Alta;Pendiente;;;
+TC-016;Menú Principal;Permisos;Menú dinámico - Recepcionista;Login como usuario con rol Recepcionista;"1. Login como recepcionista
+2. Observar opciones del menú";"- Muestra: Gestión Clientes
+- Muestra: Gestión Mascotas
+- Muestra: Gestión Citas
+- NO muestra: Gestión Usuarios";Crítico;Alta;Pendiente;;;
+TC-017;Menú Principal;Permisos;Menú dinámico - Veterinario;Login como usuario con rol Veterinario;"1. Login como veterinario
+2. Observar opciones del menú";"- Muestra: Mis Citas
+- Muestra: Gestión Medicamentos
+- Opciones según permisos asignados";Crítico;Alta;Pendiente;;;
+TC-018;Menú Principal;Navegación;Abrir Gestión Clientes;En menú principal;"1. Click ""Gestión Clientes""
+2. Observar";"- Abre formulario gestionClientes
+- Menú principal permanece visible";Alto;Media;Pendiente;;;
+TC-019;Menú Principal;Navegación;Cerrar sesión;En menú principal con otros formularios abiertos;"1. Abrir varios formularios
+2. Click ""Cerrar Sesión""";"- Cierra todos los formularios abiertos
+- Vuelve a Login
+- Sesión limpiada";Crítico;Alta;Pendiente;;;
+TC-020;Gestión Clientes;Carga Inicial;Verificar carga del formulario;Menú abierto - Click en Gestión Clientes;"1. Abrir Gestión Clientes
+2. Observar estado inicial";"- DataGridView cargado con clientes
+- Campos deshabilitados
+- Botón Nuevo habilitado
+- Botón Guardar deshabilitado
+- DataGridView mascotas vacío";Crítico;Alta;Pendiente;;;
+TC-021;Gestión Clientes;Crear;Cliente válido - Happy Path;BD sin cliente con DNI 12345678;"1. Click ""Nuevo""
+2. Nombre: ""Juan""
+3. Apellido: ""Pérez""
+4. DNI: ""12345678""
+5. Teléfono: ""1234567890""
+6. Email: ""juan@email.com""
+7. Dirección: ""Calle Falsa 123""
+8. Activo: ?
+9. Click ""Guardar""";"- Mensaje: ""Cliente registrado correctamente""
+- DataGridView actualizado con nuevo cliente
+- Campos limpiados y bloqueados
+- Cliente ordenado por apellido en grilla";Crítico;Alta;Pendiente;;;
+TC-022;Gestión Clientes;Validación;Nombre vacío;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. Dejar Nombre vacío
+3. Llenar resto de campos
+4. Click ""Guardar""";"Error: ""El nombre es obligatorio""";Crítico;Alta;Pendiente;;;
+TC-023;Gestión Clientes;Validación;Apellido vacío;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. Dejar Apellido vacío
+3. Llenar resto de campos
+4. Click ""Guardar""";"Error: ""El apellido es obligatorio""";Crítico;Alta;Pendiente;;;
+TC-024;Gestión Clientes;Validación;DNI vacío;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. Dejar DNI vacío
+3. Llenar resto de campos
+4. Click ""Guardar""";"Error: ""El DNI es obligatorio""";Crítico;Alta;Pendiente;;;
+TC-025;Gestión Clientes;Validación;Nombre muy corto;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. Nombre: ""A"" (1 carácter)
+3. Resto completo válido
+4. Click ""Guardar""";"Error: ""El nombre debe tener al menos 2 caracteres""";Alto;Media;Pendiente;;;
+TC-026;Gestión Clientes;Validación;Apellido muy corto;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. Apellido: ""B"" (1 carácter)
+3. Resto completo válido
+4. Click ""Guardar""";"Error: ""El apellido debe tener al menos 2 caracteres""";Alto;Media;Pendiente;;;
+TC-027;Gestión Clientes;Validación;DNI muy corto;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. DNI: ""123"" (3 caracteres)
+3. Resto completo válido
+4. Click ""Guardar""";"Error: ""El DNI debe tener al menos 6 caracteres""";Crítico;Alta;Pendiente;;;
+TC-028;Gestión Clientes;Validación;Email inválido;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. Email: ""emailsinformato""
+3. Resto completo válido
+4. Click ""Guardar""";"Error: ""El formato del email no es válido""";Alto;Media;Pendiente;;;
+TC-029;Gestión Clientes;Validación;Teléfono muy corto;Formulario abierto modo nuevo;"1. Click ""Nuevo""
+2. Teléfono: ""123"" (menos de 7)
+3. Resto completo válido
+4. Click ""Guardar""";"Error: ""El teléfono debe tener al menos 7 caracteres""";Alto;Media;Pendiente;;;
+TC-030;Gestión Clientes;Validación;DNI duplicado;Cliente con DNI 12345678 ya existe;"1. Click ""Nuevo""
+2. DNI: ""12345678""
+3. Resto completo y válido
+4. Click ""Guardar""";"- Error: ""Ya existe un cliente con DNI 12345678""
+- NO debe guardarse en BD";Crítico;Alta;Pendiente;;;
+TC-031;Gestión Clientes;Modificar;Editar cliente existente;Cliente Juan Pérez existe con DNI 12345678;"1. Seleccionar cliente en grilla
+2. Verificar datos en campos
+3. Click ""Modificar""
+4. Cambiar Teléfono a ""9876543210""
+5. Cambiar Email a ""nuevo@email.com""
+6. Click ""Guardar""";"- Mensaje: ""Cliente actualizado correctamente""
+- Grilla muestra datos actualizados
+- Campos bloqueados";Crítico;Alta;Pendiente;;;
+TC-032;Gestión Clientes;Modificar;Intentar DNI duplicado al editar;Cliente A con DNI 11111111 y Cliente B con DNI 22222222 existen;"1. Seleccionar Cliente A
+2. Click ""Modificar""
+3. Cambiar DNI de A a ""22222222""
+4. Click ""Guardar""";"- Error: ""Ya existe otro cliente con DNI 22222222""
+- NO debe guardar cambios";Crítico;Alta;Pendiente;;;
+TC-033;Gestión Clientes;Modificar;Sin seleccionar cliente;Formulario abierto sin selección;"1. Sin seleccionar fila en grilla
+2. Click ""Modificar""";"Mensaje: ""Debe seleccionar un cliente""";Alto;Media;Pendiente;;;
+TC-034;Gestión Clientes;Eliminar;Eliminar cliente sin mascotas;Cliente sin mascotas asociadas existe;"1. Seleccionar cliente
+2. Verificar grilla mascotas vacía
+3. Click ""Eliminar""
+4. Confirmar con ""Sí""";"- Mensaje: ""Cliente eliminado correctamente""
+- Cliente desaparece de grilla
+- Campos limpiados";Crítico;Alta;Pendiente;;;
+TC-035;Gestión Clientes;Eliminar;Eliminar cliente con mascotas;Cliente tiene 2 mascotas asociadas;"1. Seleccionar cliente
+2. Verificar grilla inferior muestra 2 mascotas
+3. Click ""Eliminar""
+4. Leer advertencia de eliminación en cascada
+5. Confirmar con ""Sí""";"- Mensaje de advertencia sobre cascada
+- Cliente Y mascotas eliminados de BD
+- Verificar en SQL: SELECT * FROM Mascota WHERE IdCliente = [guid] retorna 0";Crítico;Alta;Pendiente;;;
+TC-036;Gestión Clientes;Eliminar;Cancelar eliminación;Cliente seleccionado;"1. Seleccionar cliente
+2. Click ""Eliminar""
+3. Click ""No"" en confirmación";"- Cliente NO eliminado
+- Sigue en grilla";Medio;Baja;Pendiente;;;
+TC-037;Gestión Clientes;Eliminar;Sin seleccionar cliente;Formulario abierto sin selección;"1. Sin seleccionar cliente
+2. Click ""Eliminar""";"Mensaje: ""Debe seleccionar un cliente""";Alto;Media;Pendiente;;;
+TC-038;Gestión Clientes;Búsqueda;Buscar por nombre;Existen clientes con nombre Juan;"1. Ingresar ""Juan"" en campo búsqueda
+2. Click ""Buscar""";"Filtra y muestra solo clientes con """"Juan"""" en nombre";Alto;Media;Pendiente;;;
+TC-039;Gestión Clientes;Búsqueda;Buscar por apellido;Existen clientes con apellido Pérez;"1. Ingresar ""Pérez"" en campo búsqueda
+2. Click ""Buscar""";"Filtra y muestra solo clientes con """"Pérez"""" en apellido";Alto;Media;Pendiente;;;
+TC-040;Gestión Clientes;Búsqueda;Buscar por DNI;Cliente con DNI 12345678 existe;"1. Ingresar ""12345678"" en búsqueda
+2. Click ""Buscar""";Muestra únicamente el cliente con ese DNI;Alto;Media;Pendiente;;;
+TC-041;Gestión Clientes;Búsqueda;Buscar por email;Cliente con email juan@email.com existe;"1. Ingresar ""juan@email.com"" en búsqueda
+2. Click ""Buscar""";Muestra el cliente con ese email;Medio;Baja;Pendiente;;;
+TC-042;Gestión Clientes;Búsqueda;Búsqueda sin resultados;BD con clientes;"1. Ingresar ""ClienteInexistente999""
+2. Click ""Buscar""";"- DataGridView vacío
+- Sin errores";Medio;Baja;Pendiente;;;
+TC-043;Gestión Clientes;Selección;Seleccionar cliente en grilla;Grilla con clientes;"1. Click en fila de cliente
+2. Observar";"- Datos del cliente aparecen en campos
+- Botón Modificar habilitado
+- Botón Eliminar habilitado
+- Grilla mascotas carga mascotas del cliente";Alto;Media;Pendiente;;;
+TC-044;Gestión Clientes;Mascotas;Agregar mascota a cliente;Cliente seleccionado;"1. Seleccionar cliente
+2. Click ""Agregar Mascota""
+3. Llenar datos mascota en formulario que abre
+4. Guardar";"- Vuelve a gestionClientes
+- Grilla mascotas actualizada con nueva mascota
+- Cliente pre-seleccionado en formulario de mascota";Alto;Media;Pendiente;;;
+TC-045;Gestión Clientes;Mascotas;Copiar DNI del cliente;Cliente seleccionado;"1. Seleccionar cliente
+2. Click ""Copiar DNI""";"- DNI copiado al portapapeles
+- Mensaje o tooltip de confirmación";Bajo;Baja;Pendiente;;;
+TC-046;Gestión Clientes;Casos Borde;Campos opcionales vacíos;Formulario modo nuevo;"1. Click ""Nuevo""
+2. Solo llenar: Nombre Apellido DNI
+3. Dejar vacíos: Teléfono Email Dirección
+4. Click ""Guardar""";"- Guarda correctamente
+- Campos opcionales NULL en BD";Alto;Media;Pendiente;;;
+TC-047;Gestión Clientes;Casos Borde;Desactivar cliente;Cliente activo seleccionado;"1. Seleccionar cliente activo
+2. Click ""Modificar""
+3. Desmarcar checkbox ""Activo""
+4. Click ""Guardar""";"- Cliente marcado como inactivo (Activo=0)
+- ¿Sigue visible en grilla o se filtra?";Alto;Media;Pendiente;;;
+TC-048;Gestión Mascotas;Crear;Mascota válida - Happy Path;Cliente dueño existe y está activo;"1. Click ""Nueva Mascota""
+2. Buscar y seleccionar cliente dueño
+3. Nombre: ""Max""
+4. Especie: ""Perro""
+5. Raza: ""Labrador""
+6. Fecha Nac: 01/01/2020
+7. Sexo: ""Macho""
+8. Peso: 25.5
+9. Color: ""Dorado""
+10. Click ""Guardar""";"- Mensaje: ""Mascota registrada correctamente""
+- Aparece en DataGridView
+- Edad calculada correctamente (ej: 5 años)";Crítico;Alta;Pendiente;;;
+TC-049;Gestión Mascotas;Validación;Mascota sin dueño;Formulario modo nuevo;"1. Click ""Nueva Mascota""
+2. NO seleccionar cliente dueño
+3. Llenar resto de datos
+4. Click ""Guardar""";"Error: ""Debe seleccionar un cliente dueño""";Crítico;Alta;Pendiente;;;
+TC-050;Gestión Mascotas;Validación;Nombre vacío;Formulario modo nuevo con dueño seleccionado;"1. Nueva mascota con dueño
+2. Dejar Nombre vacío
+3. Click ""Guardar""";"Error: ""El nombre es obligatorio""";Crítico;Alta;Pendiente;;;
+TC-051;Gestión Mascotas;Validación;Especie vacía;Formulario modo nuevo con dueño seleccionado;"1. Nueva mascota con dueño
+2. Dejar Especie vacía
+3. Click ""Guardar""";"Error: ""La especie es obligatoria""";Crítico;Alta;Pendiente;;;
+TC-052;Gestión Mascotas;Validación;Nombre muy corto;Formulario modo nuevo;"1. Nueva mascota
+2. Nombre: ""A"" (1 carácter)
+3. Resto completo
+4. Click ""Guardar""";"Error: ""El nombre debe tener al menos 2 caracteres""";Alto;Media;Pendiente;;;
+TC-053;Gestión Mascotas;Validación;Fecha nacimiento futura;Formulario modo nuevo;"1. Nueva mascota
+2. Fecha Nacimiento: 01/01/2030 (futura)
+3. Resto completo
+4. Click ""Guardar""";"Error: ""La fecha de nacimiento no puede ser futura""";Crítico;Alta;Pendiente;;;
+TC-054;Gestión Mascotas;Validación;Sexo inválido;Formulario modo nuevo;"1. Nueva mascota
+2. Sexo: ""Otro"" (no Macho/Hembra)
+3. Click ""Guardar""";"Error: ""El sexo debe ser Macho o Hembra""";Alto;Media;Pendiente;;;
+TC-055;Gestión Mascotas;Validación;Peso negativo;Formulario modo nuevo;"1. Nueva mascota
+2. Peso: -10
+3. Click ""Guardar""";"Error: ""El peso no puede ser negativo""";Alto;Media;Pendiente;;;
+TC-056;Gestión Mascotas;Validación;Peso excesivo;Formulario modo nuevo;"1. Nueva mascota
+2. Peso: 1500
+3. Click ""Guardar""";"Error: ""El peso debe ser menor a 1000 kg""";Medio;Media;Pendiente;;;
+TC-057;Gestión Mascotas;Validación;Cliente inactivo como dueño;Cliente inactivo existe;"1. Nueva mascota
+2. Seleccionar cliente inactivo como dueño
+3. Llenar resto de datos
+4. Click ""Guardar""";"Error: ""No se puede registrar mascota para cliente inactivo""";Alto;Alta;Pendiente;;;
+TC-058;Gestión Mascotas;Modificar;Editar mascota existente;Mascota Max existe;"1. Seleccionar mascota Max
+2. Click ""Modificar""
+3. Cambiar Peso a 28.5
+4. Cambiar Raza a ""Golden Retriever""
+5. Click ""Guardar""";"- Mensaje: ""Mascota actualizada correctamente""
+- Cambios reflejados en grilla";Crítico;Alta;Pendiente;;;
+TC-059;Gestión Mascotas;Eliminar;Eliminar mascota sin dependencias;Mascota sin citas asociadas;"1. Seleccionar mascota
+2. Click ""Eliminar""
+3. Confirmar";"- Mensaje: ""Mascota eliminada correctamente""
+- Desaparece de grilla";Alto;Media;Pendiente;;;
+TC-060;Gestión Mascotas;Casos Borde;Calcular edad correctamente;Mascota con fecha nacimiento 01/01/2020;"1. Crear mascota con fecha 01/01/2020
+2. Observar campo Edad en grilla";Edad calculada correctamente según fecha actual (ej: 5 años en 2025);Medio;Baja;Pendiente;;;
+TC-061;Gestión Citas;Carga Inicial;Verificar carga del formulario;Menú abierto;"1. Abrir Gestión Citas
+2. Observar estado inicial";"- Combo Fecha con opciones: Hoy Mañana Esta Semana etc
+- Combo Veterinario cargado con lista + Todos
+- Combo Estado con todos los estados
+- Por defecto: Hoy
+- Grilla carga citas del día";Crítico;Alta;Pendiente;;;
+TC-062;Gestión Citas;Crear;Agendar cita válida;Cliente y mascota existen - Veterinario asignado;"1. Click ""Nueva Cita""
+2. Buscar cliente por DNI
+3. Seleccionar mascota del cliente
+4. Fecha/Hora: 15/01/2025 10:00 AM
+5. Tipo: ""Vacunación""
+6. Veterinario: Seleccionar de combo
+7. Observaciones: ""Primera visita""
+8. Click ""Guardar""";"- Mensaje: ""Cita agendada correctamente""
+- Vuelve a gestionCitas
+- Nueva cita en grilla
+- Estado inicial: Agendada";Crítico;Alta;Pendiente;;;
+TC-063;Gestión Citas;Validación;Cita sin cliente;Formulario nueva cita;"1. Click ""Nueva Cita""
+2. NO seleccionar cliente
+3. Llenar resto
+4. Click ""Guardar""";"Error: ""Debe seleccionar un cliente""";Crítico;Alta;Pendiente;;;
+TC-064;Gestión Citas;Validación;Cita sin mascota;Formulario nueva cita con cliente seleccionado;"1. Nueva cita
+2. Seleccionar cliente
+3. NO seleccionar mascota
+4. Click ""Guardar""";"Error: ""Debe seleccionar una mascota""";Crítico;Alta;Pendiente;;;
+TC-065;Gestión Citas;Validación;Fecha/hora pasada;Formulario nueva cita;"1. Nueva cita
+2. Fecha: 01/01/2020 (pasada)
+3. Resto completo
+4. Click ""Guardar""";"Error: ""La fecha de la cita no puede ser pasada""";Crítico;Alta;Pendiente;;;
+TC-066;Gestión Citas;Validación;Sin veterinario asignado;Formulario nueva cita;"1. Nueva cita con cliente y mascota
+2. NO seleccionar veterinario
+3. Click ""Guardar""";"- ¿Permite guardar con veterinario NULL?
+- O requiere veterinario: Error correspondiente";Alto;Media;Pendiente;;;
+TC-067;Gestión Citas;Filtros;Filtro por fecha - Hoy;Citas varias en BD;"1. Combo Fecha: ""Hoy""
+2. Click ""Buscar""";Muestra solo citas de hoy;Alto;Media;Pendiente;;;
+TC-068;Gestión Citas;Filtros;Filtro por fecha - Mañana;Citas varias en BD;"1. Combo Fecha: ""Mañana""
+2. Click ""Buscar""";Muestra solo citas de mañana;Alto;Media;Pendiente;;;
+TC-069;Gestión Citas;Filtros;Filtro por fecha - Esta Semana;Citas varias en BD;"1. Combo Fecha: ""Esta Semana""
+2. Click ""Buscar""";Muestra citas de los próximos 7 días desde hoy;Alto;Media;Pendiente;;;
+TC-070;Gestión Citas;Filtros;Filtro por veterinario;Citas de varios veterinarios en BD;"1. Combo Veterinario: ""Dr. García""
+2. Click ""Buscar""";Muestra solo citas asignadas a Dr. García;Alto;Media;Pendiente;;;
+TC-071;Gestión Citas;Filtros;Filtro por estado - Confirmada;Citas con varios estados en BD;"1. Combo Estado: ""Confirmada""
+2. Click ""Buscar""";Muestra solo citas con estado Confirmada;Alto;Media;Pendiente;;;
+TC-072;Gestión Citas;Filtros;Filtros combinados;Citas variadas en BD;"1. Fecha: ""Esta Semana""
+2. Veterinario: ""Dr. García""
+3. Estado: ""Agendada""
+4. Click ""Buscar""";Aplica los 3 filtros simultáneamente - Solo citas que cumplan TODOS;Alto;Media;Pendiente;;;
+TC-073;Gestión Citas;Filtros;Limpiar filtros;Filtros aplicados;"1. Aplicar múltiples filtros
+2. Click ""Limpiar Filtros""";Restaura a valores por defecto: Hoy + Todos + Todos;Medio;Baja;Pendiente;;;
+TC-074;Gestión Citas;Modificar;Editar cita existente;Cita agendada existe;"1. Seleccionar cita
+2. Click ""Modificar""
+3. Cambiar hora de 10:00 a 14:00
+4. Cambiar tipo consulta
+5. Click ""Guardar""";"- Mensaje: ""Cita actualizada correctamente""
+- Cambios en BD y grilla";Crítico;Alta;Pendiente;;;
+TC-075;Gestión Citas;Estado;Actualizar estado: Agendada a Confirmada;Cita con estado Agendada;"1. Seleccionar cita Agendada
+2. Click ""Actualizar Estado""
+3. Seleccionar ""Confirmada""
+4. Guardar";"- Estado cambia a Confirmada
+- Refleja en BD y grilla";Crítico;Alta;Pendiente;;;
+TC-076;Gestión Citas;Estado;Actualizar estado: Confirmada a Completada;Cita con estado Confirmada;"1. Seleccionar cita Confirmada
+2. Click ""Actualizar Estado""
+3. Seleccionar ""Completada""
+4. Guardar";"- Estado cambia a Completada
+- Cita marcada como finalizada";Crítico;Alta;Pendiente;;;
+TC-077;Gestión Citas;Estado;Actualizar estado a Cancelada;Cita agendada;"1. Seleccionar cita
+2. Click ""Actualizar Estado""
+3. Seleccionar ""Cancelada""
+4. Guardar";Estado cambia a Cancelada;Alto;Media;Pendiente;;;
+TC-078;Gestión Citas;Cancelar;Cancelar cita con confirmación;Cita agendada existe;"1. Seleccionar cita
+2. Click ""Cancelar Cita""
+3. Confirmar";"- Estado cambia a Cancelada
+- O se elimina según lógica de negocio";Alto;Media;Pendiente;;;
+TC-079;Gestión Citas;Casos Borde;Doble click en cita;Cita en grilla;1. Doble click en fila de cita;¿Abre detalle o formulario de edición?;Medio;Baja;Pendiente;;;
+TC-080;Gestión Medicamentos;Crear;Medicamento válido;BD sin medicamento con ese nombre;"1. Click ""Nuevo Medicamento""
+2. Nombre: ""Amoxicilina""
+3. Presentación: ""Tableta""
+4. Stock: 50
+5. Precio: 150.00
+6. Click ""Guardar""";"- Mensaje: ""Medicamento registrado correctamente""
+- Aparece en grilla";Crítico;Alta;Pendiente;;;
+TC-081;Gestión Medicamentos;Validación;Nombre vacío;Formulario modo nuevo;"1. Nuevo medicamento
+2. Dejar Nombre vacío
+3. Click ""Guardar""";"Error: ""El nombre es obligatorio""";Crítico;Alta;Pendiente;;;
+TC-082;Gestión Medicamentos;Validación;Stock negativo;Formulario modo nuevo;"1. Nuevo medicamento
+2. Stock: -10
+3. Click ""Guardar""";"Error: ""El stock no puede ser negativo""";Alto;Media;Pendiente;;;
+TC-083;Gestión Medicamentos;Validación;Precio negativo;Formulario modo nuevo;"1. Nuevo medicamento
+2. Precio: -100
+3. Click ""Guardar""";"Error: ""El precio no puede ser negativo""";Alto;Media;Pendiente;;;
+TC-084;Gestión Medicamentos;Funcionalidad;Alerta de stock bajo;Medicamento con stock bajo;"1. Crear medicamento con Stock: 5
+2. Observar en grilla";"- Alerta visual (color rojo icono warning)
+- Indica stock crítico";Medio;Media;Pendiente;;;
+TC-085;Gestión Medicamentos;Modificar;Editar medicamento;Medicamento Amoxicilina existe;"1. Seleccionar Amoxicilina
+2. Click ""Modificar""
+3. Cambiar Stock a 100
+4. Cambiar Precio a 180.00
+5. Click ""Guardar""";"- Mensaje de éxito
+- Cambios reflejados";Alto;Media;Pendiente;;;
+TC-086;Gestión Medicamentos;Eliminar;Eliminar medicamento sin uso;Medicamento sin prescripciones;"1. Seleccionar medicamento
+2. Click ""Eliminar""
+3. Confirmar";Medicamento eliminado de BD;Alto;Media;Pendiente;;;
+TC-087;Mis Citas (Veterinario);Carga Inicial;Verificar vista personalizada;Login como veterinario;"1. Login como veterinario
+2. Abrir Mis Citas";"- Solo citas asignadas a este veterinario
+- NO muestra citas de otros
+- Ordenadas por fecha/hora";Crítico;Alta;Pendiente;;;
+TC-088;Mis Citas (Veterinario);Funcionalidad;Filtrar por fecha;Veterinario tiene citas varias;"1. Seleccionar fecha específica
+2. Observar";Solo citas del veterinario en esa fecha;Alto;Media;Pendiente;;;
+TC-089;Mis Citas (Veterinario);Consulta Médica;Iniciar consulta;Cita con estado Confirmada;"1. Seleccionar cita Confirmada
+2. Click ""Iniciar Consulta""
+3. Formulario ConsultaMedica abre
+4. Datos de cita pre-cargados";"- FormConsultaMedica abierto
+- Cliente mascota veterinario pre-cargados";Crítico;Alta;Pendiente;;;
+TC-090;Consulta Médica;Crear;Registrar consulta completa;Cita confirmada seleccionada;"1. Desde Mis Citas iniciar consulta
+2. Síntomas: ""Tos y fiebre""
+3. Diagnóstico: ""Infección respiratoria""
+4. Agregar medicamento: Amoxicilina cantidad 10
+5. Indicaciones: ""1 tableta cada 12 horas""
+6. Click ""Guardar Consulta""";"- Consulta guardada en BD (tabla ConsultaMedica)
+- Prescripción guardada (tabla ConsultaMedicamento)
+- Stock de Amoxicilina reducido en 10
+- Estado de cita cambia a Completada
+- Mensaje de éxito";Crítico;Alta;Pendiente;;;
+TC-091;Consulta Médica;Validación;Consulta sin síntomas;Formulario consulta;"1. Iniciar consulta
+2. Dejar Síntomas vacío
+3. Llenar Diagnóstico
+4. Click ""Guardar""";"Error: ""Los síntomas son obligatorios""";Alto;Media;Pendiente;;;
+TC-092;Consulta Médica;Validación;Consulta sin diagnóstico;Formulario consulta;"1. Iniciar consulta
+2. Llenar Síntomas
+3. Dejar Diagnóstico vacío
+4. Click ""Guardar""";"Error: ""El diagnóstico es obligatorio""";Alto;Media;Pendiente;;;
+TC-093;Consulta Médica;Validación;Medicamento con cantidad <= 0;Formulario consulta con medicamento;"1. Agregar medicamento
+2. Cantidad: 0 o negativa
+3. Click ""Guardar""";"Error: ""La cantidad debe ser mayor a 0""";Alto;Media;Pendiente;;;
+TC-094;Consulta Médica;Validación;Medicamento sin stock suficiente;Medicamento con stock 5 - solicitar 10;"1. Agregar medicamento con stock 5
+2. Cantidad: 10
+3. Click ""Guardar""";"Error: ""Stock insuficiente - Disponible: 5""";Crítico;Alta;Pendiente;;;
+TC-095;Consulta Médica;Funcionalidad;Reducción de stock automática;Medicamento con stock 50 - prescribir 10;"1. Registrar consulta
+2. Prescribir 10 unidades de medicamento (stock inicial 50)
+3. Guardar consulta
+4. Verificar tabla Medicamento";"- Stock del medicamento = 40
+- Reducción automática aplicada";Crítico;Alta;Pendiente;;;
+TC-096;Historial Clínico;Consulta;Ver historial de mascota;Mascota con consultas registradas;"1. Buscar cliente
+2. Seleccionar mascota
+3. Click ""Ver Historial""";"- Abre FormHistorialClinico
+- Lista todas las consultas de la mascota
+- Ordenadas por fecha (más reciente primero)
+- Muestra: fecha veterinario diagnóstico";Alto;Media;Pendiente;;;
+TC-097;Historial Clínico;Detalle;Ver detalle de consulta;Historial abierto con consultas;"1. En historial seleccionar consulta
+2. Doble click o botón Ver Detalle";"- Abre FormDetalleConsulta
+- Muestra: síntomas diagnóstico medicamentos recetados con cantidades e indicaciones";Alto;Media;Pendiente;;;
+TC-098;Historial Clínico;Casos Borde;Mascota sin consultas;Mascota nueva sin historial;"1. Ver historial de mascota nueva
+2. Observar";"- Mensaje: ""No hay consultas registradas""
+- Lista vacía sin errores";Medio;Baja;Pendiente;;;
+TC-099;Gestión Usuarios;Crear;Usuario válido - Recepcionista;Login como administrador;"1. Abrir Gestión Usuarios
+2. Click ""Nuevo Usuario""
+3. Usuario: ""recepcionista1""
+4. Email: ""recep@vetcare.com""
+5. Contraseña: ""Pass123""
+6. Click ""Guardar""
+7. Asignar rol: ROL_Recepcionista";"- Usuario creado
+- Contraseña hasheada en BD (no texto plano)
+- Email único verificado";Crítico;Alta;Pendiente;;;
+TC-100;Gestión Usuarios;Validación;Usuario duplicado;Usuario admin ya existe;"1. Nuevo usuario
+2. Usuario: ""admin""
+3. Click ""Guardar""";"Error: ""El nombre de usuario ya existe""";Crítico;Alta;Pendiente;;;
+TC-101;Gestión Usuarios;Validación;Email duplicado;Email juan@vetcare.com ya usado;"1. Nuevo usuario
+2. Email: ""juan@vetcare.com""
+3. Click ""Guardar""";"Error: ""El email ya está registrado""";Alto;Alta;Pendiente;;;
+TC-102;Gestión Usuarios;Validación;Contraseña débil;Formulario nuevo usuario;"1. Nuevo usuario
+2. Contraseña: ""123""
+3. Click ""Guardar""";"Error: ""La contraseña debe tener al menos 6 caracteres"" (o política definida)";Alto;Media;Pendiente;;;
+TC-103;Gestión Usuarios;Roles;Asignar rol a usuario;Usuario sin rol existe;"1. Seleccionar usuario
+2. Click ""Asignar Rol""
+3. Seleccionar ""ROL_Veterinario""
+4. Guardar";"- Rol asignado en BD (tabla UsuarioFamilia)
+- Usuario adquiere permisos de veterinario";Crítico;Alta;Pendiente;;;
+TC-104;Gestión Usuarios;Roles;Cambiar rol de usuario;Usuario con rol Recepcionista;"1. Seleccionar usuario recepcionista
+2. Remover rol actual
+3. Asignar ""ROL_Veterinario""
+4. Usuario logout y login nuevamente";"- Menú refleja nuevos permisos
+- Opciones de veterinario disponibles";Crítico;Alta;Pendiente;;;
+TC-105;Gestión Usuarios;Seguridad;Verificar hash de contraseña;Usuario creado;"1. Crear usuario con contraseña ""Pass123""
+2. Verificar en BD: SELECT Clave FROM Usuario WHERE Nombre = [usuario]";"Contraseña NO es """"Pass123"""" en texto plano - Debe ser hash";Crítico;Alta;Pendiente;;;
+TC-106;Gestión Usuarios;Permisos;Usuario sin permiso no accede;Usuario recepcionista sin permiso admin;"1. Login como recepcionista
+2. Intentar abrir Gestión Usuarios";"- Opción NO aparece en menú
+- Si se intenta acceder manualmente: error de permisos";Crítico;Alta;Pendiente;;;
+TC-107;Gestión Permisos;Visualización;Ver árbol de permisos;Login como administrador;"1. Abrir Gestión Permisos
+2. Observar estructura";"- Muestra jerarquía
+- Familias (roles) como nodos padres
+- Patentes (permisos) como hojas
+- Estructura tipo árbol expandible";Alto;Media;Pendiente;;;
+TC-108;Gestión Permisos;Asignar;Agregar permiso a rol;ROL_Recepcionista sin permiso de citas;"1. Seleccionar ROL_Recepcionista
+2. Click ""Agregar Permiso""
+3. Seleccionar patente ""gestionCitas - Alta""
+4. Guardar";"- Permiso agregado a rol en BD (tabla FamiliaPatente)
+- Usuarios con este rol pueden crear citas";Crítico;Alta;Pendiente;;;
+TC-109;Gestión Permisos;Remover;Quitar permiso de rol;ROL_Recepcionista con permiso de citas;"1. Seleccionar ROL_Recepcionista
+2. Seleccionar permiso ""gestionCitas - Alta""
+3. Click ""Remover""
+4. Guardar
+5. Usuario con ese rol logout y login";"- Opción desaparece del menú
+- Usuario no puede crear citas";Crítico;Alta;Pendiente;;;
+TC-110;Gestión Permisos;Jerarquía;Permiso heredado de familia padre;ROL_Admin contiene sub-familia con permisos;"1. Verificar estructura jerárquica
+2. ROL_Admin tiene Familia hija
+3. Usuario admin login";"- Usuario obtiene permisos de familia padre E hijos
+- Composite pattern funcionando";Alto;Alta;Pendiente;;;
+TC-111;Integridad BD;Cascada;Verificar eliminación en cascada;Cliente con mascotas en BD;"1. En SQL: SELECT * FROM Mascota WHERE IdCliente = [guid]
+2. Eliminar cliente desde aplicación
+3. Ejecutar query nuevamente";Mascotas del cliente eliminadas automáticamente (0 resultados);Crítico;Alta;Pendiente;;;
+TC-112;Integridad BD;FK Constraints;Intentar crear mascota con cliente inexistente;BD operativa;"1. En SQL directamente: INSERT INTO Mascota VALUES (newid() '[guid-inexistente]' ...)
+2. Ejecutar";Error de FK constraint - No permite inserción;Alto;Alta;Pendiente;;;
+TC-113;Integridad BD;Unique Constraints;DNI único en clientes;Cliente con DNI 12345678 existe;"1. En SQL: INSERT INTO Cliente (DNI...) VALUES ('12345678'...)
+2. Ejecutar";Error de UNIQUE constraint;Crítico;Alta;Pendiente;;;
+TC-114;Rendimiento;Carga;Tiempo de carga con 1000 clientes;BD con 1000 clientes;"1. Abrir Gestión Clientes
+2. Medir tiempo hasta que grilla se llena";¿Carga en menos de 2 segundos?;Medio;Baja;Pendiente;;;
+TC-115;Rendimiento;Búsqueda;Búsqueda con 1000 registros;BD con 1000 clientes;"1. Ingresar criterio de búsqueda
+2. Click Buscar
+3. Medir tiempo";¿Responde en menos de 1 segundo?;Medio;Baja;Pendiente;;;
+TC-116;Usabilidad;Navegación;Tab order correcto;Formulario gestionClientes;"1. Click ""Nuevo""
+2. Presionar Tab repetidamente";Foco se mueve en orden lógico: Nombre ? Apellido ? DNI ? Teléfono ? Email ? Dirección;Bajo;Baja;Pendiente;;;
+TC-117;Usabilidad;Validación;Feedback visual en campos requeridos;Formulario con campo vacío;"1. Intentar guardar con campo obligatorio vacío
+2. Observar";Campo vacío resaltado en rojo o con indicador visual;Bajo;Baja;Pendiente;;;
+TC-118;Usabilidad;Mensajes;Mensajes claros y descriptivos;Provocar error de validación;"1. DNI duplicado
+2. Observar mensaje";"Mensaje claro: ""Ya existe un cliente con DNI..."" (NO: ""Error 001"")";Medio;Baja;Pendiente;;;
+TC-119;Seguridad;Inyección SQL;Intentar SQL injection en búsqueda;Pantalla búsqueda abierta;"1. Ingresar en búsqueda: ""' OR '1'='1""
+2. Click Buscar";"- NO ejecuta código SQL malicioso
+- Stored procedures con parámetros previenen inyección";Crítico;Alta;Pendiente;;;
+TC-120;Seguridad;Session;Verificar timeout de sesión;Usuario logueado;"1. Login
+2. Dejar aplicación inactiva 30 minutos
+3. Intentar operación";"¿Requiere re-login?
+¿O sesión persiste indefinidamente?";Medio;Media;Pendiente;;;

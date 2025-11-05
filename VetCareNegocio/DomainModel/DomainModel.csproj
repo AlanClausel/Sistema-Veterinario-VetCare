@@ -42,8 +42,13 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Cita.cs" />
     <Compile Include="Cliente.cs" />
     <Compile Include="Mascota.cs" />
+    <Compile Include="Veterinario.cs" />
+    <Compile Include="ConsultaMedica.cs" />
+    <Compile Include="Medicamento.cs" />
+    <Compile Include="Exceptions\ValidacionException.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

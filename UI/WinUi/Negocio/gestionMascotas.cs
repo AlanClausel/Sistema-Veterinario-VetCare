@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
+using BLL;
 using DomainModel;
 using ServicesSecurity.DomainModel.Security.Composite;
+using ServicesSecurity.Services;
 
 namespace UI.WinUi.Negocio
 {
@@ -12,12 +14,6 @@ namespace UI.WinUi.Negocio
         private Usuario _usuarioLogueado;
         private Mascota _mascotaSeleccionada;
         private bool _modoEdicion = false;
-
-        // Lista temporal de mascotas en memoria (sin BD)
-        private static List<Mascota> _mascotasEnMemoria = new List<Mascota>();
-
-        // Lista temporal de clientes/dueños (sin BD)
-        private static List<Cliente> _clientesEnMemoria = new List<Cliente>();
 
         public gestionMascotas()
         {
@@ -50,44 +46,44 @@ namespace UI.WinUi.Negocio
         private void GestionMascotas_Load(object sender, EventArgs e)
         {
             AplicarTraducciones();
+            ConfigurarDataGridMascotas();
             CargarDuenos();
             CargarTodasLasMascotas();
-            ConfigurarDataGridMascotas();
         }
 
         private void AplicarTraducciones()
         {
             try
             {
-                this.Text = "Gestión de Mascotas";
-                groupBoxDatosMascota.Text = "Datos de la Mascota";
-                groupBoxAcciones.Text = "Acciones";
+                this.Text = LanguageManager.Translate("gestion_mascotas");
+                groupBoxDatosMascota.Text = LanguageManager.Translate("datos_mascota");
+                groupBoxAcciones.Text = LanguageManager.Translate("acciones");
 
                 // Labels
-                label1.Text = "Buscar Mascota:";
-                lblNombre.Text = "Nombre:";
-                lblEspecie.Text = "Especie:";
-                lblRaza.Text = "Raza:";
-                lblFechaNacimiento.Text = "Fecha Nacimiento:";
-                lblSexo.Text = "Sexo:";
-                lblPeso.Text = "Peso (kg):";
-                lblColor.Text = "Color:";
-                lblDueno.Text = "Dueño:";
-                lblObservaciones.Text = "Observaciones:";
-                chkActivo.Text = "Activo";
+                label1.Text = $"{LanguageManager.Translate("buscar_mascota")}:";
+                lblNombre.Text = $"{LanguageManager.Translate("nombre")}:";
+                lblEspecie.Text = $"{LanguageManager.Translate("especie")}:";
+                lblRaza.Text = $"{LanguageManager.Translate("raza")}:";
+                lblFechaNacimiento.Text = $"{LanguageManager.Translate("fecha_nacimiento")}:";
+                lblSexo.Text = $"{LanguageManager.Translate("sexo")}:";
+                lblPeso.Text = $"{LanguageManager.Translate("peso")} ({LanguageManager.Translate("kg")}):";
+                lblColor.Text = $"{LanguageManager.Translate("color")}:";
+                lblDueno.Text = $"{LanguageManager.Translate("dueno")}:";
+                lblObservaciones.Text = $"{LanguageManager.Translate("observaciones")}:";
+                chkActivo.Text = LanguageManager.Translate("activo");
 
                 // Botones
-                btnNuevo.Text = "Nuevo";
-                btnGuardar.Text = "Guardar";
-                btnModificar.Text = "Modificar";
-                btnEliminar.Text = "Eliminar";
-                btnVolver.Text = "Volver";
-                btnBuscar.Text = "Buscar";
+                btnNuevo.Text = LanguageManager.Translate("nuevo");
+                btnGuardar.Text = LanguageManager.Translate("guardar");
+                btnModificar.Text = LanguageManager.Translate("modificar");
+                btnEliminar.Text = LanguageManager.Translate("eliminar");
+                btnVolver.Text = LanguageManager.Translate("volver");
+                btnBuscar.Text = LanguageManager.Translate("buscar");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al aplicar traducciones: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_aplicar_traducciones")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -104,43 +100,43 @@ namespace UI.WinUi.Negocio
             dgvMascotas.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = "Nombre",
-                HeaderText = "Nombre",
+                HeaderText = LanguageManager.Translate("nombre"),
                 Width = 120
             });
             dgvMascotas.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = "Especie",
-                HeaderText = "Especie",
+                HeaderText = LanguageManager.Translate("especie"),
                 Width = 100
             });
             dgvMascotas.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = "Raza",
-                HeaderText = "Raza",
+                HeaderText = LanguageManager.Translate("raza"),
                 Width = 120
             });
             dgvMascotas.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = "EdadEnAnios",
-                HeaderText = "Edad (años)",
+                HeaderText = LanguageManager.Translate("edad_anios"),
                 Width = 80
             });
             dgvMascotas.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = "Sexo",
-                HeaderText = "Sexo",
+                HeaderText = LanguageManager.Translate("sexo"),
                 Width = 80
             });
             dgvMascotas.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = "Peso",
-                HeaderText = "Peso (kg)",
+                HeaderText = $"{LanguageManager.Translate("peso")} ({LanguageManager.Translate("kg")})",
                 Width = 80
             });
             dgvMascotas.Columns.Add(new DataGridViewCheckBoxColumn
             {
                 DataPropertyName = "Activo",
-                HeaderText = "Activo",
+                HeaderText = LanguageManager.Translate("activo"),
                 Width = 60
             });
         }
@@ -149,15 +145,18 @@ namespace UI.WinUi.Negocio
         {
             try
             {
+                // Cargar clientes activos usando BLL
+                var clientes = ClienteBLL.Current.ListarClientesActivos();
+
                 cmbDueno.DataSource = null;
                 cmbDueno.DisplayMember = "NombreCompleto";
                 cmbDueno.ValueMember = "IdCliente";
-                cmbDueno.DataSource = _clientesEnMemoria.Where(c => c.Activo).OrderBy(c => c.Apellido).ToList();
+                cmbDueno.DataSource = clientes.OrderBy(c => c.Apellido).ToList();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar dueños: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_duenos")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -165,42 +164,52 @@ namespace UI.WinUi.Negocio
         {
             try
             {
+                // Cargar todas las mascotas usando BLL
+                var mascotas = MascotaBLL.Current.ListarTodasLasMascotas();
+
                 dgvMascotas.DataSource = null;
-                dgvMascotas.DataSource = _mascotasEnMemoria.OrderBy(m => m.Nombre).ToList();
+                dgvMascotas.DataSource = mascotas.OrderBy(m => m.Nombre).ToList();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar mascotas: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_mascotas")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private void BtnNuevo_Click(object sender, EventArgs e)
         {
-            if (_clientesEnMemoria.Count == 0)
+            try
             {
-                MessageBox.Show("Debe crear al menos un cliente antes de agregar mascotas", "Advertencia",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+                // Verificar que haya clientes disponibles usando BLL
+                var clientes = ClienteBLL.Current.ListarClientesActivos();
+                if (!clientes.Any())
+                {
+                    MessageBox.Show(LanguageManager.Translate("debe_crear_cliente_antes_mascota"),
+                        LanguageManager.Translate("advertencia"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
 
-            _modoEdicion = false;
-            _mascotaSeleccionada = new Mascota();
-            LimpiarCampos();
-            DesbloquearCampos();
-            btnGuardar.Enabled = true;
-            txtNombre.Focus();
+                _modoEdicion = false;
+                _mascotaSeleccionada = new Mascota();
+                LimpiarCampos();
+                DesbloquearCampos();
+                btnGuardar.Enabled = true;
+                txtNombre.Focus();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"{LanguageManager.Translate("error_iniciar_nueva_mascota")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void BtnGuardar_Click(object sender, EventArgs e)
         {
             try
             {
-                // Validar campos
-                if (!ValidarCampos())
-                    return;
-
-                // Asignar valores a la mascota
+                // Asignar valores a la mascota desde los controles
                 _mascotaSeleccionada.Nombre = txtNombre.Text.Trim();
                 _mascotaSeleccionada.Especie = txtEspecie.Text.Trim();
                 _mascotaSeleccionada.Raza = txtRaza.Text.Trim();
@@ -210,45 +219,68 @@ namespace UI.WinUi.Negocio
                 _mascotaSeleccionada.Color = txtColor.Text.Trim();
                 _mascotaSeleccionada.Observaciones = txtObservaciones.Text.Trim();
                 _mascotaSeleccionada.Activo = chkActivo.Checked;
+
+                // Validar que se haya seleccionado un dueño
+                if (cmbDueno.SelectedValue == null)
+                {
+                    MessageBox.Show(LanguageManager.Translate("debe_seleccionar_dueno"),
+                        LanguageManager.Translate("advertencia"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    cmbDueno.Focus();
+                    return;
+                }
+
                 _mascotaSeleccionada.IdCliente = (Guid)cmbDueno.SelectedValue;
 
                 if (_modoEdicion)
                 {
-                    // Actualizar mascota existente
-                    var mascotaExistente = _mascotasEnMemoria.FirstOrDefault(m => m.IdMascota == _mascotaSeleccionada.IdMascota);
-                    if (mascotaExistente != null)
-                    {
-                        var index = _mascotasEnMemoria.IndexOf(mascotaExistente);
-                        _mascotasEnMemoria[index] = _mascotaSeleccionada;
-                    }
-                    MessageBox.Show("Mascota actualizada correctamente", "Éxito",
+                    // Actualizar mascota existente usando BLL
+                    var mascotaActualizada = MascotaBLL.Current.ModificarMascota(_mascotaSeleccionada);
+                    MessageBox.Show(LanguageManager.Translate("mascota_actualizada_correctamente"),
+                        LanguageManager.Translate("exito"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
-                    // Agregar nueva mascota
-                    _mascotasEnMemoria.Add(_mascotaSeleccionada);
-                    MessageBox.Show("Mascota creada correctamente", "Éxito",
+                    // Registrar nueva mascota usando BLL
+                    var mascotaCreada = MascotaBLL.Current.RegistrarMascota(_mascotaSeleccionada);
+                    MessageBox.Show(LanguageManager.Translate("mascota_registrada_correctamente"),
+                        LanguageManager.Translate("exito"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
 
+                // Recargar lista y limpiar formulario
                 CargarTodasLasMascotas();
                 LimpiarCampos();
                 BloquearCampos();
                 btnGuardar.Enabled = false;
             }
+            catch (ArgumentException ex)
+            {
+                // Errores de validación del BLL
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error_validacion"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Errores de reglas de negocio
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar mascota: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                // Errores inesperados
+                MessageBox.Show($"{LanguageManager.Translate("error_guardar_mascota")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private void BtnModificar_Click(object sender, EventArgs e)
         {
-            if (_mascotaSeleccionada == null)
+            if (_mascotaSeleccionada == null || _mascotaSeleccionada.IdMascota == Guid.Empty)
             {
-                MessageBox.Show("Debe seleccionar una mascota", "Advertencia",
+                MessageBox.Show(LanguageManager.Translate("debe_seleccionar_mascota"),
+                    LanguageManager.Translate("advertencia"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -263,32 +295,45 @@ namespace UI.WinUi.Negocio
         {
             try
             {
-                if (_mascotaSeleccionada == null)
+                if (_mascotaSeleccionada == null || _mascotaSeleccionada.IdMascota == Guid.Empty)
                 {
-                    MessageBox.Show("Debe seleccionar una mascota", "Advertencia",
+                    MessageBox.Show(LanguageManager.Translate("debe_seleccionar_mascota"),
+                        LanguageManager.Translate("advertencia"),
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
-                var resultado = MessageBox.Show(
-                    $"¿Está seguro que desea eliminar a {_mascotaSeleccionada.Nombre}?",
-                    "Confirmar Eliminación",
+                var mensaje = string.Format(LanguageManager.Translate("confirmar_eliminar_mascota_nombre"),
+                    _mascotaSeleccionada.Nombre);
+                var resultado = MessageBox.Show(mensaje,
+                    LanguageManager.Translate("confirmar_eliminacion"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
 
                 if (resultado == DialogResult.Yes)
                 {
-                    _mascotasEnMemoria.Remove(_mascotaSeleccionada);
-                    MessageBox.Show("Mascota eliminada correctamente", "Éxito",
+                    // Eliminar mascota usando BLL
+                    MascotaBLL.Current.EliminarMascota(_mascotaSeleccionada.IdMascota);
+
+                    MessageBox.Show(LanguageManager.Translate("mascota_eliminada_correctamente"),
+                        LanguageManager.Translate("exito"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
+
                     CargarTodasLasMascotas();
                     LimpiarCampos();
+                    _mascotaSeleccionada = null;
                 }
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Error de reglas de negocio
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al eliminar mascota: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_eliminar_mascota")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -301,7 +346,7 @@ namespace UI.WinUi.Negocio
         {
             try
             {
-                var textoBusqueda = txtBuscar.Text.Trim().ToLower();
+                var textoBusqueda = txtBuscar.Text.Trim();
 
                 if (string.IsNullOrEmpty(textoBusqueda))
                 {
@@ -309,21 +354,16 @@ namespace UI.WinUi.Negocio
                     return;
                 }
 
-                var mascotasFiltradas = _mascotasEnMemoria
-                    .Where(m =>
-                        m.Nombre.ToLower().Contains(textoBusqueda) ||
-                        m.Especie.ToLower().Contains(textoBusqueda) ||
-                        (m.Raza != null && m.Raza.ToLower().Contains(textoBusqueda)))
-                    .OrderBy(m => m.Nombre)
-                    .ToList();
+                // Buscar usando BLL
+                var mascotasFiltradas = MascotaBLL.Current.BuscarMascotas(textoBusqueda);
 
                 dgvMascotas.DataSource = null;
-                dgvMascotas.DataSource = mascotasFiltradas;
+                dgvMascotas.DataSource = mascotasFiltradas.OrderBy(m => m.Nombre).ToList();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al buscar: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_buscar")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -351,35 +391,6 @@ namespace UI.WinUi.Negocio
                 chkActivo.Checked = _mascotaSeleccionada.Activo;
                 cmbDueno.SelectedValue = _mascotaSeleccionada.IdCliente;
             }
-        }
-
-        private bool ValidarCampos()
-        {
-            if (string.IsNullOrWhiteSpace(txtNombre.Text))
-            {
-                MessageBox.Show("El nombre es obligatorio", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtNombre.Focus();
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(txtEspecie.Text))
-            {
-                MessageBox.Show("La especie es obligatoria", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtEspecie.Focus();
-                return false;
-            }
-
-            if (cmbDueno.SelectedValue == null)
-            {
-                MessageBox.Show("Debe seleccionar un dueño", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                cmbDueno.Focus();
-                return false;
-            }
-
-            return true;
         }
 
         private void LimpiarCampos()

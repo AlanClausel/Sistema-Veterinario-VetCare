@@ -32,6 +32,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -41,14 +42,22 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
-    <Compile Include="ValidationBLL.cs" />
+    <Compile Include="CitaBLL.cs" />
+    <Compile Include="ClienteBLL.cs" />
+    <Compile Include="MascotaBLL.cs" />
+    <Compile Include="VeterinarioBLL.cs" />
+    <Compile Include="MedicamentoBLL.cs" />
+    <Compile Include="ConsultaMedicaBLL.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\ServicesSeguridad\ServicesSecurity.csproj">
-      <Project>{391c7a20-31e4-449a-9521-2efa9776fd16}</Project>
-      <Name>ServicesSecurity</Name>
+    <ProjectReference Include="..\DAL\DAL.csproj">
+      <Project>{ec9a79a4-c4b2-4011-9203-b704d6f49273}</Project>
+      <Name>DAL</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\DomainModel\DomainModel.csproj">
+      <Project>{959f08ce-253c-44bc-9931-0c4b9e06dd45}</Project>
+      <Name>DomainModel</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

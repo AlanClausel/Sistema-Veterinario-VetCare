@@ -4,6 +4,7 @@ using System.Linq;
 using ServicesSecurity.DomainModel.Security.Composite;
 using ServicesSecurity.DomainModel.Exceptions;
 using ServicesSecurity.Services;
+// using BLL; // ELIMINADO: Causaba dependencia circular (BLL -> DAL -> ServicesSecurity -> BLL)
 
 namespace ServicesSecurity.BLL
 {
@@ -178,6 +179,10 @@ namespace ServicesSecurity.BLL
 
                 ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.Update(usuario);
 
+                // NOTA: La sincronización de nombre con VetCareDB.Veterinario se hace de forma "lazy"
+                // cuando se consulta el veterinario (VeterinarioBLL.ObtenerVeterinarioConSincronizacion)
+                // Esto evita la dependencia circular entre ServicesSeguridad y VetCareNegocio
+
                 // Actualizar rol si se proporcionó uno nuevo
                 if (idFamiliaRol.HasValue && idFamiliaRol.Value != Guid.Empty)
                 {
@@ -193,36 +198,58 @@ namespace ServicesSecurity.BLL
 
         /// <summary>
         /// Cambia el rol de un usuario (quita el rol anterior y asigna uno nuevo)
+        /// Usa Unit of Work para garantizar atomicidad
         /// </summary>
         public static void CambiarRol(Guid idUsuario, Guid idNuevaFamiliaRol)
         {
-            try
+            // Usar Unit of Work para garantizar que todas las operaciones se completen o se reviertan
+            using (var unitOfWork = new ServicesSecurity.DAL.Implementations.SecurityUnitOfWork())
             {
-                // Verificar que la nueva familia de rol exista y sea válida
-                var nuevaFamiliaRol = ServicesSecurity.DAL.Implementations.FamiliaRepository.Current.SelectOne(idNuevaFamiliaRol);
-                if (nuevaFamiliaRol == null)
+                try
                 {
-                    throw new ValidacionException("El rol seleccionado no existe");
-                }
-                if (!nuevaFamiliaRol.EsRol)
-                {
-                    throw new ValidacionException("La familia seleccionada no representa un rol válido");
-                }
+                    unitOfWork.BeginTransaction();
 
-                // Quitar rol anterior (quitar todas las familias de rol)
-                var familiasUsuario = ObtenerFamiliasDelUsuario(idUsuario);
-                foreach (var familia in familiasUsuario.Where(f => f.EsRol))
-                {
-                    QuitarFamilia(idUsuario, familia.IdComponent);
-                }
+                    // Verificar que la nueva familia de rol exista y sea válida
+                    var nuevaFamiliaRol = ServicesSecurity.DAL.Implementations.FamiliaRepository.Current.SelectOne(idNuevaFamiliaRol);
+                    if (nuevaFamiliaRol == null)
+                    {
+                        throw new ValidacionException("El rol seleccionado no existe");
+                    }
+                    if (!nuevaFamiliaRol.EsRol)
+                    {
+                        throw new ValidacionException("La familia seleccionada no representa un rol válido");
+                    }
 
-                // Asignar nuevo rol
-                AsignarFamilia(idUsuario, idNuevaFamiliaRol);
-            }
-            catch (Exception ex)
-            {
-                ExceptionManager.Current.Handle(ex);
-                throw new Exception("Error al cambiar el rol del usuario", ex);
+                    // Quitar rol anterior (quitar todas las familias de rol)
+                    var familiasUsuario = ObtenerFamiliasDelUsuario(idUsuario);
+                    foreach (var familia in familiasUsuario.Where(f => f.EsRol))
+                    {
+                        var usuarioFamilia = new ServicesSecurity.DomainModel.Security.UsuarioFamilia
+                        {
+                            idUsuario = idUsuario,
+                            idFamilia = familia.IdComponent
+                        };
+                        ServicesSecurity.DAL.Implementations.UsuarioFamiliaRepository.Current.DeleteRelacion(usuarioFamilia, unitOfWork);
+                    }
+
+                    // Asignar nuevo rol
+                    var nuevaUsuarioFamilia = new ServicesSecurity.DomainModel.Security.UsuarioFamilia
+                    {
+                        idUsuario = idUsuario,
+                        idFamilia = idNuevaFamiliaRol
+                    };
+                    ServicesSecurity.DAL.Implementations.UsuarioFamiliaRepository.Current.Insert(nuevaUsuarioFamilia, unitOfWork);
+
+                    // Confirmar la transacción
+                    unitOfWork.Commit();
+                }
+                catch (Exception ex)
+                {
+                    // En caso de error, revertir la transacción
+                    unitOfWork.Rollback();
+                    ExceptionManager.Current.Handle(ex);
+                    throw new Exception("Error al cambiar el rol del usuario", ex);
+                }
             }
         }
 
@@ -342,6 +369,7 @@ namespace ServicesSecurity.BLL
 
         /// <summary>
         /// Asigna una familia a un usuario
+        /// Si la familia es ROL_Veterinario, crea automáticamente el registro en VetCareDB
         /// </summary>
         public static void AsignarFamilia(Guid idUsuario, Guid idFamilia)
         {
@@ -354,6 +382,11 @@ namespace ServicesSecurity.BLL
                 };
 
                 ServicesSecurity.DAL.Implementations.UsuarioFamiliaRepository.Current.Insert(usuarioFamilia);
+
+                // NOTA: Si se asigna ROL_Veterinario, el registro en VetCareDB.Veterinario
+                // se crea automáticamente la primera vez que el usuario inicia sesión o
+                // cuando se consulta el veterinario por primera vez (sincronización lazy).
+                // Esto evita la dependencia circular entre ServicesSeguridad y VetCareNegocio.
             }
             catch (Exception ex)
             {
@@ -527,6 +560,99 @@ namespace ServicesSecurity.BLL
             if (value != null && value.Length < minLength)
             {
                 throw new ValidacionException($"El campo '{fieldName}' debe tener al menos {minLength} caracteres");
+            }
+        }
+
+        #endregion
+
+        #region Métodos para Mi Cuenta (Perfil de Usuario)
+
+        /// <summary>
+        /// Cambia la contraseña de un usuario
+        /// Recalcula el DVH automáticamente
+        /// </summary>
+        /// <param name="idUsuario">ID del usuario</param>
+        /// <param name="contraseñaActual">Contraseña actual (para validación)</param>
+        /// <param name="nuevaContraseña">Nueva contraseña en texto plano</param>
+        public static void CambiarContraseña(Guid idUsuario, string contraseñaActual, string nuevaContraseña)
+        {
+            try
+            {
+                // Validaciones
+                ValidarCampoRequerido(contraseñaActual, "Contraseña actual");
+                ValidarCampoRequerido(nuevaContraseña, "Nueva contraseña");
+                ValidarLongitudMinima(nuevaContraseña, "Nueva contraseña", 6);
+
+                // Obtener usuario actual
+                var usuario = ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.SelectOne(idUsuario);
+                if (usuario == null)
+                {
+                    throw new UsuarioNoEncontradoException($"Usuario con ID {idUsuario}");
+                }
+
+                // Verificar contraseña actual
+                string hashActual = CryptographyService.HashPassword(contraseñaActual);
+                if (usuario.Clave != hashActual)
+                {
+                    throw new ContraseñaInvalidaException("La contraseña actual es incorrecta");
+                }
+
+                // Validar que la nueva contraseña sea diferente
+                string hashNueva = CryptographyService.HashPassword(nuevaContraseña);
+                if (usuario.Clave == hashNueva)
+                {
+                    throw new ValidacionException("La nueva contraseña debe ser diferente a la actual");
+                }
+
+                // Actualizar contraseña (el SP recalcula DVH automáticamente)
+                ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.ActualizarContraseña(idUsuario, hashNueva);
+
+                LoggerService.WriteLog($"Contraseña cambiada para usuario: {usuario.Nombre}",
+                    System.Diagnostics.Tracing.EventLevel.Informational, string.Empty);
+            }
+            catch (Exception ex)
+            {
+                ExceptionManager.Current.Handle(ex);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Actualiza el idioma preferido de un usuario
+        /// Recalcula el DVH automáticamente
+        /// </summary>
+        /// <param name="idUsuario">ID del usuario</param>
+        /// <param name="nuevoIdioma">Código del idioma (ej: 'es-AR', 'en-GB')</param>
+        public static void ActualizarIdioma(Guid idUsuario, string nuevoIdioma)
+        {
+            try
+            {
+                // Validaciones
+                ValidarCampoRequerido(nuevoIdioma, "Idioma");
+
+                // Validar formato de idioma (debe ser xx-XX)
+                if (nuevoIdioma.Length != 5 || nuevoIdioma[2] != '-')
+                {
+                    throw new ValidacionException("El formato del idioma debe ser xx-XX (ej: es-AR, en-GB)");
+                }
+
+                // Obtener usuario actual
+                var usuario = ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.SelectOne(idUsuario);
+                if (usuario == null)
+                {
+                    throw new UsuarioNoEncontradoException($"Usuario con ID {idUsuario}");
+                }
+
+                // Actualizar idioma (el SP recalcula DVH automáticamente)
+                ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.ActualizarIdioma(idUsuario, nuevoIdioma);
+
+                LoggerService.WriteLog($"Idioma actualizado para usuario: {usuario.Nombre} - Nuevo idioma: {nuevoIdioma}",
+                    System.Diagnostics.Tracing.EventLevel.Informational, string.Empty);
+            }
+            catch (Exception ex)
+            {
+                ExceptionManager.Current.Handle(ex);
+                throw;
             }
         }
 

@@ -282,5 +282,41 @@ namespace ServicesSecurity.DAL.Implementations
         {
             return SelectOneByName(sName);
         }
+
+        #region Métodos para Mi Cuenta
+
+        /// <summary>
+        /// Actualiza la contraseña del usuario y recalcula DVH
+        /// </summary>
+        public void ActualizarContraseña(Guid idUsuario, string nuevaClaveHasheada)
+        {
+            var parameters = new List<SqlParameter>
+            {
+                new SqlParameter("@IdUsuario", idUsuario),
+                new SqlParameter("@NuevaClaveHasheada", nuevaClaveHasheada)
+            };
+
+            SqlHelper.ExecuteNonQuery("SP_Usuario_ActualizarPassword",
+                System.Data.CommandType.StoredProcedure,
+                parameters.ToArray());
+        }
+
+        /// <summary>
+        /// Actualiza el idioma preferido del usuario y recalcula DVH
+        /// </summary>
+        public void ActualizarIdioma(Guid idUsuario, string nuevoIdioma)
+        {
+            var parameters = new List<SqlParameter>
+            {
+                new SqlParameter("@IdUsuario", idUsuario),
+                new SqlParameter("@NuevoIdioma", nuevoIdioma)
+            };
+
+            SqlHelper.ExecuteNonQuery("SP_Usuario_ActualizarIdioma",
+                System.Data.CommandType.StoredProcedure,
+                parameters.ToArray());
+        }
+
+        #endregion
     }
 }

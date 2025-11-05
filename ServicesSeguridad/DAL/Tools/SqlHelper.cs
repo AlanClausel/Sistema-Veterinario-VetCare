@@ -90,6 +90,42 @@ namespace ServicesSecurity.DAL.Tools
                 return reader;
             }
         }
+
+        // =============================================
+        // Métodos sobrecargados para soportar transacciones (Unit of Work)
+        // =============================================
+
+        /// <summary>
+        /// Ejecuta un comando que no retorna datos usando una transacción existente
+        /// </summary>
+        public static Int32 ExecuteNonQuery(SqlConnection connection, SqlTransaction transaction,
+            String commandText, CommandType commandType, params SqlParameter[] parameters)
+        {
+            CheckNullables(parameters);
+
+            using (SqlCommand cmd = new SqlCommand(commandText, connection, transaction))
+            {
+                cmd.CommandType = commandType;
+                cmd.Parameters.AddRange(parameters);
+                return cmd.ExecuteNonQuery();
+            }
+        }
+
+        /// <summary>
+        /// Ejecuta un comando y retorna un valor único usando una transacción existente
+        /// </summary>
+        public static Object ExecuteScalar(SqlConnection connection, SqlTransaction transaction,
+            String commandText, CommandType commandType, params SqlParameter[] parameters)
+        {
+            CheckNullables(parameters);
+
+            using (SqlCommand cmd = new SqlCommand(commandText, connection, transaction))
+            {
+                cmd.CommandType = commandType;
+                cmd.Parameters.AddRange(parameters);
+                return cmd.ExecuteScalar();
+            }
+        }
     }
 
 }

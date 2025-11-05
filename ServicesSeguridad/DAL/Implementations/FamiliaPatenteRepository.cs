@@ -46,12 +46,35 @@ namespace ServicesSecurity.DAL.Implementations
 
         public void Insert(ServicesSecurity.DomainModel.Security.FamiliaPatente obj)
         {
+            Insert(obj, null);
+        }
+
+        /// <summary>
+        /// Inserta una relación FamiliaPatente con soporte para Unit of Work
+        /// </summary>
+        public void Insert(ServicesSecurity.DomainModel.Security.FamiliaPatente obj, IUnitOfWork unitOfWork)
+        {
             try
             {
-                SqlHelper.ExecuteNonQuery(InsertStatement, System.Data.CommandType.Text, new SqlParameter[] {
-                    new SqlParameter("@IdFamilia", obj.idFamilia),
-                    new SqlParameter("@IdPatente", obj.idPatente)
-                });
+                if (unitOfWork != null && unitOfWork.Transaction != null)
+                {
+                    SqlHelper.ExecuteNonQuery(
+                        unitOfWork.Connection,
+                        unitOfWork.Transaction,
+                        InsertStatement,
+                        System.Data.CommandType.Text,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdFamilia", obj.idFamilia),
+                            new SqlParameter("@IdPatente", obj.idPatente)
+                        });
+                }
+                else
+                {
+                    SqlHelper.ExecuteNonQuery(InsertStatement, System.Data.CommandType.Text, new SqlParameter[] {
+                        new SqlParameter("@IdFamilia", obj.idFamilia),
+                        new SqlParameter("@IdPatente", obj.idPatente)
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -62,12 +85,35 @@ namespace ServicesSecurity.DAL.Implementations
 
         public void DeleteRelacion(ServicesSecurity.DomainModel.Security.FamiliaPatente obj)
         {
+            DeleteRelacion(obj, null);
+        }
+
+        /// <summary>
+        /// Elimina una relación FamiliaPatente con soporte para Unit of Work
+        /// </summary>
+        public void DeleteRelacion(ServicesSecurity.DomainModel.Security.FamiliaPatente obj, IUnitOfWork unitOfWork)
+        {
             try
             {
-                SqlHelper.ExecuteNonQuery(DeleteStatement, System.Data.CommandType.Text, new SqlParameter[] {
-                    new SqlParameter("@IdFamilia", obj.idFamilia),
-                    new SqlParameter("@IdPatente", obj.idPatente)
-                });
+                if (unitOfWork != null && unitOfWork.Transaction != null)
+                {
+                    SqlHelper.ExecuteNonQuery(
+                        unitOfWork.Connection,
+                        unitOfWork.Transaction,
+                        DeleteStatement,
+                        System.Data.CommandType.Text,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdFamilia", obj.idFamilia),
+                            new SqlParameter("@IdPatente", obj.idPatente)
+                        });
+                }
+                else
+                {
+                    SqlHelper.ExecuteNonQuery(DeleteStatement, System.Data.CommandType.Text, new SqlParameter[] {
+                        new SqlParameter("@IdFamilia", obj.idFamilia),
+                        new SqlParameter("@IdPatente", obj.idPatente)
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -103,7 +149,6 @@ namespace ServicesSecurity.DAL.Implementations
         {
             //3) Buscar en SP Familia_Patente_Select y retornar id de patentes relacionados
             //4) Iterar sobre esos ids -> LLamar al Adaptador y cargar las patentes...
-            Patente patenteGet = null;
 
             try
             {
@@ -116,10 +161,11 @@ namespace ServicesSecurity.DAL.Implementations
                     while (reader.Read())
                     {
                         reader.GetValues(values);
-                        //Obtengo el id de familia relacionado a la familia principal...(obj)
-                        Guid idPatenteRelacionada = Guid.Parse(values[1].ToString());
+                        //Obtengo el id de patente relacionado a la familia principal...(obj)
+                        // CORREGIDO: values[0] en lugar de values[1] porque el SP solo devuelve 1 columna
+                        Guid idPatenteRelacionada = Guid.Parse(values[0].ToString());
 
-                        patenteGet = PatenteRepository.Current.SelectOne(idPatenteRelacionada);
+                        Patente patenteGet = PatenteRepository.Current.SelectOne(idPatenteRelacionada);
 
                         obj.Add(patenteGet);
                     }

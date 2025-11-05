@@ -52,6 +52,7 @@
     <Compile Include="DAL\Contracts\IEntityAdapter.cs" />
     <Compile Include="DAL\Contracts\IGenericRepository.cs" />
     <Compile Include="DAL\Contracts\IJoinRepository.cs" />
+    <Compile Include="DAL\Contracts\IUnitOfWork.cs" />
     <Compile Include="DAL\Factory\FactoryDAL.cs" />
     <Compile Include="DAL\Factory\ServiceFactory.cs" />
     <Compile Include="DAL\Implementations\Adapter\FamiliaAdapter.cs" />
@@ -65,6 +66,7 @@
     <Compile Include="DAL\Implementations\LanguageRepository.cs" />
     <Compile Include="DAL\Implementations\LoggerRepository.cs" />
     <Compile Include="DAL\Implementations\PatenteRepository.cs" />
+    <Compile Include="DAL\Implementations\SecurityUnitOfWork.cs" />
     <Compile Include="DAL\Implementations\UsuarioFamiliaRepository.cs" />
     <Compile Include="DAL\Implementations\UsuarioPatenteRepository.cs" />
     <Compile Include="DAL\Implementations\UsuarioRepository.cs" />

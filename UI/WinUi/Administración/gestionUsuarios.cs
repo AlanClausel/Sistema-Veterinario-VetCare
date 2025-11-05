@@ -71,8 +71,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar roles: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_roles")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -131,7 +131,7 @@ namespace UI.WinUi.Administrador
                     u.IdUsuario,
                     Nombre = u.Nombre,
                     Email = u.Email ?? "",
-                    Rol = u.ObtenerNombreRol() ?? "Sin asignar"
+                    Rol = u.ObtenerNombreRol() ?? LanguageManager.Translate("sin_asignar")
                 }).ToList();
 
                 // Ocultar columna ID
@@ -142,8 +142,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar usuarios: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_usuarios")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -160,8 +160,8 @@ namespace UI.WinUi.Administrador
 
                 if (string.IsNullOrWhiteSpace(nombreBusqueda))
                 {
-                    MessageBox.Show("Ingrese un nombre de usuario para buscar",
-                        "Validación", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(LanguageManager.Translate("ingrese_nombre_buscar"),
+                        LanguageManager.Translate("validacion"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
@@ -171,24 +171,24 @@ namespace UI.WinUi.Administrador
                 _usuarioSeleccionado = usuario;
                 MostrarDatosUsuario(usuario);
 
-                MessageBox.Show($"Usuario '{usuario.Nombre}' encontrado",
-                    "Búsqueda exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(string.Format(LanguageManager.Translate("usuario_encontrado"), usuario.Nombre),
+                    LanguageManager.Translate("busqueda_exitosa"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (UsuarioNoEncontradoException ex)
             {
-                MessageBox.Show(ex.Message, "Usuario no encontrado",
+                MessageBox.Show(ex.Message, LanguageManager.Translate("informacion"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LimpiarCampos();
             }
             catch (ValidacionException ex)
             {
-                MessageBox.Show(ex.Message, "Validación",
+                MessageBox.Show(ex.Message, LanguageManager.Translate("validacion"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al buscar usuario: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_buscar_usuario")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -217,8 +217,8 @@ namespace UI.WinUi.Administrador
                 // Validar formato de email
                 if (!ValidarFormatoEmail(email))
                 {
-                    MessageBox.Show("El formato del email no es válido. Debe contener '@' y un dominio válido (ej: usuario@dominio.com)",
-                        "Validación de Email", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(LanguageManager.Translate("formato_email_invalido"),
+                        LanguageManager.Translate("validacion_email"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     txtEmail.Focus();
                     return;
                 }
@@ -227,7 +227,7 @@ namespace UI.WinUi.Administrador
                 var rolSeleccionado = comboBoxPerfil.SelectedItem as Familia;
                 if (rolSeleccionado == null)
                 {
-                    MessageBox.Show("Debe seleccionar un rol", "Validación",
+                    MessageBox.Show(LanguageManager.Translate("debe_seleccionar_rol"), LanguageManager.Translate("validacion"),
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -243,16 +243,16 @@ namespace UI.WinUi.Administrador
                         rolSeleccionado.IdComponent  // Pasar ID de la Familia de rol
                     );
 
-                    MessageBox.Show("Usuario actualizado correctamente",
-                        "Éxito", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LanguageManager.Translate("usuario_actualizado_correctamente"),
+                        LanguageManager.Translate("exito"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
                     // Crear nuevo usuario (idioma por defecto: es-AR)
                     UsuarioBLL.CrearUsuario(nombre, email, password, rolSeleccionado.IdComponent, "es-AR");
 
-                    MessageBox.Show("Usuario creado correctamente",
-                        "Éxito", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LanguageManager.Translate("usuario_creado_correctamente"),
+                        LanguageManager.Translate("exito"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
 
                 CargarTodosLosUsuarios();
@@ -262,13 +262,13 @@ namespace UI.WinUi.Administrador
             }
             catch (ValidacionException ex)
             {
-                MessageBox.Show(ex.Message, "Validación",
+                MessageBox.Show(ex.Message, LanguageManager.Translate("validacion"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_guardar")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -276,8 +276,8 @@ namespace UI.WinUi.Administrador
         {
             if (_usuarioSeleccionado == null)
             {
-                MessageBox.Show("Seleccione un usuario de la lista o busque uno para modificar",
-                    "Validación", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(LanguageManager.Translate("seleccione_usuario_modificar"),
+                    LanguageManager.Translate("validacion"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -293,22 +293,22 @@ namespace UI.WinUi.Administrador
             {
                 if (_usuarioSeleccionado == null)
                 {
-                    MessageBox.Show("Seleccione un usuario de la lista para eliminar",
-                        "Validación", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(LanguageManager.Translate("seleccione_usuario_eliminar"),
+                        LanguageManager.Translate("validacion"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
                 // Validar que no se elimine a sí mismo
                 if (_usuarioSeleccionado.IdUsuario == _usuarioLogueado.IdUsuario)
                 {
-                    MessageBox.Show("No puede eliminar su propio usuario",
-                        "Validación", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(LanguageManager.Translate("no_eliminar_propio_usuario"),
+                        LanguageManager.Translate("validacion"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
                 var confirmResult = MessageBox.Show(
-                    $"¿Está seguro que desea eliminar el usuario '{_usuarioSeleccionado.Nombre}'?",
-                    "Confirmar eliminación",
+                    string.Format(LanguageManager.Translate("confirmar_eliminar_usuario"), _usuarioSeleccionado.Nombre),
+                    LanguageManager.Translate("confirmar_eliminacion"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
 
@@ -316,16 +316,16 @@ namespace UI.WinUi.Administrador
                 {
                     UsuarioBLL.EliminarUsuario(_usuarioSeleccionado.IdUsuario);
 
-                    MessageBox.Show("Usuario eliminado correctamente",
-                        "Éxito", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LanguageManager.Translate("usuario_eliminado_correctamente"),
+                        LanguageManager.Translate("exito"), MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                     CargarTodosLosUsuarios();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al eliminar: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_eliminar")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

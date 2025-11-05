@@ -64,6 +64,12 @@
     <Compile Include="WinUi\Administración\menu.Designer.cs">
       <DependentUpon>menu.cs</DependentUpon>
     </Compile>
+    <Compile Include="WinUi\Administración\FormMiCuenta.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Administración\FormMiCuenta.Designer.cs">
+      <DependentUpon>FormMiCuenta.cs</DependentUpon>
+    </Compile>
     <Compile Include="WinUi\Negocio\gestionClientes.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -82,6 +88,72 @@
     <Compile Include="WinUi\Negocio\gestionMascotas.Designer.cs">
       <DependentUpon>gestionMascotas.cs</DependentUpon>
     </Compile>
+    <Compile Include="WinUi\Negocio\gestionMedicamentos.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\gestionMedicamentos.Designer.cs">
+      <DependentUpon>gestionMedicamentos.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\gestionCitas.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\gestionCitas.Designer.cs">
+      <DependentUpon>gestionCitas.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormNuevaCita.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormNuevaCita.Designer.cs">
+      <DependentUpon>FormNuevaCita.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormModificarCita.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormModificarCita.Designer.cs">
+      <DependentUpon>FormModificarCita.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormActualizarEstado.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormActualizarEstado.Designer.cs">
+      <DependentUpon>FormActualizarEstado.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\MisCitas.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\MisCitas.Designer.cs">
+      <DependentUpon>MisCitas.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormConsultaMedica.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormConsultaMedica.Designer.cs">
+      <DependentUpon>FormConsultaMedica.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormHistorialClinico.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormHistorialClinico.Designer.cs">
+      <DependentUpon>FormHistorialClinico.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormHistorialDetallado.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormHistorialDetallado.Designer.cs">
+      <DependentUpon>FormHistorialDetallado.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormDetalleConsulta.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormDetalleConsulta.Designer.cs">
+      <DependentUpon>FormDetalleConsulta.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormReportes.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Negocio\FormReportes.Designer.cs">
+      <DependentUpon>FormReportes.cs</DependentUpon>
+    </Compile>
     <Compile Include="WinUi\Login.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -99,8 +171,32 @@
     <EmbeddedResource Include="WinUi\Administración\menu.resx">
       <DependentUpon>menu.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Administración\FormMiCuenta.resx">
+      <DependentUpon>FormMiCuenta.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="WinUi\Negocio\gestionMascotas.resx">
       <DependentUpon>gestionMascotas.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Negocio\gestionMedicamentos.resx">
+      <DependentUpon>gestionMedicamentos.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Negocio\MisCitas.resx">
+      <DependentUpon>MisCitas.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Negocio\FormConsultaMedica.resx">
+      <DependentUpon>FormConsultaMedica.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Negocio\FormHistorialClinico.resx">
+      <DependentUpon>FormHistorialClinico.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Negocio\FormHistorialDetallado.resx">
+      <DependentUpon>FormHistorialDetallado.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Negocio\FormDetalleConsulta.resx">
+      <DependentUpon>FormDetalleConsulta.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Negocio\FormReportes.resx">
+      <DependentUpon>FormReportes.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="WinUi\Login.resx">
       <DependentUpon>Login.cs</DependentUpon>
@@ -136,6 +232,10 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\VetCareNegocio\BLL\BLL.csproj">
+      <Project>{ac4ea265-fede-4613-aa84-80831fc8da9b}</Project>
+      <Name>BLL</Name>
+    </ProjectReference>
     <ProjectReference Include="..\VetCareNegocio\DomainModel\DomainModel.csproj">
       <Project>{959f08ce-253c-44bc-9931-0c4b9e06dd45}</Project>
       <Name>DomainModel</Name>

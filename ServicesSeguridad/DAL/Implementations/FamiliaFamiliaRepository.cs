@@ -106,5 +106,37 @@ namespace ServicesSecurity.DAL.Implementations
                 ex.Handle(this);
             }
         }
+
+        /// <summary>
+        /// Obtiene las relaciones FamiliaFamilia (usado por FamiliaBLL para navegación recursiva)
+        /// </summary>
+        public IEnumerable<ServicesSecurity.DomainModel.Security.FamiliaFamilia> GetChildrenRelations(Familia familia)
+        {
+            var relaciones = new List<ServicesSecurity.DomainModel.Security.FamiliaFamilia>();
+
+            try
+            {
+                string sqlStatement = "SELECT IdFamiliaPadre, IdFamiliaHijo FROM [dbo].[FamiliaFamilia] WHERE IdFamiliaPadre = @IdFamiliaPadre";
+
+                using (var dr = SqlHelper.ExecuteReader(sqlStatement, System.Data.CommandType.Text,
+                                                        new SqlParameter[] { new SqlParameter("@IdFamiliaPadre", familia.IdComponent) }))
+                {
+                    while (dr.Read())
+                    {
+                        relaciones.Add(new ServicesSecurity.DomainModel.Security.FamiliaFamilia
+                        {
+                            idFamiliaPadre = (Guid)dr["IdFamiliaPadre"],
+                            idFamiliaHijo = (Guid)dr["IdFamiliaHijo"]
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.Handle(this);
+            }
+
+            return relaciones;
+        }
     }
 }

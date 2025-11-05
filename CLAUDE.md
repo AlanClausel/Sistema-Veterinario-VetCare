@@ -4,258 +4,364 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VetCare Veterinary Management System - A Windows Forms application (.NET Framework 4.7.2) for managing veterinary clinic operations with a robust security subsystem using the Composite pattern for permissions and roles.
+**Sistema Veterinaria VetCare** is a Windows Forms veterinary management system built with C# (.NET Framework 4.7.2) that manages clients, pets, appointments, medical consultations, and user permissions. The system uses a layered architecture with two separate SQL Server databases.
 
-**Note:** The solution file is named "Sistema Biblioteca Escolar.sln" but this is actually a Veterinary Management System (VetCare). The database is "SeguridadBiblioteca" (legacy naming).
+## Build Commands
 
-## Build and Run Commands
-
-### Build the Solution
+### Build the solution
 ```bash
-msbuild "Sistema Biblioteca Escolar.sln" /p:Configuration=Debug
+# Using build.bat
+build.bat
+
+# Using MSBuild directly
+"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" "Sistema Veterinario VetCare.sln" /p:Configuration=Debug
 ```
 
-### Run the Application
+### Clean all build artifacts
 ```bash
-UI\bin\Debug\UI.exe
+clean_all.bat
 ```
 
-### Database Setup
+## Database Setup
 
-**Initial Installation (Run once):**
+The system uses **two separate SQL Server databases**:
+
+### 1. SecurityVet (Security Module)
 ```bash
+# Complete installation (recommended)
 sqlcmd -S localhost -i "Database\00_EJECUTAR_TODO.sql"
-```
 
-**Step-by-step Installation:**
-```bash
+# Step by step
 sqlcmd -S localhost -i "Database\01_CrearBaseDatos.sql"
 sqlcmd -S localhost -i "Database\02_CrearTablas.sql"
 sqlcmd -S localhost -i "Database\03_DatosIniciales.sql"
 ```
 
-**Default Admin Credentials:**
-- Username: `admin`
-- Password: `admin123`
-- Email: `admin@biblioteca.edu`
+**Default admin credentials:** `admin` / `admin123`
 
-**Connection String:** Located in `UI/App.config`, modify the `Data Source` to match your SQL Server instance.
+### 2. VetCareDB (Business Module)
+```bash
+# Complete installation (recommended)
+sqlcmd -S localhost -i "Database\00_EJECUTAR_TODO_NEGOCIO.sql"
+
+# Individual scripts available in Database folder (14-32)
+```
+
+### Connection Strings
+Located in `UI/App.config`:
+- **ServicesConString**: SecurityVet database
+- **VetCareConString**: VetCareDB database
+
+Both use `localhost` by default with Integrated Security and TrustServerCertificate=True.
 
 ## Architecture
 
-### Layered Architecture (Model-View-Controller variant)
-
-The solution follows a layered architecture with clear separation of concerns:
+### Layered Architecture (3-Tier)
 
 ```
-UI (View Layer)
-  └── Windows Forms - User interface
-      ├── Login.cs
-      ├── Administración/ - Admin forms (gestionUsuarios, gestionPermisos, menu, gestionCatalogo)
-      └── Transacciones/ - Business transaction forms
-
-ServicesSecurity (Security Module) - Complete security subsystem
-  ├── BLL/ - Business logic for security
-  │   ├── UsuarioBLL.cs - User management logic
-  │   ├── FamiliaBLL.cs - Role/permission group logic
-  │   └── ValidationBLL.cs - Business validation rules
-  ├── DAL/ - Data access layer for security
-  │   ├── Contracts/ - Repository interfaces
-  │   ├── Implementations/ - Concrete repositories
-  │   │   ├── UsuarioRepository.cs
-  │   │   ├── FamiliaRepository.cs
-  │   │   ├── PatenteRepository.cs
-  │   │   └── Adapter/ - Entity-to-model adapters
-  │   └── Tools/ - Database utilities
-  ├── DomainModel/Security/Composite/ - Security domain entities
-  │   ├── Component.cs - Base class (Composite pattern)
-  │   ├── Familia.cs - Composite (roles/permission groups)
-  │   ├── Patente.cs - Leaf (atomic permissions)
-  │   └── Usuario.cs - User entity
-  └── Services/ - Cross-cutting services
-      ├── CryptographyService.cs - SHA256 hashing (uses Encoding.Unicode)
-      ├── LanguageManager.cs - i18n support
-      ├── LoggerService.cs - Application logging
-      └── ExceptionManager.cs - Exception handling
-
-BLL/ - Business logic layer (future business modules)
-DAL/ - Data access layer (future business modules)
-DomainModel/ - Domain entities (future business modules)
-Services/ - Application services (future business modules)
-
-Database/ - SQL scripts for database setup
+UI (Windows Forms)
+  └── WinUi/
+      ├── Administración/ (Security module forms)
+      ├── Negocio/ (Business module forms)
+      └── Login.cs (Entry point)
+          ↓
+BLL (Business Logic Layer)
+  ├── ServicesSeguridad/BLL/ (Security module)
+  │   ├── UsuarioBLL - User management
+  │   └── FamiliaBLL - Permission management
+  └── VetCareNegocio/BLL/ (Business module)
+      ├── ClienteBLL - Client use cases
+      ├── MascotaBLL - Pet use cases
+      ├── CitaBLL - Appointment use cases
+      ├── ConsultaMedicaBLL - Medical consultation use cases
+      ├── MedicamentoBLL - Medication use cases
+      └── VeterinarioBLL - Veterinarian use cases
+          ↓
+DAL (Data Access Layer)
+  ├── ServicesSeguridad/DAL/ (SecurityVet DB)
+  │   ├── Contracts/ (Interfaces)
+  │   ├── Implementations/ (Repositories using SPs)
+  │   └── Tools/SqlHelper
+  └── VetCareNegocio/DAL/ (VetCareDB)
+      ├── Contracts/ (Interfaces)
+      ├── Implementations/ (Repositories using SPs)
+      ├── Adapters/ (DataRow → Entity conversion)
+      └── Tools/SqlHelper
+          ↓
+Database
+  ├── SecurityVet (Usuario, Familia, Patente tables)
+  └── VetCareDB (Cliente, Mascota, Cita, ConsultaMedica, Medicamento, Veterinario tables)
 ```
 
 ### Key Architectural Patterns
 
-**1. Composite Pattern for Permissions (Critical)**
+1. **Repository Pattern (Specific)**: Each entity has a specific repository with domain methods, not generic CRUD
+2. **Singleton Pattern**: All BLL and Repository classes use singleton (`ClassName.Current`)
+3. **Adapter Pattern**: `Adapters/` convert ADO.NET DataRows to domain entities
+4. **Unit of Work Pattern**: For transactional operations (see `UNIT_OF_WORK_IMPLEMENTATION.md`)
+5. **Composite Pattern**: Security permissions use composite pattern (Familia can contain Familias and Patentes)
+6. **Stored Procedures Only**: All database access uses SPs, no inline SQL queries
 
-The security system uses the Composite design pattern to build hierarchical permission structures:
+### Project Structure
 
-- `Component` (abstract base): Interface for both `Familia` and `Patente`
-- `Familia` (Composite): Container that can hold other Familias or Patentes
-- `Patente` (Leaf): Atomic permission (e.g., "Alta de Usuario", "Ver Logs")
+- **UI/** - Windows Forms presentation layer (.csproj: UI.csproj)
+- **ServicesSeguridad/** - Security module (authentication, authorization) (.csproj: ServicesSecurity.csproj)
+  - Uses `ServicesConString` connection
+  - Database: SecurityVet
+- **VetCareNegocio/** - Business module (split into 4 projects)
+  - **DomainModel/** - Domain entities (Cliente, Mascota, Cita, etc.)
+  - **DAL/** - Data access with repositories and adapters
+  - **BLL/** - Business logic and use cases
+  - **Services/** - Cross-cutting services
+  - Uses `VetCareConString` connection
+  - Database: VetCareDB
 
-**Roles as Special Familias:**
-- Roles are Familias with names starting with `ROL_` (e.g., `ROL_Administrador`, `ROL_Veterinario`)
-- `Familia.EsRol` property identifies if a Familia is a role
-- `Usuario.Permisos` contains a list of Components (Familias and Patentes)
-- To get a user's role, use `usuario.ObtenerFamiliaRol()` or `usuario.ObtenerNombreRol()`
+## Security Module
 
-**Hierarchy Example:**
-```
-ROL_Administrador (Familia)
-  ├── Gestión de Usuarios (Familia)
-  │   ├── Alta de Usuario (Patente)
-  │   ├── Baja de Usuario (Patente)
-  │   └── Modificar Usuario (Patente)
-  └── Gestión de Permisos (Familia)
-      └── Asignar Permisos (Patente)
-```
+### Composite Permissions System
 
-**2. Repository Pattern with Adapter**
+The security module implements a **Composite Pattern** for permissions:
 
-Data access uses Repository pattern with Adapters to map between DataTable rows and domain entities:
+- **Patente** (Leaf): Atomic permission (e.g., "Alta de Usuario", "Gestión de Clientes")
+  - Properties: `FormName` (form to open), `MenuItemName` (display text), `Orden`
+- **Familia** (Composite): Group of permissions or roles
+  - Naming convention: `ROL_*` = Role (e.g., `ROL_Administrador`, `ROL_Veterinario`, `ROL_Recepcionista`)
+  - Other names = Permission groups (e.g., "Gestión de Usuarios")
+- **Relationships**:
+  - Usuario → Familia (roles assigned to user)
+  - Usuario → Patente (direct permissions)
+  - Familia → Familia (hierarchy)
+  - Familia → Patente (permissions in group)
 
-- `IGenericRepository<T>` - Base repository interface
-- Concrete repositories (e.g., `UsuarioRepository.Current` is a singleton)
-- Adapters (`UsuarioAdapter`, `FamiliaAdapter`, etc.) convert ADO.NET DataTables to entities
+### Key Security Features
 
-**3. DVH (Dígito Verificador Horizontal) - Data Integrity**
+1. **DVH (Dígito Verificador Horizontal)**: SHA256 hash per Usuario row to detect unauthorized DB modifications
+2. **Password Hashing**: SHA256 via `CryptographyService.HashPassword()`
+3. **Dynamic Menu**: Menu loads based on user's Patentes (`menu.cs:CargarMenuDinamico()`)
+4. **Permission Checking**: UI forms check permissions via `_usuarioLogueado.TienePermiso(formName)`
 
-The `Usuario` table includes a DVH column for detecting unauthorized database modifications:
+### LoginService
 
-**DVH Calculation:**
+Static service in `ServicesSeguridad/Services/LoginService.cs`:
+- `Login(nombre, password)` - Authenticates and loads permissions recursively
+- `GetUsuarioLogueado()` - Returns current logged-in user
+- Loads Composite tree recursively with `CargarHijosDeFamilia()`
+
+## Business Module Entities
+
+### Main Domain Models (VetCareNegocio/DomainModel/)
+
+- **Cliente**: Name, Apellido, DNI (unique), Telefono, Email, Direccion
+- **Mascota**: Belongs to Cliente, has Nombre, Especie, Raza, FechaNacimiento, Sexo, Peso, Color
+- **Veterinario**: Synced from SecurityVet Usuario when assigned ROL_Veterinario
+- **Cita**: Appointment linking Cliente, Mascota, Veterinario, with Estado (Agendada, Confirmada, Completada, Cancelada, NoAsistio)
+- **ConsultaMedica**: Links to Cita, contains Sintomas, Diagnostico, Tratamiento
+- **Medicamento**: Stock, PrecioUnitario, Nombre, Presentacion
+- **ConsultaMedicamento**: Many-to-many linking ConsultaMedica and Medicamento with Cantidad and Indicaciones
+
+### Business Validations
+
+All validations occur in BLL classes before calling repositories:
+
+**ClienteBLL:**
+- Nombre/Apellido: min 2 chars
+- DNI: min 6 chars, unique
+- Email: valid format if provided
+
+**MascotaBLL:**
+- Nombre: min 2 chars
+- Sexo: must be "Macho" or "Hembra"
+- FechaNacimiento: cannot be future
+- Peso: >= 0, < 1000 kg
+- Cliente must exist and be active
+
+**ConsultaMedicaBLL:**
+- Sintomas: min 10 chars
+- Diagnostico: min 10 chars
+- Stock validation before finalizing (uses transaction in SP)
+
+## Important Development Patterns
+
+### Using BLL Classes
+
+All BLL classes are singletons accessed via `.Current`:
+
 ```csharp
-string datos = $"{UPPER(IdUsuario)}|{Nombre}|{Clave}|{(Activo ? 1 : 0)}";
-DVH = CryptographyService.HashPassword(datos); // SHA256 with Encoding.Unicode
+var clienteBLL = ClienteBLL.Current;
+var cliente = clienteBLL.RegistrarCliente(new Cliente { ... });
 ```
 
-**IMPORTANT:**
-- GUID must be in UPPERCASE when calculating DVH
-- Only includes: IdUsuario, Nombre, Clave, Activo (NOT Email or IdiomaPreferido)
-- Must be recalculated on every INSERT/UPDATE of Usuario
-- Must be validated on every SELECT
+### Using Repositories
 
-**4. Password Hashing**
+Repositories use Stored Procedures only:
 
-Uses `CryptographyService.HashPassword()`:
-- Algorithm: SHA256
-- Encoding: `Encoding.Unicode` (UTF-16) to match SQL Server NVARCHAR
-- Output: Uppercase hexadecimal string
-- Matches SQL Server: `CONVERT(NVARCHAR(64), HASHBYTES('SHA2_256', @input), 2)`
-
-## Database Schema
-
-**Database Name:** SeguridadBiblioteca
-
-**Core Tables:**
-- `Usuario` - Users (with DVH for integrity)
-- `Familia` - Roles and permission groups (Composite pattern)
-- `Patente` - Atomic permissions (Leaf pattern)
-- `UsuarioFamilia` - User-to-role/group assignments
-- `UsuarioPatente` - User-to-permission direct assignments
-- `FamiliaFamilia` - Hierarchy (Familia contains Familia)
-- `FamiliaPatente` - Familia contains Patente
-- `Language` - i18n translations
-- `Logger` - Application logs
-
-**Relationships:**
-- Many-to-many: Usuario ↔ Familia (through UsuarioFamilia)
-- Many-to-many: Usuario ↔ Patente (through UsuarioPatente)
-- Many-to-many: Familia ↔ Familia (through FamiliaFamilia) - Composite hierarchy
-- Many-to-many: Familia ↔ Patente (through FamiliaPatente)
-
-## Critical Implementation Details
-
-### When Creating/Updating Users
-
-Always calculate DVH:
 ```csharp
-usuario.DVH = CalcularDVH(usuario);
+// All repositories follow this pattern
+var repo = ClienteRepository.Current;
+var cliente = repo.Crear(clienteEntity);
+var clientes = repo.ObtenerTodos();
+```
 
-private string CalcularDVH(Usuario u)
+### Using Unit of Work (for transactional operations)
+
+```csharp
+using (var uow = new SecurityUnitOfWork())
 {
-    string datos = $"{u.IdUsuario.ToString().ToUpper()}|{u.Nombre}|{u.Clave}|{(u.Activo ? 1 : 0)}";
-    return CryptographyService.HashPassword(datos);
+    uow.BeginTransaction();
+    try
+    {
+        // Multiple operations
+        repository.Insert(entity, uow);
+        repository.Delete(otherEntity, uow);
+        uow.Commit();
+    }
+    catch
+    {
+        uow.Rollback();
+        throw;
+    }
 }
 ```
 
-### When Reading Users
+See `UNIT_OF_WORK_IMPLEMENTATION.md` for detailed examples.
 
-Always validate DVH:
-```csharp
-var usuario = UsuarioRepository.Current.SelectOne(id);
-string dvhCalculado = CalcularDVH(usuario);
-if (dvhCalculado != usuario.DVH)
-    throw new IntegridadException("DVH no coincide - registro alterado");
-```
+### Connection String Usage
 
-### Working with Roles
+Always use named connection strings from App.config:
 
 ```csharp
-// Get user role
-var rolNombre = usuario.ObtenerNombreRol(); // Returns "Administrador", "Veterinario", etc.
+// Security module
+SqlHelper.ExecuteNonQuery(commandText, commandType, parameters);
+// Uses "ServicesConString" by default
 
-// Check if user has a role
-if (usuario.TieneRol("Administrador")) { ... }
-
-// Get role Familia
-var familiaRol = usuario.ObtenerFamiliaRol();
+// Business module
+SqlHelper.ExecuteNonQuery(commandText, commandType, parameters);
+// Uses "VetCareConString" by default (configured in SqlHelper constructor)
 ```
 
-### Menu Construction
+## Critical Implementation Notes
 
-Use `usuario.GetPatentesAll()` to retrieve all permissions recursively through the Composite hierarchy, then filter unique patentes by `FormName` to build the menu.
+### 1. Two Databases, One System
 
-## Configuration
+The system coordinates data across two databases:
+- When a user is assigned `ROL_Veterinario`, a corresponding record is created in `VetCareDB.Veterinario` table
+- This synchronization happens in `UsuarioBLL.AsignarFamiliaAUsuario()` and `UsuarioBLL.CambiarRol()`
+- The `IdUsuario` (GUID) is shared between both databases as the linking key
 
-**App.config Settings:**
-- `connectionStrings/ServicesConString` - Database connection
-- `appSettings/LanguagePath` - i18n file path (`Resources\I18n\idioma`)
-- `appSettings/SecurityRepositoryServices` - DAL namespace for dependency injection
+### 2. All Database Access Uses Stored Procedures
 
-**i18n Files:**
-- `UI/Resources/I18n/idioma.es-AR` - Spanish (Argentina)
-- `UI/Resources/I18n/idioma.en-GB` - English (UK)
+Never write inline SQL. All operations use SPs:
+- SecurityVet SPs: prefixed by entity (e.g., `Usuario_Insert`, `Familia_SelectAll`)
+- VetCareDB SPs: prefixed by entity (e.g., `Cliente_Insert`, `Mascota_SelectByCliente`)
+- Check `Database/` folder for SP definitions
 
-## Common Tasks
+### 3. DVH Validation
 
-### Adding a New User Manually
+When working with Usuario table:
+- **Always recalculate DVH** on INSERT/UPDATE
+- **Always validate DVH** on SELECT
+- Formula: `SHA256(IdUsuario|Nombre|Clave|Activo)`
+- Validation in `UsuarioRepository.SelectOne()` and similar methods
 
-Use the template script:
-```bash
-# Edit Database/06_InsertarUsuarioManual.sql with user details
-sqlcmd -S localhost -i "Database\06_InsertarUsuarioManual.sql"
-```
+### 4. Dynamic Menu System
 
-### Adding a New Permission (Patente)
+The menu loads dynamically based on Patentes:
+- Menu items created at runtime in `menu.cs:CargarMenuDinamico()`
+- Uses `FormName` to instantiate form: `Type.GetType($"UI.WinUi.Negocio.{patente.FormName}")`
+- New forms need matching Patente records in SecurityVet database
 
-1. Insert into `Patente` table with `FormName`, `MenuItemName`, `Orden`, `Descripcion`
-2. Link to a Familia via `FamiliaPatente` table
-3. Update `03_DatosIniciales.sql` for future installations
+### 5. Adapter Pattern for Data Access
 
-### Creating a New Role
+Each repository uses an Adapter to convert DataRows to entities:
+- Located in `DAL/Adapters/`
+- Example: `ClienteAdapter.DataRowToCliente(DataRow row)`
+- Always use adapters, never manual field mapping in repositories
 
-1. Create a Familia with name starting with `ROL_` (e.g., `ROL_Enfermero`)
-2. Link child Familias (permission groups) via `FamiliaFamilia`
-3. Or link Patentes directly via `FamiliaPatente`
+### 6. Transactional Operations
 
-### Viewing Logs
+Some operations require Unit of Work:
+- **FamiliaBLL.ActualizarPatentesDeRol()** - Multiple DELETE/INSERT of patentes
+- **UsuarioBLL.CambiarRol()** - Delete old roles + insert new role
+- **ConsultaMedicaBLL.FinalizarConsulta()** - Already has transaction in SP `ConsultaMedica_Finalizar`
 
+### 7. Exception Handling
+
+The system has custom exceptions in `DomainModel/Exceptions/`:
+- `ValidacionException` - Business rule violations
+- `IntegridadException` - DVH/data integrity issues
+- `UsuarioNoEncontradoException`, `ContraseñaInvalidaException` - Authentication
+- Always catch and handle appropriately in UI layer
+
+## Testing
+
+### Manual Testing
+See `GUIA_TESTING_MANUAL.md` and `Testing_Manual_VetCare.csv` for 120 test cases covering:
+- Login validation
+- CRUD operations per module
+- Permission checks
+- Data integrity
+
+### Database Verification
 ```sql
-sqlcmd -S localhost -i "Database\VerLogs.sql"
+-- Verify SecurityVet installation
+USE SecurityVet;
+SELECT * FROM Usuario;
+SELECT * FROM Familia WHERE Nombre LIKE 'ROL_%';
+
+-- Verify VetCareDB installation
+USE VetCareDB;
+SELECT * FROM Cliente;
+SELECT * FROM Mascota;
 ```
 
-## Important Notes
+## Common Development Tasks
 
-- **Singleton Repositories:** DAL repositories use `.Current` singleton pattern (e.g., `UsuarioRepository.Current`)
-- **Never modify the database directly** without recalculating DVH for Usuario table
-- **Password storage:** Always hash passwords using `CryptographyService.HashPassword()` before storing
-- **GUID format:** When working with DVH, always use UPPERCASE GUID strings
-- **Composite pattern:** When traversing permissions, use `component.ChildrenCount()` to distinguish between Familia (>0) and Patente (=0)
-- **Migration notes:** See `Database/README_MIGRACION.md` for details on the roles-as-Familias migration
+### Adding a New Form with Permissions
 
-## Future Development
+1. Create the form in `UI/WinUi/Negocio/` or `UI/WinUi/Administración/`
+2. Create Patente in SecurityVet:
+   ```sql
+   INSERT INTO Patente (IdPatente, FormName, MenuItemName, Orden, Descripcion)
+   VALUES (NEWID(), 'NombreFormulario', 'Texto del Menú', 100, 'Descripción');
+   ```
+3. Assign Patente to Familia/Role:
+   ```sql
+   INSERT INTO FamiliaPatente (idFamilia, idPatente)
+   SELECT f.IdFamilia, p.IdPatente
+   FROM Familia f, Patente p
+   WHERE f.Nombre = 'ROL_Administrador' AND p.FormName = 'NombreFormulario';
+   ```
+4. The menu will auto-load the form for users with that permission
 
-The BLL, DAL, DomainModel, and Services folders at the root level are placeholders for future business logic modules (e.g., veterinary operations, appointments, medical records). The ServicesSecurity project is a complete, standalone security module.
+### Adding a New BLL Use Case
+
+1. Define method in `BLL/EntityBLL.cs`
+2. Add validations (throw `ValidacionException` if needed)
+3. Call repository methods
+4. Return domain entity
+
+### Adding a New Repository Method
+
+1. Create Stored Procedure in `Database/` folder
+2. Add method to interface in `DAL/Contracts/IEntityRepository.cs`
+3. Implement in `DAL/Implementations/EntityRepository.cs`
+4. Use `SqlHelper.ExecuteNonQuery/ExecuteReader/ExecuteScalar`
+5. Use Adapter to convert results
+
+### Modifying Database Schema
+
+1. Create SQL script in `Database/` with sequential numbering (e.g., `33_NombreDelCambio.sql`)
+2. Update corresponding SP scripts
+3. Update domain model in `DomainModel/`
+4. Update Adapter in `DAL/Adapters/`
+5. Update Repository in `DAL/Implementations/`
+6. Add migration documentation
+
+## File References
+
+- **Architecture**: See layered structure above
+- **Database Setup**: `Database/README_INSTALACION.md`, `Database/README_MODULO_NEGOCIO.md`, `Database/README_MODULO_VETERINARIO.md`
+- **Unit of Work**: `UNIT_OF_WORK_IMPLEMENTATION.md`
+- **Testing**: `GUIA_TESTING_MANUAL.md`, `Testing_Manual_VetCare.csv`
+- **Entry Point**: `UI/WinUi/Login.cs`
+- **Main Menu**: `UI/WinUi/Administración/menu.cs`

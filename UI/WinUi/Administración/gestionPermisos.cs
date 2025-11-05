@@ -97,8 +97,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar roles: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_roles")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -116,8 +116,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar usuarios: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_usuarios")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -127,30 +127,100 @@ namespace UI.WinUi.Administrador
             {
                 var patentes = UsuarioBLL.ObtenerTodasLasPatentes();
 
-                // Filtrar solo las patentes del menú principal (FormName = "menu")
-                var patentesMenu = patentes.Where(p => p.FormName == "menu").OrderBy(p => p.MenuItemName).ToList();
+                // Agrupar por FormName
+                var patentesAgrupadas = patentes
+                    .GroupBy(p => p.FormName)
+                    .OrderBy(g => g.Key);
 
-                // Cargar en CheckedListBox de roles
+                // Cargar en CheckedListBox de roles con agrupamiento
                 checkedListPatentesRol.Items.Clear();
-                foreach (var patente in patentesMenu)
+                foreach (var grupo in patentesAgrupadas)
                 {
-                    // Crear un texto descriptivo: "MenuItemName - Descripcion"
-                    string textoMostrar = $"{patente.MenuItemName} - {patente.Descripcion}";
-                    checkedListPatentesRol.Items.Add(new PatenteDisplay { Patente = patente, TextoMostrar = textoMostrar }, false);
+                    // Agregar header del grupo
+                    string nombreModulo = HumanizarFormName(grupo.Key);
+                    checkedListPatentesRol.Items.Add(new HeaderDisplay { TextoMostrar = $"━━━ {nombreModulo.ToUpper()} ━━━" }, false);
+
+                    // Agregar patentes del grupo
+                    foreach (var patente in grupo.OrderBy(p => p.Orden).ThenBy(p => p.MenuItemName))
+                    {
+                        string textoMostrar = $"   {patente.MenuItemName}";
+                        checkedListPatentesRol.Items.Add(new PatenteDisplay { Patente = patente, TextoMostrar = textoMostrar }, false);
+                    }
+
+                    // Agregar línea en blanco para separación visual
+                    checkedListPatentesRol.Items.Add(new HeaderDisplay { TextoMostrar = "" }, false);
                 }
 
-                // Cargar en CheckedListBox de usuarios
+                // Cargar en CheckedListBox de usuarios con agrupamiento
                 checkedListPatentesUsuario.Items.Clear();
-                foreach (var patente in patentesMenu)
+                foreach (var grupo in patentesAgrupadas)
                 {
-                    string textoMostrar = $"{patente.MenuItemName} - {patente.Descripcion}";
-                    checkedListPatentesUsuario.Items.Add(new PatenteDisplay { Patente = patente, TextoMostrar = textoMostrar }, false);
+                    // Agregar header del grupo
+                    string nombreModulo = HumanizarFormName(grupo.Key);
+                    checkedListPatentesUsuario.Items.Add(new HeaderDisplay { TextoMostrar = $"━━━ {nombreModulo.ToUpper()} ━━━" }, false);
+
+                    // Agregar patentes del grupo
+                    foreach (var patente in grupo.OrderBy(p => p.Orden).ThenBy(p => p.MenuItemName))
+                    {
+                        string textoMostrar = $"   {patente.MenuItemName}";
+                        checkedListPatentesUsuario.Items.Add(new PatenteDisplay { Patente = patente, TextoMostrar = textoMostrar }, false);
+                    }
+
+                    // Agregar línea en blanco para separación visual
+                    checkedListPatentesUsuario.Items.Add(new HeaderDisplay { TextoMostrar = "" }, false);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar patentes: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_patentes")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Convierte "gestionClientes" o "frmGestionUsuarios" en nombres legibles
+        /// </summary>
+        private string HumanizarFormName(string formName)
+        {
+            if (string.IsNullOrWhiteSpace(formName))
+                return formName;
+
+            string nombre = formName;
+
+            // Eliminar prefijos
+            if (nombre.StartsWith("frm", StringComparison.OrdinalIgnoreCase))
+                nombre = nombre.Substring(3);
+            if (nombre.StartsWith("Form", StringComparison.OrdinalIgnoreCase))
+                nombre = nombre.Substring(4);
+
+            // Reemplazar "gestion" por "Gestión "
+            nombre = System.Text.RegularExpressions.Regex.Replace(
+                nombre,
+                @"[gG]estion",
+                "Gestión ",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            // Agregar espacios antes de mayúsculas (camelCase)
+            nombre = System.Text.RegularExpressions.Regex.Replace(
+                nombre,
+                @"([a-z])([A-Z])",
+                "$1 $2");
+
+            // Capitalizar primera letra
+            if (nombre.Length > 0)
+                nombre = char.ToUpper(nombre[0]) + nombre.Substring(1);
+
+            return nombre.Trim();
+        }
+
+        // Clase auxiliar para headers (no seleccionables)
+        private class HeaderDisplay
+        {
+            public string TextoMostrar { get; set; }
+
+            public override string ToString()
+            {
+                return TextoMostrar;
             }
         }
 
@@ -184,13 +254,16 @@ namespace UI.WinUi.Administrador
         {
             try
             {
-                // Obtener patentes directas del rol desde la BLL (no recursivas)
-                var patentesDelRol = FamiliaBLL.ObtenerPatentesDirectasDeFamilia(rol.IdComponent);
+                // Obtener TODAS las patentes del rol (incluyendo las de familias hijas) - RECURSIVO
+                var patentesDelRol = FamiliaBLL.ObtenerTodasLasPatentesDeRol(rol.IdComponent);
 
-                // Desmarcar todas
+                // Desmarcar todas (solo las patentes, no los headers)
                 for (int i = 0; i < checkedListPatentesRol.Items.Count; i++)
                 {
-                    checkedListPatentesRol.SetItemChecked(i, false);
+                    if (checkedListPatentesRol.Items[i] is PatenteDisplay)
+                    {
+                        checkedListPatentesRol.SetItemChecked(i, false);
+                    }
                 }
 
                 // Marcar las que tiene el rol
@@ -205,8 +278,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar patentes del rol: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_patentes_rol")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -237,8 +310,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar permisos: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_guardar_permisos")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -267,10 +340,13 @@ namespace UI.WinUi.Administrador
                 // Obtener patentes directas del usuario (no heredadas del rol)
                 var patentesDirectas = UsuarioBLL.ObtenerPatentesDelUsuario(usuario.IdUsuario);
 
-                // Desmarcar todas
+                // Desmarcar todas (solo las patentes, no los headers)
                 for (int i = 0; i < checkedListPatentesUsuario.Items.Count; i++)
                 {
-                    checkedListPatentesUsuario.SetItemChecked(i, false);
+                    if (checkedListPatentesUsuario.Items[i] is PatenteDisplay)
+                    {
+                        checkedListPatentesUsuario.SetItemChecked(i, false);
+                    }
                 }
 
                 // Marcar las patentes directas
@@ -285,8 +361,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar datos del usuario: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_datos_usuario")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -322,8 +398,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al asignar rol: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_asignar_rol")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -372,8 +448,8 @@ namespace UI.WinUi.Administrador
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar permisos: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_guardar_permisos")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

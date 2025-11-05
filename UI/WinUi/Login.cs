@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -25,6 +26,24 @@ namespace UI
         public Login()
         {
             InitializeComponent();
+
+            // Cargar logo desde Resources/Imagenes
+            try
+            {
+                string logoPath = Path.Combine(Application.StartupPath, "..", "..", "Resources", "Imagenes", "LogoVetCare.png");
+                logoPath = Path.GetFullPath(logoPath);
+
+                if (File.Exists(logoPath))
+                {
+                    picLogo.Image = Image.FromFile(logoPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Si falla la carga del logo, continuar sin él
+                Console.WriteLine($"No se pudo cargar el logo: {ex.Message}");
+            }
+
             AplicarTraducciones();
             // Los eventos btnIngresar.Click y btnMostrarContraseña.Click ya están en el Designer
             this.btnRecuperarContraseña.Click += BtnRecuperarContraseña_Click;
@@ -87,7 +106,8 @@ namespace UI
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cambiar idioma: {ex.Message}", "Error",
+                MessageBox.Show($"{LanguageManager.Translate("error")}: {ex.Message}",
+                    LanguageManager.Translate("error"),
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -116,6 +136,9 @@ namespace UI
 
                 // Intentar login usando LoginService
                 Usuario usuarioLogueado = LoginService.Login(txtUsuario.Text.Trim(), txtContraseña.Text);
+
+                // Sincronizar veterinario si tiene el rol
+                SincronizarVeterinarioSiCorresponde(usuarioLogueado);
 
                 // Login exitoso - redirigir según el rol
                 RedirigirPorRol(usuarioLogueado);
@@ -199,25 +222,45 @@ namespace UI
 
         private void BtnRecuperarContraseña_Click(object sender, EventArgs e)
         {
+            string mensaje = LanguageManager.Translate("contactar_admin_recuperacion");
+            string titulo = LanguageManager.Translate("recuperar_contraseña");
+
+            MessageBox.Show(mensaje, titulo, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// Sincroniza automáticamente el registro de Veterinario en VetCareDB
+        /// si el usuario tiene el rol ROL_Veterinario
+        /// </summary>
+        private void SincronizarVeterinarioSiCorresponde(Usuario usuario)
+        {
             try
             {
-                string mensaje = LanguageManager.Translate("contactar_admin_recuperacion");
-                string titulo = LanguageManager.Translate("recuperar_contraseña");
+                // Verificar si el usuario tiene el rol Veterinario
+                // NOTA: ObtenerNombreRol() retorna "Veterinario" sin el prefijo "ROL_"
+                var nombreRol = usuario.ObtenerNombreRol();
 
-                MessageBox.Show(mensaje, titulo, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (nombreRol == "Veterinario")
+                {
+                    // Verificar si ya existe el veterinario en VetCareDB
+                    if (!BLL.VeterinarioBLL.Current.EsVeterinario(usuario.IdUsuario))
+                    {
+                        // Crear el registro automáticamente
+                        BLL.VeterinarioBLL.Current.CrearDesdeUsuario(usuario.IdUsuario, usuario.Nombre);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                // Si falla la traducción, mostrar mensaje por defecto
-                MessageBox.Show(
-                    "Contactar con el administrador del sistema para la recuperación de contraseña.",
-                    "Recuperar Contraseña",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                // Log error silenciosamente - no interrumpir el login
+                ServicesSecurity.Services.LoggerService.WriteLog(
+                    $"Error al sincronizar veterinario para usuario {usuario.Nombre}: {ex.Message}",
+                    System.Diagnostics.Tracing.EventLevel.Warning,
+                    string.Empty);
             }
         }
 
 
-        
+
     }
 }

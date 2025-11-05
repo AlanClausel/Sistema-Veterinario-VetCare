@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
+using BLL;
 using DomainModel;
 using ServicesSecurity.DomainModel.Security.Composite;
 using ServicesSecurity.Services;
@@ -13,9 +14,6 @@ namespace UI.WinUi.Negocio
         private Usuario _usuarioLogueado;
         private Cliente _clienteSeleccionado;
         private bool _modoEdicion = false;
-
-        // Lista temporal de clientes en memoria (sin BD)
-        private static List<Cliente> _clientesEnMemoria = new List<Cliente>();
 
         public gestionClientes()
         {
@@ -41,6 +39,7 @@ namespace UI.WinUi.Negocio
             dgvClientes.SelectionChanged += DgvClientes_SelectionChanged;
             btnAgregarMascota.Click += BtnAgregarMascota_Click;
             btnEliminarMascota.Click += BtnEliminarMascota_Click;
+            btnCopiarDNI.Click += BtnCopiarDNI_Click;
 
             // Configurar estado inicial
             BloquearCampos();
@@ -50,44 +49,44 @@ namespace UI.WinUi.Negocio
         private void GestionClientes_Load(object sender, EventArgs e)
         {
             AplicarTraducciones();
-            CargarTodosLosClientes();
             ConfigurarDataGridClientes();
             ConfigurarDataGridMascotas();
+            CargarTodosLosClientes();
         }
 
         private void AplicarTraducciones()
         {
             try
             {
-                this.Text = "Gestión de Clientes";
-                groupBoxDatosCliente.Text = "Datos del Cliente";
-                groupBoxAcciones.Text = "Acciones";
-                groupBoxMascotas.Text = "Mascotas del Cliente";
+                this.Text = LanguageManager.Translate("gestion_clientes");
+                groupBoxDatosCliente.Text = LanguageManager.Translate("datos_usuario");
+                groupBoxAcciones.Text = LanguageManager.Translate("acciones");
+                groupBoxMascotas.Text = LanguageManager.Translate("mascotas");
 
                 // Labels
-                label1.Text = "Buscar Cliente:";
-                lblNombre.Text = "Nombre:";
-                lblApellido.Text = "Apellido:";
-                lblDNI.Text = "DNI:";
-                lblTelefono.Text = "Teléfono:";
-                lblEmail.Text = "Email:";
-                lblDireccion.Text = "Dirección:";
-                chkActivo.Text = "Activo";
+                label1.Text = $"{LanguageManager.Translate("buscar_cliente")}:";
+                lblNombre.Text = $"{LanguageManager.Translate("nombre")}:";
+                lblApellido.Text = $"{LanguageManager.Translate("apellido")}:";
+                lblDNI.Text = $"{LanguageManager.Translate("dni")}:";
+                lblTelefono.Text = $"{LanguageManager.Translate("telefono")}:";
+                lblEmail.Text = $"{LanguageManager.Translate("email")}:";
+                lblDireccion.Text = $"{LanguageManager.Translate("direccion")}:";
+                chkActivo.Text = LanguageManager.Translate("activo");
 
                 // Botones
-                btnNuevo.Text = "Nuevo";
-                btnGuardar.Text = "Guardar";
-                btnModificar.Text = "Modificar";
-                btnEliminar.Text = "Eliminar";
-                btnVolver.Text = "Volver";
-                btnBuscar.Text = "Buscar";
-                btnAgregarMascota.Text = "Agregar Mascota";
-                btnEliminarMascota.Text = "Eliminar Mascota";
+                btnNuevo.Text = LanguageManager.Translate("nuevo");
+                btnGuardar.Text = LanguageManager.Translate("guardar");
+                btnModificar.Text = LanguageManager.Translate("modificar");
+                btnEliminar.Text = LanguageManager.Translate("eliminar");
+                btnVolver.Text = LanguageManager.Translate("volver");
+                btnBuscar.Text = LanguageManager.Translate("buscar");
+                btnAgregarMascota.Text = LanguageManager.Translate("agregar_mascota");
+                btnEliminarMascota.Text = LanguageManager.Translate("eliminar_mascota");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al aplicar traducciones: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -185,13 +184,14 @@ namespace UI.WinUi.Negocio
         {
             try
             {
+                var clientes = ClienteBLL.Current.ListarTodosLosClientes();
                 dgvClientes.DataSource = null;
-                dgvClientes.DataSource = _clientesEnMemoria.OrderBy(c => c.Apellido).ToList();
+                dgvClientes.DataSource = clientes.OrderBy(c => c.Apellido).ToList();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al cargar clientes: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_datos")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -209,11 +209,7 @@ namespace UI.WinUi.Negocio
         {
             try
             {
-                // Validar campos
-                if (!ValidarCampos())
-                    return;
-
-                // Asignar valores al cliente
+                // Asignar valores al cliente desde los controles
                 _clienteSeleccionado.Nombre = txtNombre.Text.Trim();
                 _clienteSeleccionado.Apellido = txtApellido.Text.Trim();
                 _clienteSeleccionado.DNI = txtDNI.Text.Trim();
@@ -224,41 +220,53 @@ namespace UI.WinUi.Negocio
 
                 if (_modoEdicion)
                 {
-                    // Actualizar cliente existente
-                    var clienteExistente = _clientesEnMemoria.FirstOrDefault(c => c.IdCliente == _clienteSeleccionado.IdCliente);
-                    if (clienteExistente != null)
-                    {
-                        var index = _clientesEnMemoria.IndexOf(clienteExistente);
-                        _clientesEnMemoria[index] = _clienteSeleccionado;
-                    }
-                    MessageBox.Show("Cliente actualizado correctamente", "Éxito",
+                    // Actualizar cliente existente usando BLL
+                    var clienteActualizado = ClienteBLL.Current.ModificarCliente(_clienteSeleccionado);
+                    MessageBox.Show(LanguageManager.Translate("cliente_actualizado_correctamente"),
+                        LanguageManager.Translate("exito"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
-                    // Agregar nuevo cliente
-                    _clientesEnMemoria.Add(_clienteSeleccionado);
-                    MessageBox.Show("Cliente creado correctamente", "Éxito",
+                    // Registrar nuevo cliente usando BLL
+                    var clienteCreado = ClienteBLL.Current.RegistrarCliente(_clienteSeleccionado);
+                    MessageBox.Show(LanguageManager.Translate("cliente_registrado_correctamente"),
+                        LanguageManager.Translate("exito"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
 
+                // Recargar lista y limpiar formulario
                 CargarTodosLosClientes();
                 LimpiarCampos();
                 BloquearCampos();
                 btnGuardar.Enabled = false;
             }
+            catch (ArgumentException ex)
+            {
+                // Errores de validación del BLL
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error_validacion"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Errores de reglas de negocio (ej: DNI duplicado)
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar cliente: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                // Errores inesperados
+                MessageBox.Show($"{LanguageManager.Translate("error_inesperado_guardar_cliente")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private void BtnModificar_Click(object sender, EventArgs e)
         {
-            if (_clienteSeleccionado == null)
+            if (_clienteSeleccionado == null || _clienteSeleccionado.IdCliente == Guid.Empty)
             {
-                MessageBox.Show("Debe seleccionar un cliente", "Advertencia",
+                MessageBox.Show(LanguageManager.Translate("debe_seleccionar_cliente"),
+                    LanguageManager.Translate("advertencia"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -273,32 +281,46 @@ namespace UI.WinUi.Negocio
         {
             try
             {
-                if (_clienteSeleccionado == null)
+                if (_clienteSeleccionado == null || _clienteSeleccionado.IdCliente == Guid.Empty)
                 {
-                    MessageBox.Show("Debe seleccionar un cliente", "Advertencia",
+                    MessageBox.Show(LanguageManager.Translate("debe_seleccionar_cliente"),
+                        LanguageManager.Translate("advertencia"),
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
-                var resultado = MessageBox.Show(
-                    $"¿Está seguro que desea eliminar al cliente {_clienteSeleccionado.NombreCompleto}?",
-                    "Confirmar Eliminación",
+                var mensaje = string.Format(LanguageManager.Translate("confirmar_eliminar_cliente_completo"),
+                    _clienteSeleccionado.NombreCompleto);
+
+                var resultado = MessageBox.Show(mensaje,
+                    LanguageManager.Translate("confirmar"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
 
                 if (resultado == DialogResult.Yes)
                 {
-                    _clientesEnMemoria.Remove(_clienteSeleccionado);
-                    MessageBox.Show("Cliente eliminado correctamente", "Éxito",
+                    // Eliminar cliente usando BLL
+                    ClienteBLL.Current.EliminarCliente(_clienteSeleccionado.IdCliente);
+
+                    MessageBox.Show(LanguageManager.Translate("cliente_eliminado_correctamente"),
+                        LanguageManager.Translate("exito"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
+
                     CargarTodosLosClientes();
                     LimpiarCampos();
+                    _clienteSeleccionado = null;
                 }
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Error de reglas de negocio
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al eliminar cliente: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -311,7 +333,7 @@ namespace UI.WinUi.Negocio
         {
             try
             {
-                var textoBusqueda = txtBuscar.Text.Trim().ToLower();
+                var textoBusqueda = txtBuscar.Text.Trim();
 
                 if (string.IsNullOrEmpty(textoBusqueda))
                 {
@@ -319,22 +341,16 @@ namespace UI.WinUi.Negocio
                     return;
                 }
 
-                var clientesFiltrados = _clientesEnMemoria
-                    .Where(c =>
-                        c.Nombre.ToLower().Contains(textoBusqueda) ||
-                        c.Apellido.ToLower().Contains(textoBusqueda) ||
-                        c.DNI.Contains(textoBusqueda) ||
-                        (c.Email != null && c.Email.ToLower().Contains(textoBusqueda)))
-                    .OrderBy(c => c.Apellido)
-                    .ToList();
+                // Buscar usando BLL
+                var clientesFiltrados = ClienteBLL.Current.BuscarClientes(textoBusqueda);
 
                 dgvClientes.DataSource = null;
-                dgvClientes.DataSource = clientesFiltrados;
+                dgvClientes.DataSource = clientesFiltrados.OrderBy(c => c.Apellido).ToList();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al buscar: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_buscar")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -364,22 +380,42 @@ namespace UI.WinUi.Negocio
 
         private void CargarMascotasCliente()
         {
-            if (_clienteSeleccionado != null)
+            try
             {
-                dgvMascotas.DataSource = null;
-                dgvMascotas.DataSource = _clienteSeleccionado.Mascotas.Where(m => m.Activo).ToList();
+                if (_clienteSeleccionado != null && _clienteSeleccionado.IdCliente != Guid.Empty)
+                {
+                    // Cargar cliente con sus mascotas usando BLL
+                    var clienteConMascotas = ClienteBLL.Current.ObtenerClienteConMascotas(_clienteSeleccionado.IdCliente);
+
+                    if (clienteConMascotas != null && clienteConMascotas.Mascotas != null)
+                    {
+                        dgvMascotas.DataSource = null;
+                        dgvMascotas.DataSource = clienteConMascotas.Mascotas.Where(m => m.Activo).ToList();
+                    }
+                    else
+                    {
+                        dgvMascotas.DataSource = null;
+                    }
+                }
+                else
+                {
+                    dgvMascotas.DataSource = null;
+                }
             }
-            else
+            catch (Exception ex)
             {
+                MessageBox.Show($"{LanguageManager.Translate("error_cargar_mascotas")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                 dgvMascotas.DataSource = null;
             }
         }
 
         private void BtnAgregarMascota_Click(object sender, EventArgs e)
         {
-            if (_clienteSeleccionado == null)
+            if (_clienteSeleccionado == null || _clienteSeleccionado.IdCliente == Guid.Empty)
             {
-                MessageBox.Show("Debe seleccionar un cliente", "Advertencia",
+                MessageBox.Show(LanguageManager.Translate("debe_seleccionar_cliente"),
+                    LanguageManager.Translate("advertencia"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -389,6 +425,7 @@ namespace UI.WinUi.Negocio
             {
                 if (formMascota.ShowDialog() == DialogResult.OK)
                 {
+                    // Recargar mascotas después de agregar
                     CargarMascotasCliente();
                 }
             }
@@ -400,74 +437,43 @@ namespace UI.WinUi.Negocio
             {
                 if (dgvMascotas.SelectedRows.Count == 0)
                 {
-                    MessageBox.Show("Debe seleccionar una mascota", "Advertencia",
+                    MessageBox.Show(LanguageManager.Translate("debe_seleccionar_mascota"),
+                        LanguageManager.Translate("advertencia"),
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
                 var mascota = (Mascota)dgvMascotas.SelectedRows[0].DataBoundItem;
 
-                var resultado = MessageBox.Show(
-                    $"¿Está seguro que desea eliminar a {mascota.Nombre}?",
-                    "Confirmar Eliminación",
+                var mensaje = string.Format(LanguageManager.Translate("confirmar_desactivar_mascota"),
+                    mascota.Nombre);
+                var resultado = MessageBox.Show(mensaje,
+                    LanguageManager.Translate("confirmar_desactivacion"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
 
                 if (resultado == DialogResult.Yes)
                 {
-                    mascota.Activo = false;
-                    CargarMascotasCliente();
-                    MessageBox.Show("Mascota eliminada correctamente", "Éxito",
+                    // Desactivar mascota usando BLL
+                    MascotaBLL.Current.DesactivarMascota(mascota.IdMascota);
+
+                    MessageBox.Show(LanguageManager.Translate("mascota_desactivada_correctamente"),
+                        LanguageManager.Translate("exito"),
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    CargarMascotasCliente();
                 }
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al eliminar mascota: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Translate("error_desactivar_mascota")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
-
-        private bool ValidarCampos()
-        {
-            if (string.IsNullOrWhiteSpace(txtNombre.Text))
-            {
-                MessageBox.Show("El nombre es obligatorio", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtNombre.Focus();
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(txtApellido.Text))
-            {
-                MessageBox.Show("El apellido es obligatorio", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtApellido.Focus();
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(txtDNI.Text))
-            {
-                MessageBox.Show("El DNI es obligatorio", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtDNI.Focus();
-                return false;
-            }
-
-            // Validar que el DNI no esté duplicado
-            var dniDuplicado = _clientesEnMemoria.Any(c =>
-                c.DNI == txtDNI.Text.Trim() &&
-                c.IdCliente != _clienteSeleccionado.IdCliente);
-
-            if (dniDuplicado)
-            {
-                MessageBox.Show("Ya existe un cliente con ese DNI", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtDNI.Focus();
-                return false;
-            }
-
-            return true;
         }
 
         private void LimpiarCampos()
@@ -501,6 +507,37 @@ namespace UI.WinUi.Negocio
             txtEmail.Enabled = true;
             txtDireccion.Enabled = true;
             chkActivo.Enabled = true;
+        }
+
+        private void BtnCopiarDNI_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(txtDNI.Text))
+                {
+                    Clipboard.SetText(txtDNI.Text.Trim());
+                    var mensaje = string.Format(LanguageManager.Translate("dni_copiado_portapapeles"),
+                        txtDNI.Text.Trim());
+                    MessageBox.Show(mensaje,
+                        LanguageManager.Translate("dni_copiado"),
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show(LanguageManager.Translate("no_hay_dni_copiar"),
+                        LanguageManager.Translate("informacion"),
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"{LanguageManager.Translate("error_copiar_dni")}: {ex.Message}",
+                    LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
     }
 }

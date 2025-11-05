@@ -1,6 +1,8 @@
 using System;
 using System.Windows.Forms;
+using BLL;
 using DomainModel;
+using ServicesSecurity.Services;
 
 namespace UI.WinUi.Negocio
 {
@@ -19,9 +21,17 @@ namespace UI.WinUi.Negocio
         {
             try
             {
-                if (!ValidarCampos())
+                // Validación mínima de UI - solo verificar selección de sexo
+                if (cboSexo.SelectedIndex == -1)
+                {
+                    MessageBox.Show(LanguageManager.Translate("debe_seleccionar_sexo_mascota"),
+                        LanguageManager.Translate("validacion"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    cboSexo.Focus();
                     return;
+                }
 
+                // Crear objeto mascota desde los controles
                 var mascota = new Mascota
                 {
                     IdCliente = _cliente.IdCliente,
@@ -36,15 +46,34 @@ namespace UI.WinUi.Negocio
                     Activo = true
                 };
 
-                _cliente.Mascotas.Add(mascota);
+                // Registrar mascota usando BLL (valida y persiste en BD)
+                var mascotaCreada = MascotaBLL.Current.RegistrarMascota(mascota);
+
+                var mensaje = string.Format(LanguageManager.Translate("mascota_registrada_detalle"),
+                    mascotaCreada.Nombre, mascotaCreada.Especie, _cliente.NombreCompleto);
+                MessageBox.Show(mensaje, LanguageManager.Translate("exito"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 this.DialogResult = DialogResult.OK;
                 this.Close();
             }
+            catch (ArgumentException ex)
+            {
+                // Errores de validación del BLL
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error_validacion"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Errores de reglas de negocio (ej: cliente inactivo)
+                MessageBox.Show(ex.Message, LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al guardar mascota: {ex.Message}",
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                // Errores inesperados
+                MessageBox.Show($"{LanguageManager.Translate("error_guardar_mascota")}: {ex.Message}",
+                    LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -52,35 +81,6 @@ namespace UI.WinUi.Negocio
         {
             this.DialogResult = DialogResult.Cancel;
             this.Close();
-        }
-
-        private bool ValidarCampos()
-        {
-            if (string.IsNullOrWhiteSpace(txtNombre.Text))
-            {
-                MessageBox.Show("El nombre de la mascota es obligatorio", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtNombre.Focus();
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(txtEspecie.Text))
-            {
-                MessageBox.Show("La especie es obligatoria", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtEspecie.Focus();
-                return false;
-            }
-
-            if (cboSexo.SelectedIndex == -1)
-            {
-                MessageBox.Show("Debe seleccionar el sexo", "Validación",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                cboSexo.Focus();
-                return false;
-            }
-
-            return true;
         }
     }
 }
