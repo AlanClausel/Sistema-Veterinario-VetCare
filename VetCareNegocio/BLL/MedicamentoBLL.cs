@@ -4,6 +4,9 @@ using System.Linq;
 using DAL.Contracts;
 using DAL.Implementations;
 using DomainModel;
+using ServicesSecurity.Services;
+using ServicesSecurity.DomainModel.Security;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace BLL
 {
@@ -39,7 +42,23 @@ namespace BLL
         {
             ValidarMedicamento(medicamento);
 
-            return _medicamentoRepository.Crear(medicamento);
+            var nuevoMedicamento = _medicamentoRepository.Crear(medicamento);
+
+            // Registrar en bitácora
+            var usuario = LoginService.GetUsuarioLogueado();
+            if (usuario != null)
+            {
+                BitacoraService.Current.RegistrarAlta(
+                    usuario.IdUsuario,
+                    usuario.Nombre,
+                    "Medicamentos",
+                    "Medicamento",
+                    nuevoMedicamento.IdMedicamento.ToString(),
+                    $"Medicamento registrado: {nuevoMedicamento.Nombre} - {nuevoMedicamento.Presentacion}, Stock inicial: {nuevoMedicamento.Stock}"
+                );
+            }
+
+            return nuevoMedicamento;
         }
 
         /// <summary>
@@ -53,7 +72,26 @@ namespace BLL
             if (medicamentoExistente == null)
                 throw new InvalidOperationException($"No existe un medicamento con ID {medicamento.IdMedicamento}");
 
-            return _medicamentoRepository.Actualizar(medicamento);
+            var resultado = _medicamentoRepository.Actualizar(medicamento);
+
+            // Registrar en bitácora
+            if (resultado)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarModificacion(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Medicamentos",
+                        "Medicamento",
+                        medicamento.IdMedicamento.ToString(),
+                        $"Medicamento modificado: {medicamento.Nombre} - {medicamento.Presentacion}"
+                    );
+                }
+            }
+
+            return resultado;
         }
 
         /// <summary>
@@ -65,7 +103,26 @@ namespace BLL
             if (medicamento == null)
                 throw new InvalidOperationException($"No existe un medicamento con ID {idMedicamento}");
 
-            return _medicamentoRepository.Eliminar(idMedicamento);
+            var resultado = _medicamentoRepository.Eliminar(idMedicamento);
+
+            // Registrar en bitácora
+            if (resultado)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarBaja(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Medicamentos",
+                        "Medicamento",
+                        idMedicamento.ToString(),
+                        $"Medicamento eliminado: {medicamento.Nombre} - {medicamento.Presentacion}"
+                    );
+                }
+            }
+
+            return resultado;
         }
 
         /// <summary>
@@ -119,7 +176,25 @@ namespace BLL
             if (medicamento == null)
                 throw new InvalidOperationException($"No existe un medicamento con ID {idMedicamento}");
 
-            return _medicamentoRepository.ActualizarStock(idMedicamento, cantidad);
+            var medicamentoActualizado = _medicamentoRepository.ActualizarStock(idMedicamento, cantidad);
+
+            // Registrar en bitácora
+            var usuario = LoginService.GetUsuarioLogueado();
+            if (usuario != null)
+            {
+                BitacoraService.Current.Registrar(
+                    usuario.IdUsuario,
+                    usuario.Nombre,
+                    "Medicamentos",
+                    "AumentarStock",
+                    $"Stock aumentado para {medicamento.Nombre}: +{cantidad} unidades (Stock anterior: {medicamento.Stock}, Nuevo: {medicamentoActualizado.Stock})",
+                    CriticidadBitacora.Info,
+                    "Medicamento",
+                    idMedicamento.ToString()
+                );
+            }
+
+            return medicamentoActualizado;
         }
 
         /// <summary>
@@ -137,7 +212,30 @@ namespace BLL
             if (medicamento.Stock < cantidad)
                 throw new InvalidOperationException($"Stock insuficiente. Disponible: {medicamento.Stock}, Solicitado: {cantidad}");
 
-            return _medicamentoRepository.ActualizarStock(idMedicamento, -cantidad);
+            var medicamentoActualizado = _medicamentoRepository.ActualizarStock(idMedicamento, -cantidad);
+
+            // Registrar en bitácora
+            var usuario = LoginService.GetUsuarioLogueado();
+            if (usuario != null)
+            {
+                // Determinar criticidad basada en el stock resultante
+                string criticidad = medicamentoActualizado.Stock < 10
+                    ? CriticidadBitacora.Advertencia
+                    : CriticidadBitacora.Info;
+
+                BitacoraService.Current.Registrar(
+                    usuario.IdUsuario,
+                    usuario.Nombre,
+                    "Medicamentos",
+                    "ReducirStock",
+                    $"Stock reducido para {medicamento.Nombre}: -{cantidad} unidades (Stock anterior: {medicamento.Stock}, Nuevo: {medicamentoActualizado.Stock})",
+                    criticidad,
+                    "Medicamento",
+                    idMedicamento.ToString()
+                );
+            }
+
+            return medicamentoActualizado;
         }
 
         /// <summary>

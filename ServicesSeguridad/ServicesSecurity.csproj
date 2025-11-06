@@ -42,6 +42,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BLL\BitacoraBLL.cs" />
     <Compile Include="BLL\ExceptionBLL.cs" />
     <Compile Include="BLL\FamiliaBLL.cs" />
     <Compile Include="BLL\LanguageBLL.cs" />
@@ -49,17 +50,20 @@
     <Compile Include="BLL\UsuarioBLL.cs" />
     <Compile Include="BLL\ValidationBLL.cs" />
     <Compile Include="DAL\Contracts\IAdapter.cs" />
+    <Compile Include="DAL\Contracts\IBitacoraRepository.cs" />
     <Compile Include="DAL\Contracts\IEntityAdapter.cs" />
     <Compile Include="DAL\Contracts\IGenericRepository.cs" />
     <Compile Include="DAL\Contracts\IJoinRepository.cs" />
     <Compile Include="DAL\Contracts\IUnitOfWork.cs" />
     <Compile Include="DAL\Factory\FactoryDAL.cs" />
     <Compile Include="DAL\Factory\ServiceFactory.cs" />
+    <Compile Include="DAL\Implementations\Adapter\BitacoraAdapter.cs" />
     <Compile Include="DAL\Implementations\Adapter\FamiliaAdapter.cs" />
     <Compile Include="DAL\Implementations\Adapter\PatenteAdapter.cs" />
     <Compile Include="DAL\Implementations\Adapter\UsuarioAdapter.cs" />
     <Compile Include="DAL\Implementations\Adapter\UsuarioFamiliaAdapter.cs" />
     <Compile Include="DAL\Implementations\Adapter\UsuarioPatenteAdapter.cs" />
+    <Compile Include="DAL\Implementations\BitacoraRepository.cs" />
     <Compile Include="DAL\Implementations\FamiliaFamiliaRepository.cs" />
     <Compile Include="DAL\Implementations\FamiliaPatenteRepository.cs" />
     <Compile Include="DAL\Implementations\FamiliaRepository.cs" />
@@ -77,10 +81,13 @@
     <Compile Include="DomainModel\Exceptions\UsuarioNoEncontradoException.cs" />
     <Compile Include="DomainModel\Exceptions\ValidacionException.cs" />
     <Compile Include="DomainModel\Exceptions\WordNotFoundException.cs" />
+    <Compile Include="DomainModel\Security\AccionBitacora.cs" />
+    <Compile Include="DomainModel\Security\Bitacora.cs" />
     <Compile Include="DomainModel\Security\Composite\Component.cs" />
     <Compile Include="DomainModel\Security\Composite\Familia.cs" />
     <Compile Include="DomainModel\Security\Composite\Patente.cs" />
     <Compile Include="DomainModel\Security\Composite\Usuario.cs" />
+    <Compile Include="DomainModel\Security\CriticidadBitacora.cs" />
     <Compile Include="DomainModel\Security\FamiliaFamilia.cs" />
     <Compile Include="DomainModel\Security\FamiliaPatente.cs" />
     <Compile Include="DomainModel\Security\UsuarioFamilia.cs" />

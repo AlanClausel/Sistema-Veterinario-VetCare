@@ -349,5 +349,46 @@ namespace UI.WinUi.Negocio
                     LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        private void btnCopiarDNI_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (dgvCitas.SelectedRows.Count == 0)
+                {
+                    MessageBox.Show(LanguageManager.Translate("debe_seleccionar_cita"),
+                        LanguageManager.Translate("atencion"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var citaSeleccionada = dgvCitas.SelectedRows[0].DataBoundItem as Cita;
+                if (citaSeleccionada == null || string.IsNullOrWhiteSpace(citaSeleccionada.ClienteDNI))
+                {
+                    MessageBox.Show(LanguageManager.Translate("no_hay_dni_copiar"),
+                        LanguageManager.Translate("informacion"),
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Copiar DNI al portapapeles
+                Clipboard.SetText(citaSeleccionada.ClienteDNI.Trim());
+
+                // Mostrar confirmación
+                var mensaje = string.Format(LanguageManager.Translate("dni_copiado_portapapeles"),
+                    citaSeleccionada.ClienteDNI.Trim());
+                MessageBox.Show(mensaje,
+                    LanguageManager.Translate("dni_copiado"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"{LanguageManager.Translate("error_copiar_dni")}: {ex.Message}",
+                    LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
     }
 }

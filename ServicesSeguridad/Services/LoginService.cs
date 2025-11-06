@@ -136,6 +136,8 @@ namespace ServicesSecurity.Services
 
                 if (usuarioDB == null)
                 {
+                    // Registrar intento de login fallido en BD
+                    Bitacora.Current.RegistrarLoginFallido(nombre, "Usuario no encontrado");
                     throw new UsuarioNoEncontradoException(nombre);
                 }
 
@@ -144,6 +146,8 @@ namespace ServicesSecurity.Services
 
                 if (usuarioDB.Clave != passwordHash)
                 {
+                    // Registrar intento de login fallido en BD
+                    Bitacora.Current.RegistrarLoginFallido(nombre, "Contraseña incorrecta");
                     throw new ContraseñaInvalidaException();
                 }
 
@@ -152,6 +156,9 @@ namespace ServicesSecurity.Services
 
                 // Guardar usuario logueado en memoria
                 _usuarioLogueado = usuarioDB;
+
+                // Registrar login exitoso en BD
+                Bitacora.Current.RegistrarLogin(usuarioDB.IdUsuario, usuarioDB.Nombre);
 
                 return usuarioDB;
             }
@@ -164,7 +171,8 @@ namespace ServicesSecurity.Services
             {
                 // Re-lanzar excepciones de integridad de datos
                 // No convertir a AutenticacionException - es un problema de seguridad diferente
-                Bitacora.Current.LogCritical($"Intento de login con datos comprometidos: {nombre}");
+                Bitacora.Current.LogCritical($"Intento de login con datos comprometidos: {nombre} - {iex.Message}");
+                Bitacora.Current.RegistrarViolacionDVH($"Intento de login con usuario comprometido: {nombre} - Detalle: {iex.Message}");
                 throw;
             }
             catch (Exception ex)

@@ -10,6 +10,7 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.DAL.Implementations
 {
@@ -80,7 +81,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
                 throw;
             }
@@ -96,7 +97,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
                 throw;
             }
@@ -113,7 +114,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
                 throw;
             }
@@ -175,7 +176,7 @@ namespace ServicesSecurity.DAL.Implementations
             catch (Exception ex)
 
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
 
             }
@@ -205,7 +206,7 @@ namespace ServicesSecurity.DAL.Implementations
             catch (Exception ex)
 
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
 
             }
@@ -224,7 +225,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
                 throw;
             }

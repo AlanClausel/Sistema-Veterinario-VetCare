@@ -4,6 +4,9 @@ using System.Linq;
 using DAL.Contracts;
 using DAL.Implementations;
 using DomainModel;
+using ServicesSecurity.Services;
+using ServicesSecurity.DomainModel.Security;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace BLL
 {
@@ -52,7 +55,23 @@ namespace BLL
                 throw new InvalidOperationException($"No se puede iniciar consulta para una cita en estado {cita.EstadoDescripcion}");
 
             var consulta = new ConsultaMedica(idCita, idVeterinario);
-            return _consultaRepository.Crear(consulta);
+            var nuevaConsulta = _consultaRepository.Crear(consulta);
+
+            // Registrar en bitácora
+            var usuario = LoginService.GetUsuarioLogueado();
+            if (usuario != null)
+            {
+                BitacoraService.Current.RegistrarAlta(
+                    usuario.IdUsuario,
+                    usuario.Nombre,
+                    "Consultas Médicas",
+                    "ConsultaMedica",
+                    nuevaConsulta.IdConsulta.ToString(),
+                    $"Consulta médica iniciada para cita {idCita}"
+                );
+            }
+
+            return nuevaConsulta;
         }
 
         /// <summary>
@@ -65,7 +84,26 @@ namespace BLL
             _ = _consultaRepository.ObtenerPorId(consulta.IdConsulta)
                 ?? throw new InvalidOperationException($"No existe una consulta con ID {consulta.IdConsulta}");
 
-            return _consultaRepository.Actualizar(consulta);
+            var resultado = _consultaRepository.Actualizar(consulta);
+
+            // Registrar en bitácora
+            if (resultado)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarModificacion(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Consultas Médicas",
+                        "ConsultaMedica",
+                        consulta.IdConsulta.ToString(),
+                        $"Consulta médica actualizada - Diagnóstico: {consulta.Diagnostico?.Substring(0, Math.Min(50, consulta.Diagnostico?.Length ?? 0))}"
+                    );
+                }
+            }
+
+            return resultado;
         }
 
         /// <summary>
@@ -87,6 +125,22 @@ namespace BLL
 
             if (!resultado)
                 throw new InvalidOperationException("Error al finalizar la consulta. Verifique que todos los medicamentos tengan stock suficiente.");
+
+            // Registrar en bitácora
+            var usuario = LoginService.GetUsuarioLogueado();
+            if (usuario != null)
+            {
+                BitacoraService.Current.Registrar(
+                    usuario.IdUsuario,
+                    usuario.Nombre,
+                    "Consultas Médicas",
+                    "FinalizarConsulta",
+                    $"Consulta médica finalizada - ID: {idConsulta}, Cita: {consulta.IdCita}",
+                    CriticidadBitacora.Info,
+                    "ConsultaMedica",
+                    idConsulta.ToString()
+                );
+            }
 
             return resultado;
         }
@@ -114,7 +168,28 @@ namespace BLL
             if (medicamento.Stock < cantidad)
                 throw new InvalidOperationException($"Stock insuficiente. Disponible: {medicamento.Stock}, Solicitado: {cantidad}");
 
-            return _consultaRepository.AgregarMedicamento(idConsulta, idMedicamento, cantidad, indicaciones);
+            var resultado = _consultaRepository.AgregarMedicamento(idConsulta, idMedicamento, cantidad, indicaciones);
+
+            // Registrar en bitácora
+            if (resultado)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.Registrar(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Consultas Médicas",
+                        "AgregarMedicamento",
+                        $"Medicamento agregado a consulta {idConsulta}: {medicamento.Nombre}, Cantidad: {cantidad}",
+                        CriticidadBitacora.Info,
+                        "ConsultaMedicamento",
+                        idConsulta.ToString()
+                    );
+                }
+            }
+
+            return resultado;
         }
 
         /// <summary>
@@ -125,7 +200,28 @@ namespace BLL
             _ = _consultaRepository.ObtenerPorId(idConsulta)
                 ?? throw new InvalidOperationException("La consulta especificada no existe");
 
-            return _consultaRepository.EliminarMedicamento(idConsulta, idMedicamento);
+            var resultado = _consultaRepository.EliminarMedicamento(idConsulta, idMedicamento);
+
+            // Registrar en bitácora
+            if (resultado)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.Registrar(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Consultas Médicas",
+                        "EliminarMedicamento",
+                        $"Medicamento eliminado de consulta {idConsulta}",
+                        CriticidadBitacora.Advertencia,
+                        "ConsultaMedicamento",
+                        idConsulta.ToString()
+                    );
+                }
+            }
+
+            return resultado;
         }
 
         /// <summary>

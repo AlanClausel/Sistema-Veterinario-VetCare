@@ -1,10 +1,12 @@
 using System;
 using System.Diagnostics.Tracing;
+using ServicesSecurity.DomainModel.Security;
 
 namespace ServicesSecurity.Services
 {
     /// <summary>
     /// Servicio de bitácora para registro de eventos y excepciones
+    /// Registra eventos tanto en archivos de log como en base de datos
     /// Singleton pattern
     /// </summary>
     public sealed class Bitacora
@@ -22,8 +24,9 @@ namespace ServicesSecurity.Services
         }
         #endregion
 
+        #region Métodos Legacy (Archivos de Log)
         /// <summary>
-        /// Registra una excepción en la bitácora
+        /// Registra una excepción en la bitácora (solo archivos de log)
         /// </summary>
         public void LogException(Exception ex)
         {
@@ -52,7 +55,7 @@ namespace ServicesSecurity.Services
         }
 
         /// <summary>
-        /// Registra un evento informativo
+        /// Registra un evento informativo (solo archivos de log)
         /// </summary>
         public void LogInfo(string message, string user = "System")
         {
@@ -60,7 +63,7 @@ namespace ServicesSecurity.Services
         }
 
         /// <summary>
-        /// Registra una advertencia
+        /// Registra una advertencia (solo archivos de log)
         /// </summary>
         public void LogWarning(string message, string user = "System")
         {
@@ -68,7 +71,7 @@ namespace ServicesSecurity.Services
         }
 
         /// <summary>
-        /// Registra un error
+        /// Registra un error (solo archivos de log)
         /// </summary>
         public void LogError(string message, string user = "System")
         {
@@ -76,11 +79,232 @@ namespace ServicesSecurity.Services
         }
 
         /// <summary>
-        /// Registra un evento crítico
+        /// Registra un evento crítico (solo archivos de log)
         /// </summary>
         public void LogCritical(string message, string user = "System")
         {
             LoggerService.WriteLog(message, EventLevel.Critical, user);
         }
+        #endregion
+
+        #region Métodos de Base de Datos (Nueva Funcionalidad)
+        /// <summary>
+        /// Registra un evento completo en la base de datos de bitácora
+        /// </summary>
+        public void RegistrarEvento(
+            Guid? idUsuario,
+            string nombreUsuario,
+            string modulo,
+            string accion,
+            string descripcion,
+            string criticidad,
+            string tabla = null,
+            string idRegistro = null,
+            string ip = null)
+        {
+            try
+            {
+                BLL.BitacoraBLL.Registrar(
+                    idUsuario,
+                    nombreUsuario,
+                    modulo,
+                    accion,
+                    descripcion,
+                    criticidad,
+                    tabla,
+                    idRegistro,
+                    ip);
+            }
+            catch
+            {
+                // Silenciar errores de bitácora para evitar loops infinitos
+                // Si falla el registro en BD, al menos quedará en archivos de log
+            }
+        }
+
+        /// <summary>
+        /// Registrar un evento (alias de RegistrarEvento para compatibilidad)
+        /// </summary>
+        public void Registrar(
+            Guid? idUsuario,
+            string nombreUsuario,
+            string modulo,
+            string accion,
+            string descripcion,
+            string criticidad,
+            string tabla = null,
+            string idRegistro = null,
+            string ip = null)
+        {
+            RegistrarEvento(idUsuario, nombreUsuario, modulo, accion, descripcion, criticidad, tabla, idRegistro, ip);
+        }
+
+        /// <summary>
+        /// Registra un login exitoso
+        /// </summary>
+        public void RegistrarLogin(Guid idUsuario, string nombreUsuario, string ip = null)
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                "Sistema",
+                AccionBitacora.Login,
+                $"Usuario '{nombreUsuario}' inició sesión exitosamente",
+                CriticidadBitacora.Info,
+                ip: ip);
+        }
+
+        /// <summary>
+        /// Registra un login fallido
+        /// </summary>
+        public void RegistrarLoginFallido(string nombreUsuario, string motivo, string ip = null)
+        {
+            RegistrarEvento(
+                null,
+                nombreUsuario,
+                "Sistema",
+                AccionBitacora.LoginFallido,
+                $"Intento de login fallido para usuario '{nombreUsuario}': {motivo}",
+                CriticidadBitacora.Advertencia,
+                ip: ip);
+        }
+
+        /// <summary>
+        /// Registra un logout
+        /// </summary>
+        public void RegistrarLogout(Guid idUsuario, string nombreUsuario)
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                "Sistema",
+                AccionBitacora.Logout,
+                $"Usuario '{nombreUsuario}' cerró sesión",
+                CriticidadBitacora.Info);
+        }
+
+        /// <summary>
+        /// Registra una operación de alta (INSERT)
+        /// </summary>
+        public void RegistrarAlta(Guid idUsuario, string nombreUsuario, string modulo, string tabla, string idRegistro, string descripcion)
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                modulo,
+                AccionBitacora.Alta,
+                descripcion,
+                CriticidadBitacora.Info,
+                tabla,
+                idRegistro);
+        }
+
+        /// <summary>
+        /// Registra una operación de baja (DELETE)
+        /// </summary>
+        public void RegistrarBaja(Guid idUsuario, string nombreUsuario, string modulo, string tabla, string idRegistro, string descripcion)
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                modulo,
+                AccionBitacora.Baja,
+                descripcion,
+                CriticidadBitacora.Advertencia,
+                tabla,
+                idRegistro);
+        }
+
+        /// <summary>
+        /// Registra una operación de modificación (UPDATE)
+        /// </summary>
+        public void RegistrarModificacion(Guid idUsuario, string nombreUsuario, string modulo, string tabla, string idRegistro, string descripcion)
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                modulo,
+                AccionBitacora.Modificacion,
+                descripcion,
+                CriticidadBitacora.Info,
+                tabla,
+                idRegistro);
+        }
+
+        /// <summary>
+        /// Registra una excepción en la base de datos con contexto completo
+        /// </summary>
+        public void RegistrarExcepcion(Exception ex, Guid? idUsuario = null, string nombreUsuario = "Sistema", string modulo = "Sistema")
+        {
+            if (ex == null) return;
+
+            try
+            {
+                string descripcion = $"{ex.GetType().Name}: {ex.Message}";
+                if (ex.StackTrace != null)
+                {
+                    descripcion += $"\n{ex.StackTrace.Substring(0, Math.Min(ex.StackTrace.Length, 400))}";
+                }
+
+                RegistrarEvento(
+                    idUsuario,
+                    nombreUsuario,
+                    modulo,
+                    AccionBitacora.Excepcion,
+                    descripcion,
+                    CriticidadBitacora.Error);
+
+                // También registrar en archivos de log
+                LogException(ex);
+            }
+            catch
+            {
+                // Silenciar errores
+            }
+        }
+
+        /// <summary>
+        /// Registra un error personalizado
+        /// </summary>
+        public void RegistrarError(string descripcion, Guid? idUsuario = null, string nombreUsuario = "Sistema", string modulo = "Sistema")
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                modulo,
+                AccionBitacora.Error,
+                descripcion,
+                CriticidadBitacora.Error);
+        }
+
+        /// <summary>
+        /// Registra una violación de DVH (Dígito Verificador Horizontal)
+        /// </summary>
+        public void RegistrarViolacionDVH(string descripcion, Guid? idUsuario = null, string nombreUsuario = "Sistema")
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                "Seguridad",
+                AccionBitacora.ViolacionDVH,
+                descripcion,
+                CriticidadBitacora.Critico);
+        }
+
+        /// <summary>
+        /// Registra un intento de acceso no autorizado
+        /// </summary>
+        public void RegistrarAccesoNoAutorizado(Guid idUsuario, string nombreUsuario, string recurso, string ip = null)
+        {
+            RegistrarEvento(
+                idUsuario,
+                nombreUsuario,
+                "Seguridad",
+                AccionBitacora.AccesoNoAutorizado,
+                $"Intento de acceso no autorizado al recurso: {recurso}",
+                CriticidadBitacora.Critico,
+                ip: ip);
+        }
+        #endregion
     }
 }

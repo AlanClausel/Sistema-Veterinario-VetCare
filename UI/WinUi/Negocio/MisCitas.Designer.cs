@@ -36,6 +36,7 @@ namespace UI.WinUi.Negocio
             this.btnCompletada = new System.Windows.Forms.Button();
             this.btnCancelar = new System.Windows.Forms.Button();
             this.btnActualizar = new System.Windows.Forms.Button();
+            this.btnCopiarDNI = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.dgvCitas)).BeginInit();
             this.SuspendLayout();
             //
@@ -128,11 +129,23 @@ namespace UI.WinUi.Negocio
             this.btnActualizar.UseVisualStyleBackColor = true;
             this.btnActualizar.Click += new System.EventHandler(this.btnActualizar_Click);
             //
+            // btnCopiarDNI
+            //
+            this.btnCopiarDNI.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.btnCopiarDNI.Location = new System.Drawing.Point(199, 377);
+            this.btnCopiarDNI.Name = "btnCopiarDNI";
+            this.btnCopiarDNI.Size = new System.Drawing.Size(90, 35);
+            this.btnCopiarDNI.TabIndex = 8;
+            this.btnCopiarDNI.Text = "Copiar DNI";
+            this.btnCopiarDNI.UseVisualStyleBackColor = true;
+            this.btnCopiarDNI.Click += new System.EventHandler(this.btnCopiarDNI_Click);
+            //
             // MisCitas
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(800, 450);
+            this.Controls.Add(this.btnCopiarDNI);
             this.Controls.Add(this.btnActualizar);
             this.Controls.Add(this.btnCancelar);
             this.Controls.Add(this.btnCompletada);
@@ -161,5 +174,6 @@ namespace UI.WinUi.Negocio
         private System.Windows.Forms.Button btnCompletada;
         private System.Windows.Forms.Button btnCancelar;
         private System.Windows.Forms.Button btnActualizar;
+        private System.Windows.Forms.Button btnCopiarDNI;
     }
 }

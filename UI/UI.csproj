@@ -70,6 +70,12 @@
     <Compile Include="WinUi\Administración\FormMiCuenta.Designer.cs">
       <DependentUpon>FormMiCuenta.cs</DependentUpon>
     </Compile>
+    <Compile Include="WinUi\Administración\FormBitacora.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Administración\FormBitacora.Designer.cs">
+      <DependentUpon>FormBitacora.cs</DependentUpon>
+    </Compile>
     <Compile Include="WinUi\Negocio\gestionClientes.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -173,6 +179,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="WinUi\Administración\FormMiCuenta.resx">
       <DependentUpon>FormMiCuenta.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Administración\FormBitacora.resx">
+      <DependentUpon>FormBitacora.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="WinUi\Negocio\gestionMascotas.resx">
       <DependentUpon>gestionMascotas.cs</DependentUpon>

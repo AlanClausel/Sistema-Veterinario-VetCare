@@ -283,6 +283,10 @@ namespace UI.WinUi.Administrador
                 case "FormMiCuenta":
                     return new FormMiCuenta(_usuarioLogueado);
 
+                // Bitácora del Sistema (solo Administradores)
+                case "FormBitacora":
+                    return new FormBitacora(_usuarioLogueado);
+
                 // Otros formularios pueden agregarse aquí según sea necesario
                 // case "frmConfiguracion":
                 //     return new frmConfiguracion(_usuarioLogueado);
@@ -339,6 +343,12 @@ namespace UI.WinUi.Administrador
 
                 if (resultado == DialogResult.Yes)
                 {
+                    // Registrar logout en bitácora
+                    if (_usuarioLogueado != null)
+                    {
+                        Bitacora.Current.RegistrarLogout(_usuarioLogueado.IdUsuario, _usuarioLogueado.Nombre);
+                    }
+
                     // Cerrar este formulario
                     this.Close();
 

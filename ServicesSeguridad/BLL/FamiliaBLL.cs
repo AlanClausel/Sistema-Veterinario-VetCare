@@ -4,6 +4,8 @@ using System.Linq;
 using ServicesSecurity.DomainModel.Security.Composite;
 using ServicesSecurity.DomainModel.Exceptions;
 using ServicesSecurity.Services;
+using ServicesSecurity.DomainModel.Security;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.BLL
 {
@@ -68,6 +70,25 @@ namespace ServicesSecurity.BLL
 
                     // Confirmar la transacción
                     unitOfWork.Commit();
+
+                    // Registrar en bitácora (después del commit exitoso)
+                    var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                    if (usuarioLogueado != null)
+                    {
+                        var patentesNombres = string.Join(", ", patentes.Select(p => p.FormName).Take(5));
+                        if (patentes.Count > 5) patentesNombres += $" (+{patentes.Count - 5} más)";
+
+                        BitacoraService.Current.Registrar(
+                            usuarioLogueado.IdUsuario,
+                            usuarioLogueado.Nombre,
+                            "Permisos",
+                            "ActualizarPatentes",
+                            $"Patentes actualizadas para rol {familia.Nombre}: {patentes.Count} patentes asignadas ({patentesNombres})",
+                            CriticidadBitacora.Advertencia,
+                            "FamiliaPatente",
+                            idFamilia.ToString()
+                        );
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -184,6 +205,25 @@ namespace ServicesSecurity.BLL
                 };
 
                 ServicesSecurity.DAL.Implementations.FamiliaPatenteRepository.Current.Insert(familiaPatente);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    var familia = ServicesSecurity.DAL.Implementations.FamiliaRepository.Current.SelectOne(idFamilia);
+                    var patente = ServicesSecurity.DAL.Implementations.PatenteRepository.Current.SelectOne(idPatente);
+
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Permisos",
+                        "AsignarPatenteAFamilia",
+                        $"Patente asignada a familia {familia?.Nombre}: {patente?.FormName}",
+                        CriticidadBitacora.Advertencia,
+                        "FamiliaPatente",
+                        idFamilia.ToString()
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -206,6 +246,25 @@ namespace ServicesSecurity.BLL
                 };
 
                 ServicesSecurity.DAL.Implementations.FamiliaPatenteRepository.Current.DeleteRelacion(familiaPatente);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    var familia = ServicesSecurity.DAL.Implementations.FamiliaRepository.Current.SelectOne(idFamilia);
+                    var patente = ServicesSecurity.DAL.Implementations.PatenteRepository.Current.SelectOne(idPatente);
+
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Permisos",
+                        "QuitarPatenteDeFamilia",
+                        $"Patente removida de familia {familia?.Nombre}: {patente?.FormName}",
+                        CriticidadBitacora.Advertencia,
+                        "FamiliaPatente",
+                        idFamilia.ToString()
+                    );
+                }
             }
             catch (Exception ex)
             {

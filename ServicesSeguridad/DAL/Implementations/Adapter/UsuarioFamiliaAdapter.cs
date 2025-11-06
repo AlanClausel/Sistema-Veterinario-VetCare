@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.DAL.Implementations.Adapter
 {
@@ -41,7 +42,7 @@ namespace ServicesSecurity.DAL.Implementations.Adapter
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 return null;
                 throw;
             }

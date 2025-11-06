@@ -4,6 +4,8 @@ using System.Linq;
 using ServicesSecurity.DomainModel.Security.Composite;
 using ServicesSecurity.DomainModel.Exceptions;
 using ServicesSecurity.Services;
+using ServicesSecurity.DomainModel.Security;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 // using BLL; // ELIMINADO: Causaba dependencia circular (BLL -> DAL -> ServicesSecurity -> BLL)
 
 namespace ServicesSecurity.BLL
@@ -119,6 +121,20 @@ namespace ServicesSecurity.BLL
 
                 ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.Insert(nuevoUsuario);
 
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    BitacoraService.Current.RegistrarAlta(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Usuarios",
+                        "Usuario",
+                        nuevoUsuario.IdUsuario.ToString(),
+                        $"Usuario creado: {nombre}, Rol: {familiaRol.Nombre}"
+                    );
+                }
+
                 // Asignar el rol (familia) al usuario
                 AsignarFamilia(nuevoUsuario.IdUsuario, idFamiliaRol);
             }
@@ -178,6 +194,26 @@ namespace ServicesSecurity.BLL
                 }
 
                 ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.Update(usuario);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    string descripcion = $"Usuario modificado: {nombre}";
+                    if (!string.IsNullOrWhiteSpace(password))
+                    {
+                        descripcion += " (contraseña actualizada)";
+                    }
+
+                    BitacoraService.Current.RegistrarModificacion(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Usuarios",
+                        "Usuario",
+                        idUsuario.ToString(),
+                        descripcion
+                    );
+                }
 
                 // NOTA: La sincronización de nombre con VetCareDB.Veterinario se hace de forma "lazy"
                 // cuando se consulta el veterinario (VeterinarioBLL.ObtenerVeterinarioConSincronizacion)
@@ -242,6 +278,23 @@ namespace ServicesSecurity.BLL
 
                     // Confirmar la transacción
                     unitOfWork.Commit();
+
+                    // Registrar en bitácora (después del commit exitoso)
+                    var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                    if (usuarioLogueado != null)
+                    {
+                        var usuario = ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.SelectOne(idUsuario);
+                        BitacoraService.Current.Registrar(
+                            usuarioLogueado.IdUsuario,
+                            usuarioLogueado.Nombre,
+                            "Usuarios",
+                            "CambiarRol",
+                            $"Rol cambiado para usuario {usuario?.Nombre}: {nuevaFamiliaRol.Nombre}",
+                            CriticidadBitacora.Advertencia,
+                            "Usuario",
+                            idUsuario.ToString()
+                        );
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -267,6 +320,22 @@ namespace ServicesSecurity.BLL
                 }
 
                 ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.Delete(idUsuario);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Usuarios",
+                        AccionBitacora.Baja,
+                        $"Usuario ELIMINADO: {usuario.Nombre}",
+                        CriticidadBitacora.Critico,
+                        "Usuario",
+                        idUsuario.ToString()
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -383,6 +452,25 @@ namespace ServicesSecurity.BLL
 
                 ServicesSecurity.DAL.Implementations.UsuarioFamiliaRepository.Current.Insert(usuarioFamilia);
 
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    var usuario = ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.SelectOne(idUsuario);
+                    var familia = ServicesSecurity.DAL.Implementations.FamiliaRepository.Current.SelectOne(idFamilia);
+
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Permisos",
+                        "AsignarFamilia",
+                        $"Familia asignada a usuario {usuario?.Nombre}: {familia?.Nombre}",
+                        CriticidadBitacora.Advertencia,
+                        "UsuarioFamilia",
+                        idUsuario.ToString()
+                    );
+                }
+
                 // NOTA: Si se asigna ROL_Veterinario, el registro en VetCareDB.Veterinario
                 // se crea automáticamente la primera vez que el usuario inicia sesión o
                 // cuando se consulta el veterinario por primera vez (sincronización lazy).
@@ -409,6 +497,25 @@ namespace ServicesSecurity.BLL
                 };
 
                 ServicesSecurity.DAL.Implementations.UsuarioFamiliaRepository.Current.DeleteRelacion(usuarioFamilia);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    var usuario = ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.SelectOne(idUsuario);
+                    var familia = ServicesSecurity.DAL.Implementations.FamiliaRepository.Current.SelectOne(idFamilia);
+
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Permisos",
+                        "QuitarFamilia",
+                        $"Familia removida de usuario {usuario?.Nombre}: {familia?.Nombre}",
+                        CriticidadBitacora.Advertencia,
+                        "UsuarioFamilia",
+                        idUsuario.ToString()
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -486,6 +593,25 @@ namespace ServicesSecurity.BLL
                 };
 
                 ServicesSecurity.DAL.Implementations.UsuarioPatenteRepository.Current.Insert(usuarioPatente);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    var usuario = ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.SelectOne(idUsuario);
+                    var patente = ServicesSecurity.DAL.Implementations.PatenteRepository.Current.SelectOne(idPatente);
+
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Permisos",
+                        "AsignarPatente",
+                        $"Patente asignada a usuario {usuario?.Nombre}: {patente?.FormName}",
+                        CriticidadBitacora.Advertencia,
+                        "UsuarioPatente",
+                        idUsuario.ToString()
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -508,6 +634,25 @@ namespace ServicesSecurity.BLL
                 };
 
                 ServicesSecurity.DAL.Implementations.UsuarioPatenteRepository.Current.DeleteRelacion(usuarioPatente);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    var usuario = ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.SelectOne(idUsuario);
+                    var patente = ServicesSecurity.DAL.Implementations.PatenteRepository.Current.SelectOne(idPatente);
+
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Permisos",
+                        "QuitarPatente",
+                        $"Patente removida de usuario {usuario?.Nombre}: {patente?.FormName}",
+                        CriticidadBitacora.Advertencia,
+                        "UsuarioPatente",
+                        idUsuario.ToString()
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -535,6 +680,22 @@ namespace ServicesSecurity.BLL
 
                 usuario.IdiomaPreferido = idioma;
                 ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.Update(usuario);
+
+                // Registrar en bitácora
+                var usuarioLogueado = LoginService.GetUsuarioLogueado();
+                if (usuarioLogueado != null)
+                {
+                    BitacoraService.Current.Registrar(
+                        usuarioLogueado.IdUsuario,
+                        usuarioLogueado.Nombre,
+                        "Usuarios",
+                        "CambiarIdioma",
+                        $"Idioma modificado para usuario {usuario.Nombre}: {idioma}",
+                        CriticidadBitacora.Info,
+                        "Usuario",
+                        idUsuario.ToString()
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -606,6 +767,18 @@ namespace ServicesSecurity.BLL
 
                 // Actualizar contraseña (el SP recalcula DVH automáticamente)
                 ServicesSecurity.DAL.Implementations.UsuarioRepository.Current.ActualizarContraseña(idUsuario, hashNueva);
+
+                // Registrar en bitácora
+                BitacoraService.Current.Registrar(
+                    usuario.IdUsuario,
+                    usuario.Nombre,
+                    "Mi Cuenta",
+                    "CambiarContraseña",
+                    $"Contraseña modificada por el usuario {usuario.Nombre}",
+                    CriticidadBitacora.Advertencia,
+                    "Usuario",
+                    idUsuario.ToString()
+                );
 
                 LoggerService.WriteLog($"Contraseña cambiada para usuario: {usuario.Nombre}",
                     System.Diagnostics.Tracing.EventLevel.Informational, string.Empty);

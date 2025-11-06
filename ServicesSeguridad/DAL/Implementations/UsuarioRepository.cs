@@ -10,6 +10,7 @@ using ServicesSecurity.DAL.Tools;
 using ServicesSecurity.DomainModel.Security.Composite;
 using ServicesSecurity.DomainModel.Exceptions;
 using ServicesSecurity.Services;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.DAL.Implementations
 {
@@ -69,7 +70,7 @@ namespace ServicesSecurity.DAL.Implementations
             // Si no tiene DVH, no validar (compatibilidad con datos antiguos)
             if (string.IsNullOrWhiteSpace(usuario.DVH))
             {
-                Bitacora.Current.LogWarning($"Usuario '{usuario.Nombre}' no tiene DVH. Se recomienda recalcular.");
+                BitacoraService.Current.LogWarning($"Usuario '{usuario.Nombre}' no tiene DVH. Se recomienda recalcular.");
                 return;
             }
 
@@ -78,7 +79,7 @@ namespace ServicesSecurity.DAL.Implementations
             if (usuario.DVH != dvhCalculado)
             {
                 // Log crítico de seguridad
-                Bitacora.Current.LogCritical($"DVH INVÁLIDO para usuario '{usuario.Nombre}' (ID: {usuario.IdUsuario}). " +
+                BitacoraService.Current.LogCritical($"DVH INVÁLIDO para usuario '{usuario.Nombre}' (ID: {usuario.IdUsuario}). " +
                                             $"Posible alteración directa en base de datos. " +
                                             $"DVH esperado: {dvhCalculado}, DVH en BD: {usuario.DVH}");
 
@@ -190,7 +191,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
             }
 
@@ -225,7 +226,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
             }
 
@@ -260,7 +261,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
                 ExceptionManager.Current.Handle(ex);
             }
 

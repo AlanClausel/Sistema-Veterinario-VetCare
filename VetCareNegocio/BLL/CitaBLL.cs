@@ -4,6 +4,9 @@ using System.Linq;
 using DAL.Contracts;
 using DAL.Implementations;
 using DomainModel;
+using ServicesSecurity.Services;
+using ServicesSecurity.DomainModel.Security;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace BLL
 {
@@ -52,37 +55,64 @@ namespace BLL
         /// </summary>
         public Cita AgendarCita(Cita cita)
         {
-            // Validaciones de negocio
-            ValidarCita(cita);
+            try
+            {
+                // Validaciones de negocio
+                ValidarCita(cita);
 
-            // Verificar que la mascota existe y está activa
-            var mascota = _mascotaRepository.ObtenerPorId(cita.IdMascota)
-                ?? throw new ArgumentException("La mascota especificada no existe");
+                // Verificar que la mascota existe y está activa
+                var mascota = _mascotaRepository.ObtenerPorId(cita.IdMascota)
+                    ?? throw new ArgumentException("La mascota especificada no existe");
 
-            if (!mascota.Activo)
-                throw new InvalidOperationException("No se puede agendar cita para una mascota inactiva");
+                if (!mascota.Activo)
+                    throw new InvalidOperationException("No se puede agendar cita para una mascota inactiva");
 
-            // Verificar que la fecha no esté en el pasado (con margen de 5 minutos)
-            if (cita.FechaCita < DateTime.Now.AddMinutes(-5))
-                throw new ArgumentException("No se puede agendar una cita en el pasado");
+                // Verificar que la fecha no esté en el pasado (con margen de 5 minutos)
+                if (cita.FechaCita < DateTime.Now.AddMinutes(-5))
+                    throw new ArgumentException("No se puede agendar una cita en el pasado");
 
-            // Verificar conflictos de horario para el veterinario
-            ValidarConflictoHorario(cita.Veterinario, cita.FechaCita);
+                // Verificar conflictos de horario para el veterinario
+                ValidarConflictoHorario(cita.Veterinario, cita.FechaCita);
 
-            // Verificar conflictos de horario para la mascota
-            ValidarConflictoHorarioMascota(cita.IdMascota, cita.FechaCita);
+                // Verificar conflictos de horario para la mascota
+                ValidarConflictoHorarioMascota(cita.IdMascota, cita.FechaCita);
 
-            // Establecer estado inicial
-            cita.Estado = EstadoCita.Agendada;
-            cita.FechaRegistro = DateTime.Now;
-            cita.Activo = true;
+                // Establecer estado inicial
+                cita.Estado = EstadoCita.Agendada;
+                cita.FechaRegistro = DateTime.Now;
+                cita.Activo = true;
 
-            // Insertar en la base de datos
-            var idCita = _citaRepository.Insert(cita);
-            cita.IdCita = idCita;
+                // Insertar en la base de datos
+                var idCita = _citaRepository.Insert(cita);
+                cita.IdCita = idCita;
 
-            // Retornar la cita completa con información del cliente
-            return _citaRepository.SelectOne(idCita);
+                // Retornar la cita completa con información del cliente
+                var nuevaCita = _citaRepository.SelectOne(idCita);
+
+                // Registrar en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarEvento(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Citas",
+                        AccionBitacora.AgendarCita,
+                        $"Cita agendada: {mascota.Nombre} con {cita.Veterinario} el {cita.FechaCita:dd/MM/yyyy HH:mm}",
+                        CriticidadBitacora.Info,
+                        "Cita",
+                        idCita.ToString()
+                    );
+                }
+
+                return nuevaCita;
+            }
+            catch (Exception ex)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Citas");
+                throw;
+            }
         }
 
         #endregion
@@ -153,7 +183,37 @@ namespace BLL
         /// </summary>
         public bool ConfirmarCita(Guid idCita)
         {
-            return ActualizarEstadoCita(idCita, EstadoCita.Confirmada);
+            try
+            {
+                var cita = _citaRepository.SelectOne(idCita);
+                var resultado = ActualizarEstadoCita(idCita, EstadoCita.Confirmada);
+
+                if (resultado && cita != null)
+                {
+                    var usuario = LoginService.GetUsuarioLogueado();
+                    if (usuario != null)
+                    {
+                        BitacoraService.Current.RegistrarEvento(
+                            usuario.IdUsuario,
+                            usuario.Nombre,
+                            "Citas",
+                            "Confirmacion",
+                            $"Cita confirmada: {cita.FechaCita:dd/MM/yyyy HH:mm} con {cita.Veterinario}",
+                            CriticidadBitacora.Info,
+                            "Cita",
+                            idCita.ToString()
+                        );
+                    }
+                }
+
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Citas");
+                throw;
+            }
         }
 
         /// <summary>
@@ -182,15 +242,42 @@ namespace BLL
         /// </summary>
         public bool CancelarCita(Guid idCita)
         {
-            var cita = _citaRepository.SelectOne(idCita)
-                ?? throw new ArgumentException("La cita especificada no existe");
+            try
+            {
+                var cita = _citaRepository.SelectOne(idCita)
+                    ?? throw new ArgumentException("La cita especificada no existe");
 
-            if (!cita.PuedeSerCancelada())
-                throw new InvalidOperationException($"No se puede cancelar una cita en estado {cita.EstadoDescripcion}");
+                if (!cita.PuedeSerCancelada())
+                    throw new InvalidOperationException($"No se puede cancelar una cita en estado {cita.EstadoDescripcion}");
 
-            bool resultado = _citaRepository.UpdateEstado(idCita, EstadoCita.Cancelada);
+                bool resultado = _citaRepository.UpdateEstado(idCita, EstadoCita.Cancelada);
 
-            return resultado;
+                if (resultado)
+                {
+                    var usuario = LoginService.GetUsuarioLogueado();
+                    if (usuario != null)
+                    {
+                        BitacoraService.Current.RegistrarEvento(
+                            usuario.IdUsuario,
+                            usuario.Nombre,
+                            "Citas",
+                            AccionBitacora.CancelarCita,
+                            $"Cita cancelada: {cita.FechaCita:dd/MM/yyyy HH:mm} con {cita.Veterinario}",
+                            CriticidadBitacora.Advertencia,
+                            "Cita",
+                            idCita.ToString()
+                        );
+                    }
+                }
+
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Citas");
+                throw;
+            }
         }
 
         /// <summary>

@@ -4,6 +4,9 @@ using System.Linq;
 using DAL.Contracts;
 using DAL.Implementations;
 using DomainModel;
+using ServicesSecurity.Services;
+using ServicesSecurity.DomainModel.Security;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace BLL
 {
@@ -40,27 +43,53 @@ namespace BLL
         /// </summary>
         public Cliente RegistrarCliente(Cliente cliente)
         {
-            // Validaciones de negocio
-            ValidarCliente(cliente);
-
-            // Validar DNI único
-            if (_clienteRepository.ExistePorDNI(cliente.DNI))
+            try
             {
-                throw new InvalidOperationException($"Ya existe un cliente con DNI {cliente.DNI}");
-            }
+                // Validaciones de negocio
+                ValidarCliente(cliente);
 
-            // Generar nuevo ID si no tiene
-            if (cliente.IdCliente == Guid.Empty)
+                // Validar DNI único
+                if (_clienteRepository.ExistePorDNI(cliente.DNI))
+                {
+                    throw new InvalidOperationException($"Ya existe un cliente con DNI {cliente.DNI}");
+                }
+
+                // Generar nuevo ID si no tiene
+                if (cliente.IdCliente == Guid.Empty)
+                {
+                    cliente.IdCliente = Guid.NewGuid();
+                }
+
+                // Establecer fecha de registro
+                cliente.FechaRegistro = DateTime.Now;
+                cliente.Activo = true;
+
+                // Persistir en base de datos
+                var nuevoCliente = _clienteRepository.Crear(cliente);
+
+                // Registrar en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarAlta(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Clientes",
+                        "Cliente",
+                        nuevoCliente.IdCliente.ToString(),
+                        $"Cliente registrado: {nuevoCliente.Nombre} {nuevoCliente.Apellido}, DNI: {nuevoCliente.DNI}"
+                    );
+                }
+
+                return nuevoCliente;
+            }
+            catch (Exception ex)
             {
-                cliente.IdCliente = Guid.NewGuid();
+                // Registrar excepción en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Clientes");
+                throw;
             }
-
-            // Establecer fecha de registro
-            cliente.FechaRegistro = DateTime.Now;
-            cliente.Activo = true;
-
-            // Persistir en base de datos
-            return _clienteRepository.Crear(cliente);
         }
 
         #endregion
@@ -72,27 +101,53 @@ namespace BLL
         /// </summary>
         public Cliente ModificarCliente(Cliente cliente)
         {
-            // Validaciones de negocio
-            ValidarCliente(cliente);
-
-            // Verificar que el cliente existe
-            var clienteExistente = _clienteRepository.ObtenerPorId(cliente.IdCliente);
-            if (clienteExistente == null)
+            try
             {
-                throw new InvalidOperationException($"No existe un cliente con ID {cliente.IdCliente}");
-            }
+                // Validaciones de negocio
+                ValidarCliente(cliente);
 
-            // Validar DNI único (excluyendo el cliente actual)
-            if (_clienteRepository.ExistePorDNI(cliente.DNI, cliente.IdCliente))
+                // Verificar que el cliente existe
+                var clienteExistente = _clienteRepository.ObtenerPorId(cliente.IdCliente);
+                if (clienteExistente == null)
+                {
+                    throw new InvalidOperationException($"No existe un cliente con ID {cliente.IdCliente}");
+                }
+
+                // Validar DNI único (excluyendo el cliente actual)
+                if (_clienteRepository.ExistePorDNI(cliente.DNI, cliente.IdCliente))
+                {
+                    throw new InvalidOperationException($"Ya existe otro cliente con DNI {cliente.DNI}");
+                }
+
+                // Mantener fecha de registro original
+                cliente.FechaRegistro = clienteExistente.FechaRegistro;
+
+                // Persistir cambios
+                var clienteActualizado = _clienteRepository.Actualizar(cliente);
+
+                // Registrar en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarModificacion(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Clientes",
+                        "Cliente",
+                        clienteActualizado.IdCliente.ToString(),
+                        $"Cliente modificado: {clienteActualizado.Nombre} {clienteActualizado.Apellido}, DNI: {clienteActualizado.DNI}"
+                    );
+                }
+
+                return clienteActualizado;
+            }
+            catch (Exception ex)
             {
-                throw new InvalidOperationException($"Ya existe otro cliente con DNI {cliente.DNI}");
+                // Registrar excepción en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Clientes");
+                throw;
             }
-
-            // Mantener fecha de registro original
-            cliente.FechaRegistro = clienteExistente.FechaRegistro;
-
-            // Persistir cambios
-            return _clienteRepository.Actualizar(cliente);
         }
 
         #endregion
@@ -105,23 +160,51 @@ namespace BLL
         /// </summary>
         public void EliminarCliente(Guid idCliente)
         {
-            // Verificar que el cliente existe
-            var cliente = _clienteRepository.ObtenerPorId(idCliente);
-            if (cliente == null)
+            try
             {
-                throw new InvalidOperationException($"No existe un cliente con ID {idCliente}");
-            }
+                // Verificar que el cliente existe
+                var cliente = _clienteRepository.ObtenerPorId(idCliente);
+                if (cliente == null)
+                {
+                    throw new InvalidOperationException($"No existe un cliente con ID {idCliente}");
+                }
 
-            // Validar reglas de negocio antes de eliminar
-            var cantidadMascotas = _mascotaRepository.ContarPorCliente(idCliente);
-            if (cantidadMascotas > 0)
+                // Guardar datos antes de eliminar para la bitácora
+                string nombreCompleto = $"{cliente.Nombre} {cliente.Apellido}";
+                string dni = cliente.DNI;
+
+                // Validar reglas de negocio antes de eliminar
+                var cantidadMascotas = _mascotaRepository.ContarPorCliente(idCliente);
+                if (cantidadMascotas > 0)
+                {
+                    // Opcional: Puedes lanzar excepción o permitir eliminación en cascada
+                    // throw new InvalidOperationException($"No se puede eliminar el cliente porque tiene {cantidadMascotas} mascotas asociadas");
+                }
+
+                // Eliminar cliente (y mascotas en cascada por FK en BD)
+                _clienteRepository.Eliminar(idCliente);
+
+                // Registrar en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarBaja(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Clientes",
+                        "Cliente",
+                        idCliente.ToString(),
+                        $"Cliente eliminado: {nombreCompleto}, DNI: {dni}"
+                    );
+                }
+            }
+            catch (Exception ex)
             {
-                // Opcional: Puedes lanzar excepción o permitir eliminación en cascada
-                // throw new InvalidOperationException($"No se puede eliminar el cliente porque tiene {cantidadMascotas} mascotas asociadas");
+                // Registrar excepción en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Clientes");
+                throw;
             }
-
-            // Eliminar cliente (y mascotas en cascada por FK en BD)
-            _clienteRepository.Eliminar(idCliente);
         }
 
         /// <summary>
@@ -129,14 +212,39 @@ namespace BLL
         /// </summary>
         public Cliente DesactivarCliente(Guid idCliente)
         {
-            var cliente = _clienteRepository.ObtenerPorId(idCliente);
-            if (cliente == null)
+            try
             {
-                throw new InvalidOperationException($"No existe un cliente con ID {idCliente}");
-            }
+                var cliente = _clienteRepository.ObtenerPorId(idCliente);
+                if (cliente == null)
+                {
+                    throw new InvalidOperationException($"No existe un cliente con ID {idCliente}");
+                }
 
-            cliente.Activo = false;
-            return _clienteRepository.Actualizar(cliente);
+                cliente.Activo = false;
+                var clienteActualizado = _clienteRepository.Actualizar(cliente);
+
+                // Registrar en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarBaja(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Clientes",
+                        "Cliente",
+                        clienteActualizado.IdCliente.ToString(),
+                        $"Cliente desactivado: {clienteActualizado.Nombre} {clienteActualizado.Apellido}, DNI: {clienteActualizado.DNI}"
+                    );
+                }
+
+                return clienteActualizado;
+            }
+            catch (Exception ex)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Clientes");
+                throw;
+            }
         }
 
         /// <summary>
@@ -144,14 +252,39 @@ namespace BLL
         /// </summary>
         public Cliente ActivarCliente(Guid idCliente)
         {
-            var cliente = _clienteRepository.ObtenerPorId(idCliente);
-            if (cliente == null)
+            try
             {
-                throw new InvalidOperationException($"No existe un cliente con ID {idCliente}");
-            }
+                var cliente = _clienteRepository.ObtenerPorId(idCliente);
+                if (cliente == null)
+                {
+                    throw new InvalidOperationException($"No existe un cliente con ID {idCliente}");
+                }
 
-            cliente.Activo = true;
-            return _clienteRepository.Actualizar(cliente);
+                cliente.Activo = true;
+                var clienteActualizado = _clienteRepository.Actualizar(cliente);
+
+                // Registrar en bitácora
+                var usuario = LoginService.GetUsuarioLogueado();
+                if (usuario != null)
+                {
+                    BitacoraService.Current.RegistrarAlta(
+                        usuario.IdUsuario,
+                        usuario.Nombre,
+                        "Clientes",
+                        "Cliente",
+                        clienteActualizado.IdCliente.ToString(),
+                        $"Cliente reactivado: {clienteActualizado.Nombre} {clienteActualizado.Apellido}, DNI: {clienteActualizado.DNI}"
+                    );
+                }
+
+                return clienteActualizado;
+            }
+            catch (Exception ex)
+            {
+                var usuario = LoginService.GetUsuarioLogueado();
+                BitacoraService.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Clientes");
+                throw;
+            }
         }
 
         #endregion

@@ -1,4 +1,5 @@
 ﻿using ServicesSecurity.DomainModel.Exceptions;
+using ServicesSecurity.Services;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -7,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.DAL.Implementations
 {
@@ -30,7 +32,7 @@ namespace ServicesSecurity.DAL.Implementations
         }
         #endregion
 
-        private string basePath = ConfigurationManager.AppSettings["LanguagePath"];
+        private readonly string basePath = ConfigurationManager.AppSettings["LanguagePath"] ?? string.Empty;
 
         /// <summary>
         /// Obtiene la ruta del archivo de idioma con fallback
@@ -128,7 +130,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Services.Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
             }
         }
 
@@ -157,7 +159,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Services.Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
             }
 
             return translations;
@@ -195,7 +197,7 @@ namespace ServicesSecurity.DAL.Implementations
             }
             catch (Exception ex)
             {
-                Services.Bitacora.Current.LogException(ex);
+                BitacoraService.Current.LogException(ex);
             }
 
             return cultures;

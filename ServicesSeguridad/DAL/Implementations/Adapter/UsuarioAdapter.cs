@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.DAL.Implementations.Adapter
 {
@@ -59,7 +60,7 @@ namespace ServicesSecurity.DAL.Implementations.Adapter
             }
             catch (Exception ex)
             {
-                Bitacora.Current.LogError($"Error en hidratación de permisos para usuario {usuario.Nombre}: {ex.GetType().Name} - {ex.Message}");
+                BitacoraService.Current.LogError($"Error en hidratación de permisos para usuario {usuario.Nombre}: {ex.GetType().Name} - {ex.Message}");
                 throw;
             }
 
