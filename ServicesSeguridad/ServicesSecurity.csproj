@@ -100,6 +100,7 @@
     <Compile Include="Services\ExportarAExcel.cs" />
     <Compile Include="Services\Extensions\ExceptionExtension.cs" />
     <Compile Include="Services\Extensions\StringExtension.cs" />
+    <Compile Include="Services\ILanguageObserver.cs" />
     <Compile Include="Services\LanguageManager.cs" />
     <Compile Include="Services\LoggerService.cs" />
     <Compile Include="Services\LoginService.cs" />

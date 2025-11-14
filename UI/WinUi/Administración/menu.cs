@@ -10,7 +10,7 @@ using UI.WinUi.Negocio;
 
 namespace UI.WinUi.Administrador
 {
-    public partial class menu : Form
+    public partial class menu : BaseObservableForm
     {
         private Usuario _usuarioLogueado;
 
@@ -24,7 +24,7 @@ namespace UI.WinUi.Administrador
             _usuarioLogueado = usuario;
 
             CargarLogo();
-            ActualizarTextos();
+            // ActualizarTextos() se llama automáticamente por BaseObservableForm.Load
             ConfigurarEstiloMenu();
             CargarMenuDinamico();
         }
@@ -48,10 +48,46 @@ namespace UI.WinUi.Administrador
             }
         }
 
-        private void ActualizarTextos()
+        /// <summary>
+        /// Actualiza los textos del menú según el idioma actual.
+        /// Implementa el patrón Observer: se invoca automáticamente cuando cambia el idioma.
+        /// También actualiza los textos de los items dinámicos del menú.
+        /// </summary>
+        protected override void ActualizarTextos()
         {
             this.Text = LanguageManager.Translate("menu_principal");
             cerrarSesionToolStripMenuItem.Text = LanguageManager.Translate("cerrar_sesion");
+
+            // Actualizar items dinámicos del menú
+            ActualizarMenuDinamico();
+        }
+
+        /// <summary>
+        /// Actualiza los textos de los items del menú dinámico sin recrearlos
+        /// </summary>
+        private void ActualizarMenuDinamico()
+        {
+            try
+            {
+                // Obtener todos los items dinámicos
+                var itemsDinamicos = menuStrip1.Items.Cast<ToolStripItem>()
+                    .Where(item => item.Name != null && item.Name.StartsWith("mnuDynamic_"))
+                    .ToList();
+
+                // Actualizar el texto de cada item usando su Tag (FormName)
+                foreach (var item in itemsDinamicos)
+                {
+                    if (item.Tag != null && item.Tag is string formName)
+                    {
+                        item.Text = HumanizarNombre(formName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error pero no interrumpir
+                Console.WriteLine($"Error al actualizar menú dinámico: {ex.Message}");
+            }
         }
 
         /// <summary>

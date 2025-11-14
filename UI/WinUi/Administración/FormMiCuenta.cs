@@ -6,7 +6,7 @@ using ServicesSecurity.Services;
 
 namespace UI.WinUi.Administrador
 {
-    public partial class FormMiCuenta : Form
+    public partial class FormMiCuenta : BaseObservableForm
     {
         private Usuario _usuarioLogueado;
 
@@ -24,7 +24,7 @@ namespace UI.WinUi.Administrador
         {
             try
             {
-                ActualizarTextos();
+                // ActualizarTextos() se llama automáticamente por BaseObservableForm
                 CargarInformacionUsuario();
                 CargarIdiomasDisponibles();
             }
@@ -36,7 +36,11 @@ namespace UI.WinUi.Administrador
             }
         }
 
-        private void ActualizarTextos()
+        /// <summary>
+        /// Actualiza todos los textos del formulario según el idioma actual.
+        /// Implementa el patrón Observer: se invoca automáticamente cuando cambia el idioma.
+        /// </summary>
+        protected override void ActualizarTextos()
         {
             // Título del formulario
             this.Text = $"{LanguageManager.Translate("mi_cuenta")} - {LanguageManager.Translate("sistema_veterinario")}";
@@ -202,15 +206,15 @@ namespace UI.WinUi.Administrador
                     return;
                 }
 
-                // Actualizar idioma
+                // Actualizar idioma en base de datos
                 UsuarioBLL.ActualizarIdioma(_usuarioLogueado.IdUsuario, idiomaSeleccionado.Codigo);
-
-                MessageBox.Show(LanguageManager.Translate("idioma_actualizado_exito"),
-                    LanguageManager.Translate("exito"),
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 // Actualizar objeto en memoria
                 _usuarioLogueado.IdiomaPreferido = idiomaSeleccionado.Codigo;
+
+                // PATRÓN OBSERVER: Cambiar idioma notifica a todos los formularios abiertos
+                // Los cambios se aplican inmediatamente, sin necesidad de reiniciar
+                LanguageManager.CambiarIdioma(idiomaSeleccionado.Codigo);
             }
             catch (Exception ex)
             {

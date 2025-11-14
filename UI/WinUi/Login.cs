@@ -85,31 +85,17 @@ namespace UI
         private void LnkEspañol_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             _idiomaSeleccionadoEnLogin = "es-AR"; // Guardar idioma seleccionado
-            CambiarIdioma("es-AR");
+            // Usar LanguageManager.CambiarIdioma() para aplicar patrón Observer
+            LanguageManager.CambiarIdioma("es-AR");
+            AplicarTraducciones(); // Actualizar este formulario explícitamente
         }
 
         private void LnkEnglish_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             _idiomaSeleccionadoEnLogin = "en-GB"; // Guardar idioma seleccionado
-            CambiarIdioma("en-GB");
-        }
-
-        private void CambiarIdioma(string cultura)
-        {
-            try
-            {
-                CultureInfo nuevaCultura = new CultureInfo(cultura);
-                Thread.CurrentThread.CurrentCulture = nuevaCultura;
-                Thread.CurrentThread.CurrentUICulture = nuevaCultura;
-
-                AplicarTraducciones();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"{LanguageManager.Translate("error")}: {ex.Message}",
-                    LanguageManager.Translate("error"),
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            // Usar LanguageManager.CambiarIdioma() para aplicar patrón Observer
+            LanguageManager.CambiarIdioma("en-GB");
+            AplicarTraducciones(); // Actualizar este formulario explícitamente
         }
 
         private void AplicarTraducciones()
@@ -184,8 +170,8 @@ namespace UI
             // Determinar qué idioma usar: el seleccionado en el login tiene prioridad
             string idiomaAUsar = _idiomaSeleccionadoEnLogin ?? usuario.IdiomaPreferido ?? "es-AR";
 
-            // Aplicar el idioma ANTES de crear el menú
-            CambiarIdioma(idiomaAUsar);
+            // Aplicar el idioma ANTES de crear el menú usando patrón Observer
+            LanguageManager.CambiarIdioma(idiomaAUsar);
 
             // Si el usuario seleccionó un idioma diferente en el login, guardarlo en la BD
             if (!string.IsNullOrEmpty(_idiomaSeleccionadoEnLogin) &&
