@@ -138,5 +138,104 @@ namespace ServicesSecurity.DAL.Implementations
 
             return relaciones;
         }
+
+        /// <summary>
+        /// Obtiene las relaciones donde esta familia es hija (está contenida en otras familias)
+        /// </summary>
+        public IEnumerable<ServicesSecurity.DomainModel.Security.FamiliaFamilia> GetParentRelations(Familia familia)
+        {
+            var relaciones = new List<ServicesSecurity.DomainModel.Security.FamiliaFamilia>();
+
+            try
+            {
+                string sqlStatement = "SELECT IdFamiliaPadre, IdFamiliaHijo FROM [dbo].[FamiliaFamilia] WHERE IdFamiliaHijo = @IdFamiliaHijo";
+
+                using (var dr = SqlHelper.ExecuteReader(sqlStatement, System.Data.CommandType.Text,
+                                                        new SqlParameter[] { new SqlParameter("@IdFamiliaHijo", familia.IdComponent) }))
+                {
+                    while (dr.Read())
+                    {
+                        relaciones.Add(new ServicesSecurity.DomainModel.Security.FamiliaFamilia
+                        {
+                            idFamiliaPadre = (Guid)dr["IdFamiliaPadre"],
+                            idFamiliaHijo = (Guid)dr["IdFamiliaHijo"]
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.Handle(this);
+            }
+
+            return relaciones;
+        }
+
+        /// <summary>
+        /// Elimina todas las relaciones FamiliaFamilia de una familia con soporte para Unit of Work
+        /// </summary>
+        public void Delete(Familia obj, IUnitOfWork unitOfWork)
+        {
+            try
+            {
+                if (unitOfWork != null && unitOfWork.Transaction != null)
+                {
+                    SqlHelper.ExecuteNonQuery(
+                        unitOfWork.Connection,
+                        unitOfWork.Transaction,
+                        "Familia_Familia_DeleteParticular",
+                        System.Data.CommandType.StoredProcedure,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdFamilia", obj.IdComponent)
+                        });
+                }
+                else
+                {
+                    Delete(obj);
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.Handle(this);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Elimina una relación específica FamiliaFamilia con soporte para Unit of Work
+        /// </summary>
+        public void DeleteRelacion(ServicesSecurity.DomainModel.Security.FamiliaFamilia obj, IUnitOfWork unitOfWork)
+        {
+            try
+            {
+                string deleteStatement = "DELETE FROM [dbo].[FamiliaFamilia] WHERE IdFamiliaPadre = @IdFamiliaPadre AND IdFamiliaHijo = @IdFamiliaHijo";
+
+                if (unitOfWork != null && unitOfWork.Transaction != null)
+                {
+                    SqlHelper.ExecuteNonQuery(
+                        unitOfWork.Connection,
+                        unitOfWork.Transaction,
+                        deleteStatement,
+                        System.Data.CommandType.Text,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdFamiliaPadre", obj.idFamiliaPadre),
+                            new SqlParameter("@IdFamiliaHijo", obj.idFamiliaHijo)
+                        });
+                }
+                else
+                {
+                    SqlHelper.ExecuteNonQuery(deleteStatement, System.Data.CommandType.Text,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdFamiliaPadre", obj.idFamiliaPadre),
+                            new SqlParameter("@IdFamiliaHijo", obj.idFamiliaHijo)
+                        });
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.Handle(this);
+                throw;
+            }
+        }
     }
 }

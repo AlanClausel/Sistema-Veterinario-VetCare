@@ -1,0 +1,256 @@
+@startuml CU-A001_IniciarSesion
+!theme plain
+title Caso de Uso: CU-A001 - Iniciar Sesión\nSistema VetCare - Módulo de Autenticación
+
+left to right direction
+skinparam packageStyle rectangle
+
+' ========== ACTORES ==========
+actor "Usuario del Sistema\n(Administrador,\nVeterinario,\nRecepcionista)" as Usuario #LightBlue
+actor "Sistema de\nSeguridad" as Sistema #LightGray
+
+' ========== PAQUETE PRINCIPAL ==========
+package "Autenticación" {
+
+  ' ========== CASO DE USO PRINCIPAL ==========
+  usecase (CU-A001:\nIniciar Sesión) as UC_Login #LightGreen
+
+  note right of UC_Login
+    **Descripción:**
+    Autentica usuario mediante credenciales,
+    valida integridad (DVH), carga permisos
+    recursivos (patrón Composite), registra
+    en bitácora y sincroniza veterinario.
+
+    **Precondiciones:**
+    - Usuario registrado en SecurityVet
+    - Estado activo (no bloqueado)
+    - Conexión a BD disponible
+
+    **Postcondiciones Éxito:**
+    - Sesión activa
+    - Permisos cargados (Composite)
+    - Login en bitácora (criticidad: Info)
+    - Idioma configurado
+    - Menú principal mostrado
+
+    **Postcondiciones Fallo:**
+    - Login fallido en bitácora
+    - Usuario en pantalla login
+    - Mensaje de error mostrado
+
+    **Extension Points:**
+    - validación fallida
+    - autenticación fallida
+    - integridad comprometida
+
+    **Componentes:**
+    - Login.cs (UI)
+    - LoginService.cs
+    - CryptographyService.cs
+    - Bitacora.cs
+    - ValidationBLL.cs
+
+    **SPs utilizados:**
+    - Usuario_SelectByUsername
+    - Familia_Familia_SelectParticular
+    - Bitacora_Insert
+    - Usuario_UpdateIdioma
+    - Veterinario_Insert
+  end note
+
+  ' ========== CASOS DE USO INCLUIDOS ==========
+  usecase (Validar\nCredenciales) as UC_Validar #PaleGreen
+  usecase (Hashear\nContraseña) as UC_Hash #PaleGreen
+  usecase (Cargar Permisos\n(Composite)) as UC_Permisos #PaleGreen
+  usecase (Registrar Login\nen Bitácora) as UC_RegLogin #PaleGreen
+  usecase (Sincronizar\nVeterinario) as UC_Sync #PaleGreen
+  usecase (Configurar\nIdioma) as UC_Idioma #PaleGreen
+
+  ' ========== CASOS DE USO EXTENDIDOS ==========
+  usecase (Registrar Login\nFallido) as UC_LoginFallido #LightCoral
+  usecase (Registrar\nViolación DVH) as UC_DVH #LightCoral
+
+  ' ========== RELACIONES INCLUDE ==========
+  UC_Login ..> UC_Validar : <<include>>
+  UC_Login ..> UC_Hash : <<include>>
+  UC_Login ..> UC_Permisos : <<include>>
+  UC_Login ..> UC_RegLogin : <<include>>
+  UC_Login ..> UC_Sync : <<include>>
+  UC_Login ..> UC_Idioma : <<include>>
+
+  ' ========== RELACIONES EXTEND ==========
+  UC_LoginFallido .up.> UC_Login : <<extend>>\n(autenticación fallida)
+  UC_DVH .up.> UC_Login : <<extend>>\n(integridad comprometida)
+
+  ' ========== NOTAS PARA CASOS DE USO INCLUIDOS ==========
+  note right of UC_Validar
+    **ValidationBLL.ValidarCredencialesLogin()**
+    Valida campos no vacíos.
+    Lanza: ValidacionException
+  end note
+
+  note right of UC_Hash
+    **CryptographyService.HashPassword()**
+    SHA256 + Encoding.Unicode (UTF-16)
+    Compatible con NVARCHAR SQL Server
+  end note
+
+  note bottom of UC_Permisos
+    **LoginService.CargarPermisosUsuario()**
+    **LoginService.CargarHijosDeFamilia() [RECURSIVO]**
+
+    Proceso:
+    1. Carga Familias del usuario (UsuarioFamilia)
+    2. Para cada Familia, carga recursivamente:
+       - Familias hijas (FamiliaFamilia)
+       - Patentes (FamiliaPatente) - hojas
+    3. Carga Patentes directas (UsuarioPatente)
+
+    **Patrón Composite:**
+    - Familia = Composite (puede tener hijos)
+    - Patente = Leaf (sin hijos)
+
+    SP: Familia_Familia_SelectParticular
+  end note
+
+  note left of UC_RegLogin
+    **Bitacora.Current.RegistrarLogin()**
+
+    Datos registrados:
+    - Módulo: "Sistema"
+    - Acción: "Login"
+    - Descripción: "Usuario '[nombre]'
+      inició sesión exitosamente"
+    - Criticidad: "Info"
+    - FechaHora: DateTime.Now
+
+    SP: Bitacora_Insert
+  end note
+
+  note bottom of UC_Sync
+    **Login.SincronizarVeterinarioSiCorresponde()**
+
+    Si usuario.ObtenerNombreRol() == "Veterinario":
+    1. Verifica: VeterinarioBLL.EsVeterinario(IdUsuario)
+    2. Si no existe: VeterinarioBLL.CrearDesdeUsuario()
+
+    SP: Veterinario_Insert (VetCareDB)
+
+    NOTA: Errores no interrumpen login
+  end note
+
+  note bottom of UC_Idioma
+    **Login.RedirigirPorRol()**
+    **LanguageManager.CambiarIdioma()**
+
+    1. Determina idioma:
+       idiomaLogin ?? IdiomaPreferido ?? "es-AR"
+    2. Carga recursos (idioma.es-AR / idioma.en-GB)
+    3. Notifica observers (Patrón Observer)
+    4. Si difiere: actualiza en BD
+
+    SP: Usuario_UpdateIdioma
+
+    Idiomas: es-AR, en-GB
+  end note
+
+  ' ========== NOTAS PARA CASOS DE USO EXTENDIDOS ==========
+  note left of UC_LoginFallido
+    **Bitacora.Current.RegistrarLoginFallido()**
+
+    Causas:
+    - Usuario no encontrado
+    - Contraseña incorrecta
+
+    Datos registrados:
+    - IdUsuario: NULL
+    - Acción: "LoginFallido"
+    - Descripción: "Intento fallido: [motivo]"
+    - Criticidad: "Advertencia"
+
+    Excepciones lanzadas:
+    - UsuarioNoEncontradoException
+    - ContraseñaInvalidaException
+
+    SP: Bitacora_Insert
+  end note
+
+  note left of UC_DVH
+    **Bitacora.Current.RegistrarViolacionDVH()**
+    **Bitacora.Current.LogCritical()**
+
+    Causa:
+    - DVH calculado ≠ DVH almacenado
+    - Datos comprometidos (modificación manual BD)
+
+    Datos registrados:
+    - Módulo: "Seguridad"
+    - Acción: "ViolacionDVH"
+    - Descripción: "Usuario comprometido: [detalle]"
+    - Criticidad: "Critico"
+
+    Excepción: IntegridadException
+
+    ACCIÓN: Admin ejecuta 04_RecalcularDVH.sql
+  end note
+
+}
+
+' ========== ASOCIACIONES ACTOR-USECASE ==========
+Usuario --> UC_Login
+
+Sistema --> UC_Validar
+Sistema --> UC_Hash
+Sistema --> UC_Permisos
+Sistema --> UC_RegLogin
+Sistema --> UC_LoginFallido
+Sistema --> UC_DVH
+
+' ========== LEYENDA ==========
+legend bottom
+  **Código:** CU-A001
+  **Módulo:** Autenticación
+  **Complejidad:** Alta
+  **Versión:** 1.0
+
+  **Patrones de diseño aplicados:**
+  - Composite (permisos jerárquicos)
+  - Singleton (servicios)
+  - Observer (idioma)
+  - Repository (acceso datos)
+  - Static Service (LoginService)
+
+  **Bases de datos:**
+  - SecurityVet (usuarios, permisos, bitácora)
+  - VetCareDB (veterinarios)
+
+  **Flujos alternativos:**
+  1. FA-1: Campos vacíos (ValidacionException)
+  2. FA-2: Usuario no encontrado (UsuarioNoEncontradoException)
+  3. FA-3: Contraseña incorrecta (ContraseñaInvalidaException)
+  4. FA-4: Violación DVH (IntegridadException)
+  5. FA-5: Error inesperado (AutenticacionException)
+  6. FA-6: Usuario sin rol (mensaje error)
+  7. FA-7: Error sync veterinario (silencioso)
+
+  **Reglas de negocio:**
+  - RN-A001: Contraseñas hasheadas SHA256
+  - RN-A002: Encoding Unicode (UTF-16)
+  - RN-A003: Todos los intentos en bitácora
+  - RN-A004: DVH validado siempre
+  - RN-A005: Permisos recursivos al login
+  - RN-A006: Sesión en variable estática
+  - RN-A007: Requiere al menos 1 Familia
+  - RN-A008: Idioma login > preferido
+  - RN-A009: Veterinario en VetCareDB
+
+  **Clases principales:**
+  UI: Login.cs
+  Services: LoginService, CryptographyService, Bitacora, LanguageManager
+  BLL: ValidationBLL, UsuarioBLL, VeterinarioBLL, BitacoraBLL
+  DAL: UsuarioRepository, FamiliaRepository, PatenteRepository,
+       UsuarioFamiliaRepository, FamiliaPatenteRepository
+end legend
+
+@enduml

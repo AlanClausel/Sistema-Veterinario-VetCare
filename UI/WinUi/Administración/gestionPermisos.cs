@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 using ServicesSecurity.DomainModel.Security.Composite;
+using ServicesSecurity.DomainModel.Exceptions;
 using ServicesSecurity.Services;
 using ServicesSecurity.BLL;
 
@@ -33,6 +34,8 @@ namespace UI.WinUi.Administrador
             tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
 
             // Eventos de gestión de roles
+            btnCrearRol.Click += BtnCrearRol_Click;
+            btnEliminarRol.Click += BtnEliminarRol_Click;
             cboRoles.SelectedIndexChanged += CboRoles_SelectedIndexChanged;
             btnGuardarRol.Click += BtnGuardarRol_Click;
 
@@ -239,6 +242,136 @@ namespace UI.WinUi.Administrador
         #endregion
 
         #region Gestión de Roles
+
+        private void BtnCrearRol_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Usar InputBox para solicitar el nombre del rol
+                string nombreRol = Microsoft.VisualBasic.Interaction.InputBox(
+                    "Ingrese el nombre del nuevo rol:",
+                    "Crear Nuevo Rol",
+                    "",
+                    -1, -1);
+
+                // Verificar que el usuario no canceló
+                if (string.IsNullOrWhiteSpace(nombreRol))
+                    return;
+
+                // Crear el rol usando el patrón Composite
+                var nuevoRol = FamiliaBLL.CrearRol(nombreRol);
+
+                MessageBox.Show(
+                    "Rol creado exitosamente: " + nuevoRol.NombreRol,
+                    LanguageManager.Translate("exito"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+
+                // Recargar la lista de roles
+                CargarRoles();
+
+                // Seleccionar el nuevo rol creado
+                for (int i = 0; i < cboRoles.Items.Count; i++)
+                {
+                    var familia = cboRoles.Items[i] as Familia;
+                    if (familia != null && familia.IdComponent == nuevoRol.IdComponent)
+                    {
+                        cboRoles.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            catch (ValidacionException vex)
+            {
+                MessageBox.Show(vex.Message,
+                    LanguageManager.Translate("validacion"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"{LanguageManager.Translate("error")}: {ex.Message}",
+                    LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void BtnEliminarRol_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Verificar que hay un rol seleccionado
+                if (_familiaSeleccionada == null)
+                {
+                    MessageBox.Show("Por favor, seleccione un rol para eliminar",
+                        "Validación",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Obtener información del rol
+                string nombreRol = _familiaSeleccionada.NombreRol;
+                int cantidadUsuarios = FamiliaBLL.ContarUsuariosConRol(_familiaSeleccionada.IdComponent);
+
+                // Preparar mensaje de confirmación
+                string mensaje;
+                if (cantidadUsuarios > 0)
+                {
+                    mensaje = $"No se puede eliminar el rol '{nombreRol}' porque tiene {cantidadUsuarios} usuario(s) asignado(s).\n\n" +
+                              "Primero debe reasignar o eliminar los usuarios con este rol.";
+
+                    MessageBox.Show(mensaje, "No se puede eliminar",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Confirmar eliminación
+                mensaje = $"¿Está seguro de que desea eliminar el rol '{nombreRol}'?\n\n" +
+                          "Esta acción eliminará:\n" +
+                          "• El rol\n" +
+                          "• Todos los permisos asignados a este rol\n\n" +
+                          "Esta operación NO se puede deshacer.";
+
+                var resultado = MessageBox.Show(mensaje, "Confirmar Eliminación",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                if (resultado != DialogResult.Yes)
+                    return;
+
+                // Eliminar el rol
+                FamiliaBLL.EliminarRol(_familiaSeleccionada.IdComponent);
+
+                MessageBox.Show($"El rol '{nombreRol}' ha sido eliminado exitosamente",
+                    LanguageManager.Translate("exito"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                // Limpiar selección
+                _familiaSeleccionada = null;
+
+                // Recargar la lista de roles
+                CargarRoles();
+
+                // Limpiar patentes
+                for (int i = 0; i < checkedListPatentesRol.Items.Count; i++)
+                {
+                    if (checkedListPatentesRol.Items[i] is PatenteDisplay)
+                    {
+                        checkedListPatentesRol.SetItemChecked(i, false);
+                    }
+                }
+            }
+            catch (ValidacionException vex)
+            {
+                MessageBox.Show(vex.Message,
+                    "Validación",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"{LanguageManager.Translate("error")}: {ex.Message}",
+                    LanguageManager.Translate("error"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
 
         private void CboRoles_SelectedIndexChanged(object sender, EventArgs e)
         {

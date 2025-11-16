@@ -31,6 +31,8 @@ namespace UI.WinUi.Administrador
             this.tabControl = new System.Windows.Forms.TabControl();
             this.tabGestionRoles = new System.Windows.Forms.TabPage();
             this.groupBoxRol = new System.Windows.Forms.GroupBox();
+            this.btnEliminarRol = new System.Windows.Forms.Button();
+            this.btnCrearRol = new System.Windows.Forms.Button();
             this.cboRoles = new System.Windows.Forms.ComboBox();
             this.lblRol = new System.Windows.Forms.Label();
             this.groupBoxPatentesRol = new System.Windows.Forms.GroupBox();
@@ -85,6 +87,8 @@ namespace UI.WinUi.Administrador
             //
             // groupBoxRol
             //
+            this.groupBoxRol.Controls.Add(this.btnEliminarRol);
+            this.groupBoxRol.Controls.Add(this.btnCrearRol);
             this.groupBoxRol.Controls.Add(this.cboRoles);
             this.groupBoxRol.Controls.Add(this.lblRol);
             this.groupBoxRol.Location = new System.Drawing.Point(20, 20);
@@ -94,13 +98,37 @@ namespace UI.WinUi.Administrador
             this.groupBoxRol.TabStop = false;
             this.groupBoxRol.Text = "Seleccionar Rol";
             //
+            // btnEliminarRol
+            //
+            this.btnEliminarRol.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(244)))), ((int)(((byte)(67)))), ((int)(((byte)(54)))));
+            this.btnEliminarRol.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnEliminarRol.ForeColor = System.Drawing.Color.White;
+            this.btnEliminarRol.Location = new System.Drawing.Point(550, 32);
+            this.btnEliminarRol.Name = "btnEliminarRol";
+            this.btnEliminarRol.Size = new System.Drawing.Size(75, 28);
+            this.btnEliminarRol.TabIndex = 3;
+            this.btnEliminarRol.Text = "Eliminar";
+            this.btnEliminarRol.UseVisualStyleBackColor = false;
+            //
+            // btnCrearRol
+            //
+            this.btnCrearRol.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(76)))), ((int)(((byte)(175)))), ((int)(((byte)(80)))));
+            this.btnCrearRol.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnCrearRol.ForeColor = System.Drawing.Color.White;
+            this.btnCrearRol.Location = new System.Drawing.Point(635, 32);
+            this.btnCrearRol.Name = "btnCrearRol";
+            this.btnCrearRol.Size = new System.Drawing.Size(75, 28);
+            this.btnCrearRol.TabIndex = 2;
+            this.btnCrearRol.Text = "+ Crear";
+            this.btnCrearRol.UseVisualStyleBackColor = false;
+            //
             // cboRoles
             //
             this.cboRoles.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cboRoles.FormattingEnabled = true;
             this.cboRoles.Location = new System.Drawing.Point(90, 35);
             this.cboRoles.Name = "cboRoles";
-            this.cboRoles.Size = new System.Drawing.Size(600, 21);
+            this.cboRoles.Size = new System.Drawing.Size(440, 21);
             this.cboRoles.TabIndex = 1;
             //
             // lblRol
@@ -301,6 +329,8 @@ namespace UI.WinUi.Administrador
         private System.Windows.Forms.TabPage tabGestionRoles;
         private System.Windows.Forms.TabPage tabGestionUsuarios;
         private System.Windows.Forms.GroupBox groupBoxRol;
+        private System.Windows.Forms.Button btnEliminarRol;
+        private System.Windows.Forms.Button btnCrearRol;
         private System.Windows.Forms.ComboBox cboRoles;
         private System.Windows.Forms.Label lblRol;
         private System.Windows.Forms.GroupBox groupBoxPatentesRol;

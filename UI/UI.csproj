@@ -33,6 +33,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -75,6 +76,12 @@
     </Compile>
     <Compile Include="WinUi\Administración\FormBitacora.Designer.cs">
       <DependentUpon>FormBitacora.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinUi\Administración\frmBackup.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="WinUi\Administración\frmBackup.Designer.cs">
+      <DependentUpon>frmBackup.cs</DependentUpon>
     </Compile>
     <Compile Include="WinUi\Negocio\gestionClientes.cs">
       <SubType>Form</SubType>
@@ -185,6 +192,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="WinUi\Administración\FormBitacora.resx">
       <DependentUpon>FormBitacora.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="WinUi\Administración\frmBackup.resx">
+      <DependentUpon>frmBackup.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="WinUi\Negocio\gestionMascotas.resx">
       <DependentUpon>gestionMascotas.cs</DependentUpon>

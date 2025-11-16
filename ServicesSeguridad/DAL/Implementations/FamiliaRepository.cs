@@ -96,6 +96,36 @@ namespace ServicesSecurity.DAL.Implementations
             }
         }
 
+        /// <summary>
+        /// Elimina una familia con soporte para Unit of Work
+        /// </summary>
+        public void Delete(Guid id, IUnitOfWork unitOfWork)
+        {
+            try
+            {
+                if (unitOfWork != null && unitOfWork.Transaction != null)
+                {
+                    SqlHelper.ExecuteNonQuery(
+                        unitOfWork.Connection,
+                        unitOfWork.Transaction,
+                        DeleteStatement,
+                        System.Data.CommandType.Text,
+                        new SqlParameter[] {
+                            new SqlParameter("@IdFamilia", id)
+                        });
+                }
+                else
+                {
+                    Delete(id);
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.Handle(this);
+                throw;
+            }
+        }
+
         public IEnumerable<Familia> SelectAll(string sFilter)
         {
             // Por ahora retorna todos, se puede implementar filtros después

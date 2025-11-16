@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1">
+  <xmi:Documentation exporter="VetCare System" exporterVersion="1.0"/>
+
+  <!-- Model Package -->
+  <uml:Model xmi:type="uml:Model" xmi:id="MODEL_001" name="Sistema VetCare">
+
+    <!-- Package: Autenticación -->
+    <packagedElement xmi:type="uml:Package" xmi:id="PKG_Autenticacion" name="Autenticación">
+
+      <!-- ========== ACTORES ========== -->
+
+      <!-- Actor: Usuario del Sistema -->
+      <packagedElement xmi:type="uml:Actor" xmi:id="ACTOR_Usuario" name="Usuario del Sistema">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_Usuario" annotatedElement="ACTOR_Usuario">
+          <body>Usuario autenticado del sistema (Administrador, Veterinario, Recepcionista). Responsable de iniciar sesión con sus credenciales.</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- Actor: Sistema de Seguridad -->
+      <packagedElement xmi:type="uml:Actor" xmi:id="ACTOR_Sistema" name="Sistema de Seguridad">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_Sistema" annotatedElement="ACTOR_Sistema">
+          <body>Procesos automáticos de seguridad: validación de credenciales, verificación DVH, registro en bitácora.</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- ========== CASOS DE USO ========== -->
+
+      <!-- Caso de Uso Principal: Iniciar Sesión -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_IniciarSesion" name="CU-A001: Iniciar Sesión">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_IniciarSesion" annotatedElement="UC_IniciarSesion">
+          <body>Permite a un usuario autenticarse en el sistema mediante nombre de usuario y contraseña. El sistema valida las credenciales, verifica la integridad de los datos del usuario (DVH), carga sus permisos de forma recursiva utilizando el patrón Composite, registra el evento en la bitácora y sincroniza el veterinario si corresponde.
+
+PRECONDICIONES:
+- El usuario debe estar registrado en la base de datos SecurityVet
+- El usuario debe tener estado activo (no bloqueado)
+- Conexión a bases de datos SecurityVet y VetCareDB disponible
+
+POSTCONDICIONES (Éxito):
+- Usuario autenticado con sesión activa
+- Permisos cargados en memoria (patrón Composite)
+- Login registrado en tabla Bitacora (acción: Login, criticidad: Info)
+- Idioma configurado según preferencia
+- Si rol Veterinario: registro sincronizado en VetCareDB
+- Formulario Menu principal mostrado
+
+POSTCONDICIONES (Fallo):
+- Login fallido registrado en Bitácora (acción: LoginFallido, criticidad: Advertencia)
+- Usuario permanece en pantalla de login
+- Mensaje de error mostrado</body>
+        </ownedComment>
+
+        <!-- Extension Points -->
+        <extensionPoint xmi:type="uml:ExtensionPoint" xmi:id="EP_ValidacionFallida" name="validación fallida">
+          <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_EP_Validacion">
+            <body>Punto de extensión cuando la validación de campos falla (campos vacíos o formato inválido)</body>
+          </ownedComment>
+        </extensionPoint>
+
+        <extensionPoint xmi:type="uml:ExtensionPoint" xmi:id="EP_AutenticacionFallida" name="autenticación fallida">
+          <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_EP_Autenticacion">
+            <body>Punto de extensión cuando las credenciales son inválidas (usuario no encontrado o contraseña incorrecta)</body>
+          </ownedComment>
+        </extensionPoint>
+
+        <extensionPoint xmi:type="uml:ExtensionPoint" xmi:id="EP_IntegridadComprometida" name="integridad comprometida">
+          <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_EP_Integridad">
+            <body>Punto de extensión cuando se detecta violación de DVH (datos comprometidos)</body>
+          </ownedComment>
+        </extensionPoint>
+      </packagedElement>
+
+      <!-- ========== CASOS DE USO INCLUIDOS (<<include>>) ========== -->
+
+      <!-- UC Include: Validar Credenciales -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_ValidarCredenciales" name="Validar Credenciales">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_ValidarCred">
+          <body>Valida que los campos de usuario y contraseña no estén vacíos y cumplan con el formato requerido. Ejecutado por ValidationBLL.ValidarCredencialesLogin(). Lanza ValidacionException si falla.</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- UC Include: Hashear Contraseña -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_HashearPassword" name="Hashear Contraseña">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_Hash">
+          <body>Genera hash SHA256 de la contraseña ingresada usando Encoding.Unicode (UTF-16) para compatibilidad con NVARCHAR de SQL Server. Ejecutado por CryptographyService.HashPassword().</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- UC Include: Cargar Permisos (Composite) -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_CargarPermisos" name="Cargar Permisos (Composite)">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_Permisos">
+          <body>Carga recursivamente todos los permisos del usuario (Familias y Patentes) usando patrón Composite. Ejecutado por LoginService.CargarPermisosUsuario() y LoginService.CargarHijosDeFamilia().
+
+Proceso:
+1. Carga Familias directas del usuario (UsuarioFamilia)
+2. Para cada Familia, carga recursivamente familias hijas (FamiliaFamilia)
+3. Carga Patentes de cada Familia (FamiliaPatente)
+4. Carga Patentes directas del usuario (UsuarioPatente)
+
+Stored Procedures:
+- Familia_Familia_SelectParticular (recursivo)
+- Múltiples consultas a repositorios</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- UC Include: Registrar Login en Bitácora -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_RegistrarLogin" name="Registrar Login en Bitácora">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_RegLogin">
+          <body>Registra el evento de login exitoso en la tabla Bitacora de SecurityVet. Ejecutado por Bitacora.Current.RegistrarLogin().
+
+Datos registrados:
+- IdUsuario: GUID del usuario
+- NombreUsuario: string
+- Módulo: "Sistema"
+- Acción: "Login"
+- Descripción: "Usuario '[nombre]' inició sesión exitosamente"
+- Criticidad: "Info"
+- FechaHora: DateTime.Now
+- IP: opcional
+
+Stored Procedure: Bitacora_Insert</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- UC Include: Sincronizar Veterinario -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_SincronizarVeterinario" name="Sincronizar Veterinario">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_Sync">
+          <body>Si el usuario tiene rol "Veterinario", verifica que exista registro en tabla Veterinario de VetCareDB. Si no existe, lo crea automáticamente. Ejecutado por Login.SincronizarVeterinarioSiCorresponde().
+
+Proceso:
+1. Verifica rol del usuario con ObtenerNombreRol()
+2. Si rol == "Veterinario":
+   - Verifica existencia: VeterinarioBLL.Current.EsVeterinario(IdUsuario)
+   - Si no existe: VeterinarioBLL.Current.CrearDesdeUsuario(IdUsuario, Nombre)
+
+Stored Procedure: Veterinario_Insert (VetCareDB)
+
+NOTA: Errores en este proceso no interrumpen el login, solo se registran en LoggerService.</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- UC Include: Configurar Idioma -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_ConfigurarIdioma" name="Configurar Idioma">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_Idioma">
+          <body>Configura el idioma de la interfaz según la preferencia del usuario o idioma seleccionado en la pantalla de login. Ejecutado por Login.RedirigirPorRol().
+
+Proceso:
+1. Determina idioma: idiomaSeleccionadoEnLogin ?? usuario.IdiomaPreferido ?? "es-AR"
+2. Aplica idioma: LanguageManager.CambiarIdioma(idioma)
+   - Carga archivo de recursos (idioma.es-AR o idioma.en-GB)
+   - Notifica a observers (patrón Observer)
+3. Si idioma difiere del preferido almacenado:
+   - Actualiza en BD: UsuarioBLL.CambiarIdiomaPreferido()
+   - SP: Usuario_UpdateIdioma
+
+Idiomas soportados: es-AR (Español), en-GB (English)</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- ========== CASOS DE USO EXTENDIDOS (<<extend>>) ========== -->
+
+      <!-- UC Extend: Registrar Login Fallido -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_RegistrarLoginFallido" name="Registrar Login Fallido">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_LoginFallido">
+          <body>Registra intento de login fallido en la bitácora cuando las credenciales son inválidas. Ejecutado por Bitacora.Current.RegistrarLoginFallido().
+
+Causas:
+- Usuario no encontrado
+- Contraseña incorrecta
+
+Datos registrados:
+- IdUsuario: NULL (usuario no autenticado)
+- NombreUsuario: nombre ingresado
+- Módulo: "Sistema"
+- Acción: "LoginFallido"
+- Descripción: "Intento de login fallido para usuario '[nombre]': [motivo]"
+- Criticidad: "Advertencia"
+
+Stored Procedure: Bitacora_Insert
+
+Excepciones lanzadas:
+- UsuarioNoEncontradoException
+- ContraseñaInvalidaException</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- UC Extend: Registrar Violación DVH -->
+      <packagedElement xmi:type="uml:UseCase" xmi:id="UC_RegistrarViolacionDVH" name="Registrar Violación DVH">
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_UC_DVH">
+          <body>Registra violación de integridad de datos (DVH inválido) cuando se detecta que los datos del usuario han sido comprometidos. Ejecutado por Bitacora.Current.RegistrarViolacionDVH().
+
+Causa:
+- El DVH calculado no coincide con el DVH almacenado
+- Indica modificación manual en la base de datos
+
+Datos registrados:
+- Módulo: "Seguridad"
+- Acción: "ViolacionDVH"
+- Descripción: "Intento de login con usuario comprometido: [nombre] - Detalle: [mensaje]"
+- Criticidad: "Critico"
+
+También registra en archivos de log: LogCritical()
+
+Excepción lanzada: IntegridadException
+
+ACCIÓN REQUERIDA: Administrador debe ejecutar script 04_RecalcularDVH.sql</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- ========== RELACIONES <<include>> ========== -->
+
+      <packagedElement xmi:type="uml:Include" xmi:id="INCLUDE_ValidarCred" name="">
+        <includingCase xmi:idref="UC_IniciarSesion"/>
+        <addition xmi:idref="UC_ValidarCredenciales"/>
+      </packagedElement>
+
+      <packagedElement xmi:type="uml:Include" xmi:id="INCLUDE_Hash" name="">
+        <includingCase xmi:idref="UC_IniciarSesion"/>
+        <addition xmi:idref="UC_HashearPassword"/>
+      </packagedElement>
+
+      <packagedElement xmi:type="uml:Include" xmi:id="INCLUDE_Permisos" name="">
+        <includingCase xmi:idref="UC_IniciarSesion"/>
+        <addition xmi:idref="UC_CargarPermisos"/>
+      </packagedElement>
+
+      <packagedElement xmi:type="uml:Include" xmi:id="INCLUDE_RegLogin" name="">
+        <includingCase xmi:idref="UC_IniciarSesion"/>
+        <addition xmi:idref="UC_RegistrarLogin"/>
+      </packagedElement>
+
+      <packagedElement xmi:type="uml:Include" xmi:id="INCLUDE_Sync" name="">
+        <includingCase xmi:idref="UC_IniciarSesion"/>
+        <addition xmi:idref="UC_SincronizarVeterinario"/>
+      </packagedElement>
+
+      <packagedElement xmi:type="uml:Include" xmi:id="INCLUDE_Idioma" name="">
+        <includingCase xmi:idref="UC_IniciarSesion"/>
+        <addition xmi:idref="UC_ConfigurarIdioma"/>
+      </packagedElement>
+
+      <!-- ========== RELACIONES <<extend>> ========== -->
+
+      <packagedElement xmi:type="uml:Extend" xmi:id="EXTEND_LoginFallido" name="">
+        <extendedCase xmi:idref="UC_IniciarSesion"/>
+        <extension xmi:idref="UC_RegistrarLoginFallido"/>
+        <extensionLocation xmi:idref="EP_AutenticacionFallida"/>
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_EXTEND_LoginFallido">
+          <body>Se activa cuando usuario no existe o contraseña es incorrecta</body>
+        </ownedComment>
+      </packagedElement>
+
+      <packagedElement xmi:type="uml:Extend" xmi:id="EXTEND_DVH" name="">
+        <extendedCase xmi:idref="UC_IniciarSesion"/>
+        <extension xmi:idref="UC_RegistrarViolacionDVH"/>
+        <extensionLocation xmi:idref="EP_IntegridadComprometida"/>
+        <ownedComment xmi:type="uml:Comment" xmi:id="COMMENT_EXTEND_DVH">
+          <body>Se activa cuando se detecta violación de integridad (DVH inválido)</body>
+        </ownedComment>
+      </packagedElement>
+
+      <!-- ========== ASOCIACIONES ACTOR-CASO DE USO ========== -->
+
+      <!-- Usuario del Sistema -> Iniciar Sesión -->
+      <packagedElement xmi:type="uml:Association" xmi:id="ASSOC_Usuario_Login" name="">
+        <memberEnd xmi:idref="END_Usuario_Login_1"/>
+        <memberEnd xmi:idref="END_Usuario_Login_2"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Usuario_Login_1" name="" type="ACTOR_Usuario" association="ASSOC_Usuario_Login"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Usuario_Login_2" name="" type="UC_IniciarSesion" association="ASSOC_Usuario_Login"/>
+      </packagedElement>
+
+      <!-- Sistema de Seguridad -> Validar Credenciales -->
+      <packagedElement xmi:type="uml:Association" xmi:id="ASSOC_Sistema_Validar" name="">
+        <memberEnd xmi:idref="END_Sistema_Validar_1"/>
+        <memberEnd xmi:idref="END_Sistema_Validar_2"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_Validar_1" name="" type="ACTOR_Sistema" association="ASSOC_Sistema_Validar"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_Validar_2" name="" type="UC_ValidarCredenciales" association="ASSOC_Sistema_Validar"/>
+      </packagedElement>
+
+      <!-- Sistema de Seguridad -> Hashear Contraseña -->
+      <packagedElement xmi:type="uml:Association" xmi:id="ASSOC_Sistema_Hash" name="">
+        <memberEnd xmi:idref="END_Sistema_Hash_1"/>
+        <memberEnd xmi:idref="END_Sistema_Hash_2"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_Hash_1" name="" type="ACTOR_Sistema" association="ASSOC_Sistema_Hash"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_Hash_2" name="" type="UC_HashearPassword" association="ASSOC_Sistema_Hash"/>
+      </packagedElement>
+
+      <!-- Sistema de Seguridad -> Cargar Permisos -->
+      <packagedElement xmi:type="uml:Association" xmi:id="ASSOC_Sistema_Permisos" name="">
+        <memberEnd xmi:idref="END_Sistema_Permisos_1"/>
+        <memberEnd xmi:idref="END_Sistema_Permisos_2"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_Permisos_1" name="" type="ACTOR_Sistema" association="ASSOC_Sistema_Permisos"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_Permisos_2" name="" type="UC_CargarPermisos" association="ASSOC_Sistema_Permisos"/>
+      </packagedElement>
+
+      <!-- Sistema de Seguridad -> Registrar Login en Bitácora -->
+      <packagedElement xmi:type="uml:Association" xmi:id="ASSOC_Sistema_RegLogin" name="">
+        <memberEnd xmi:idref="END_Sistema_RegLogin_1"/>
+        <memberEnd xmi:idref="END_Sistema_RegLogin_2"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_RegLogin_1" name="" type="ACTOR_Sistema" association="ASSOC_Sistema_RegLogin"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_RegLogin_2" name="" type="UC_RegistrarLogin" association="ASSOC_Sistema_RegLogin"/>
+      </packagedElement>
+
+      <!-- Sistema de Seguridad -> Registrar Login Fallido -->
+      <packagedElement xmi:type="uml:Association" xmi:id="ASSOC_Sistema_LoginFallido" name="">
+        <memberEnd xmi:idref="END_Sistema_LoginFallido_1"/>
+        <memberEnd xmi:idref="END_Sistema_LoginFallido_2"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_LoginFallido_1" name="" type="ACTOR_Sistema" association="ASSOC_Sistema_LoginFallido"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_LoginFallido_2" name="" type="UC_RegistrarLoginFallido" association="ASSOC_Sistema_LoginFallido"/>
+      </packagedElement>
+
+      <!-- Sistema de Seguridad -> Registrar Violación DVH -->
+      <packagedElement xmi:type="uml:Association" xmi:id="ASSOC_Sistema_DVH" name="">
+        <memberEnd xmi:idref="END_Sistema_DVH_1"/>
+        <memberEnd xmi:idref="END_Sistema_DVH_2"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_DVH_1" name="" type="ACTOR_Sistema" association="ASSOC_Sistema_DVH"/>
+        <ownedEnd xmi:type="uml:Property" xmi:id="END_Sistema_DVH_2" name="" type="UC_RegistrarViolacionDVH" association="ASSOC_Sistema_DVH"/>
+      </packagedElement>
+
+    </packagedElement>
+
+  </uml:Model>
+</xmi:XMI>

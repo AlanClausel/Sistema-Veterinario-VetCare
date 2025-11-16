@@ -323,6 +323,10 @@ namespace UI.WinUi.Administrador
                 case "FormBitacora":
                     return new FormBitacora(_usuarioLogueado);
 
+                // Backup/Restore del Sistema (solo Administradores)
+                case "frmBackup":
+                    return new frmBackup(_usuarioLogueado);
+
                 // Otros formularios pueden agregarse aquí según sea necesario
                 // case "frmConfiguracion":
                 //     return new frmConfiguracion(_usuarioLogueado);
