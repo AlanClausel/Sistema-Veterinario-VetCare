@@ -1,0 +1,352 @@
+@startuml CU-N007_DiagramaClases
+title CU-N007: Consultar Historial Clínico - Diagrama de Clases (Resumido)
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA PRESENTACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "UI - Presentación" {
+    class FormHistorialClinico {
+        - _clienteSeleccionado : Cliente
+        + FormHistorialClinico()
+        + FormHistorialClinico_Load()
+        + btnBuscar_Click()
+        + btnVerHistorial_Click()
+        + txtDNI_KeyPress()
+        - BuscarCliente(dni)
+        - MostrarCliente(cliente)
+        - CargarMascotas(idCliente)
+        - CalcularUltimaVisita(idMascota) : string
+        - LimpiarCliente()
+    }
+
+    class FormHistorialDetallado {
+        - _mascota : Mascota
+        - _cliente : Cliente
+        + FormHistorialDetallado(mascota, cliente)
+        + FormHistorialDetallado_Load()
+        + btnVerDetalle_Click()
+        + dgvConsultas_CellDoubleClick()
+        - MostrarDatosMascota()
+        - CargarHistorialConsultas()
+    }
+
+    class FormDetalleConsulta {
+        - _consulta : ConsultaMedica
+        + FormDetalleConsulta(consulta)
+        + FormDetalleConsulta_Load()
+        + btnImprimir_Click()
+        - MostrarDetalleConsulta()
+        - FormatearTextoDetalle() : string
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA LÓGICA DE NEGOCIO (BLL)
+' ═══════════════════════════════════════════════════════════════
+
+package "BLL - Lógica de Negocio" {
+    class ClienteBLL <<Singleton>> {
+        {static} + Current : ClienteBLL
+        + BuscarClientePorDNI(dni) : Cliente
+        + ObtenerClientePorId(idCliente) : Cliente
+    }
+
+    class MascotaBLL <<Singleton>> {
+        {static} + Current : MascotaBLL
+        + ListarMascotasPorCliente(idCliente) : List<Mascota>
+        + ObtenerMascotaPorId(idMascota) : Mascota
+    }
+
+    class ConsultaMedicaBLL <<Singleton>> {
+        {static} + Current : ConsultaMedicaBLL
+        + ObtenerHistorialMascota(idMascota) : List<ConsultaMedica>
+        + ObtenerConsultaPorId(idConsulta) : ConsultaMedica
+        + ObtenerMedicamentosDeConsulta(idConsulta) : List<MedicamentoRecetado>
+    }
+
+    class VeterinarioBLL <<Singleton>> {
+        {static} + Current : VeterinarioBLL
+        + ObtenerVeterinarioPorId(idVet) : Veterinario
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA ACCESO A DATOS (REPOSITORY)
+' ═══════════════════════════════════════════════════════════════
+
+package "DAL - Acceso a Datos" {
+    interface IClienteRepository {
+        + BuscarPorDNI(dni) : Cliente
+    }
+
+    class ClienteRepository <<Singleton>> {
+        {static} + Current : ClienteRepository
+        + BuscarPorDNI(dni) : Cliente
+    }
+
+    interface IMascotaRepository {
+        + ObtenerPorCliente(idCliente) : List<Mascota>
+    }
+
+    class MascotaRepository <<Singleton>> {
+        {static} + Current : MascotaRepository
+        + ObtenerPorCliente(idCliente) : List<Mascota>
+    }
+
+    interface IConsultaMedicaRepository {
+        + ObtenerHistorialMascota(idMascota) : List<ConsultaMedica>
+        + ObtenerMedicamentosDeConsulta(idConsulta) : List<MedicamentoRecetado>
+    }
+
+    class ConsultaMedicaRepository <<Singleton>> {
+        {static} + Current : ConsultaMedicaRepository
+        + ObtenerHistorialMascota(idMascota) : List<ConsultaMedica>
+        + ObtenerMedicamentosDeConsulta(idConsulta) : List<MedicamentoRecetado>
+    }
+
+    class ConsultaMedicaAdapter {
+        {static} + AdaptarDesdeDataRow(row) : ConsultaMedica
+        {static} + AdaptarListaDesdeDataTable(dt) : List<ConsultaMedica>
+    }
+
+    class MedicamentoRecetadoAdapter {
+        {static} + AdaptarDesdeDataRow(row) : MedicamentoRecetado
+        {static} + AdaptarListaDesdeDataTable(dt) : List<MedicamentoRecetado>
+    }
+
+    class SqlHelper {
+        {static} + ExecuteDataTable(sp, params)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA DOMINIO (ENTIDADES)
+' ═══════════════════════════════════════════════════════════════
+
+package "Domain - Entidades" {
+    class Cliente {
+        + IdCliente : Guid
+        + Nombre : string
+        + Apellido : string
+        + DNI : string
+        + Telefono : string
+        + Email : string
+        + NombreCompleto : string <<get>>
+    }
+
+    class Mascota {
+        + IdMascota : Guid
+        + IdCliente : Guid
+        + Nombre : string
+        + Especie : string
+        + Raza : string
+        + FechaNacimiento : DateTime
+        + Peso : decimal
+        + EdadEnAnios : int <<get>>
+        + EdadDescripcion : string <<get>>
+    }
+
+    class ConsultaMedica {
+        + IdConsulta : Guid
+        + IdCita : Guid
+        + IdVeterinario : Guid
+        + Sintomas : string
+        + Diagnostico : string
+        + Tratamiento : string
+        + Observaciones : string
+        + FechaConsulta : DateTime
+        + Medicamentos : List<MedicamentoRecetado>
+    }
+
+    class MedicamentoRecetado {
+        + IdConsulta : Guid
+        + IdMedicamento : Guid
+        + Cantidad : int
+        + Indicaciones : string
+        + NombreMedicamento : string
+        + Presentacion : string
+        + NombreCompleto : string <<get>>
+    }
+
+    class Veterinario {
+        + IdVeterinario : Guid
+        + Nombre : string
+        + Matricula : string
+        + Especialidad : string
+    }
+
+    class Cita {
+        + IdCita : Guid
+        + IdMascota : Guid
+        + FechaCita : DateTime
+        + Estado : EstadoCita
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  STORED PROCEDURES (BASE DE DATOS)
+' ═══════════════════════════════════════════════════════════════
+
+package "Database - Stored Procedures" {
+    class "SP: Cliente_SelectByDNI" as SPClienteDNI <<Stored Procedure>> {
+        + @DNI : string
+        + Retorna: cliente por DNI único
+        + WHERE DNI = @DNI AND Activo = 1
+    }
+
+    class "SP: Mascota_SelectByCliente" as SPMascotaCliente <<Stored Procedure>> {
+        + @IdCliente : Guid
+        + Retorna: mascotas activas del cliente
+        + WHERE IdCliente = @IdCliente AND Activo = 1
+    }
+
+    class "SP: ConsultaMedica_SelectByMascota" as SPConsultaMascota <<Stored Procedure>> {
+        + @IdMascota : Guid
+        + Retorna: TODAS las consultas de la mascota
+        + JOIN con Cita para obtener fecha
+        + ORDER BY FechaConsulta DESC
+    }
+
+    class "SP: ConsultaMedicamento_SelectByConsulta" as SPMedicamentos <<Stored Procedure>> {
+        + @IdConsulta : Guid
+        + Retorna: medicamentos recetados en consulta
+        + JOIN con Medicamento para nombre y presentación
+    }
+
+    class "SP: Veterinario_SelectOne" as SPVeterinario <<Stored Procedure>> {
+        + @IdVeterinario : Guid
+        + Retorna: veterinario por ID
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+' UI - Navegación drill-down
+FormHistorialClinico ..> FormHistorialDetallado : abre (ShowDialog)
+FormHistorialDetallado ..> FormDetalleConsulta : abre (ShowDialog)
+
+' UI → BLL
+FormHistorialClinico ..> ClienteBLL : usa
+FormHistorialClinico ..> MascotaBLL : usa
+FormHistorialClinico ..> ConsultaMedicaBLL : usa
+
+FormHistorialDetallado ..> ConsultaMedicaBLL : usa
+FormHistorialDetallado ..> VeterinarioBLL : usa
+
+FormDetalleConsulta ..> VeterinarioBLL : usa
+
+' BLL → Repository
+ClienteBLL ..> IClienteRepository : usa
+ClienteBLL ..> ClienteRepository : Current
+
+MascotaBLL ..> IMascotaRepository : usa
+MascotaBLL ..> MascotaRepository : Current
+
+ConsultaMedicaBLL ..> IConsultaMedicaRepository : usa
+ConsultaMedicaBLL ..> ConsultaMedicaRepository : Current
+
+' Repository → Adapter y SqlHelper
+ClienteRepository ..|> IClienteRepository : implementa
+MascotaRepository ..|> IMascotaRepository : implementa
+ConsultaMedicaRepository ..|> IConsultaMedicaRepository : implementa
+
+ConsultaMedicaRepository ..> ConsultaMedicaAdapter : usa
+ConsultaMedicaRepository ..> MedicamentoRecetadoAdapter : usa
+ConsultaMedicaRepository ..> SqlHelper : usa
+
+' Repository → Stored Procedures
+ClienteRepository ..> SPClienteDNI : ejecuta
+MascotaRepository ..> SPMascotaCliente : ejecuta
+ConsultaMedicaRepository ..> SPConsultaMascota : ejecuta
+ConsultaMedicaRepository ..> SPMedicamentos : ejecuta
+
+' BLL → Entidades
+ClienteBLL ..> Cliente : gestiona
+MascotaBLL ..> Mascota : gestiona
+ConsultaMedicaBLL ..> ConsultaMedica : gestiona
+VeterinarioBLL ..> Veterinario : gestiona
+
+' Dominio - Relaciones
+ConsultaMedica "1" o-- "0..*" MedicamentoRecetado : contiene
+ConsultaMedica "N" --> "1" Cita : asociada a
+ConsultaMedica "N" --> "1" Veterinario : realizada por
+Cita "N" --> "1" Mascota : para
+Mascota "N" --> "1" Cliente : pertenece a
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS
+' ═══════════════════════════════════════════════════════════════
+
+note top of FormHistorialClinico
+    **CU-N007: Búsqueda por DNI**
+    - Busca cliente por DNI
+    - Carga mascotas del cliente
+    - Calcula última visita para cada mascota
+    - Abre FormHistorialDetallado (drill-down)
+
+    **Cálculo de última visita:**
+    Para cada mascota:
+    1. Obtiene TODAS las consultas
+    2. OrderByDescending(FechaConsulta)
+    3. FirstOrDefault()
+    4. Muestra fecha o "Sin visitas"
+end note
+
+note top of FormHistorialDetallado
+    **CU-N008: Historial Detallado**
+    - Recibe mascota y cliente
+    - Muestra datos de mascota en header
+    - Lista TODAS las consultas
+    - Hidrata medicamentos para cada consulta
+    - Abre FormDetalleConsulta (drill-down)
+end note
+
+note top of FormDetalleConsulta
+    **CU-N009: Detalle de Consulta**
+    - Recibe consulta (ya hidratada)
+    - Modo SOLO LECTURA
+    - Formato StringBuilder multilínea:
+      * Fecha, hora, veterinario
+      * Síntomas, diagnóstico, tratamiento
+      * Medicamentos con cantidad e indicaciones
+      * Observaciones
+    - Botón Imprimir (placeholder)
+end note
+
+note right of ConsultaMedica
+    **Hidratación de Medicamentos:**
+    Al cargar consultas, BLL automáticamente
+    carga los medicamentos recetados:
+
+    consulta.Medicamentos =
+      ObtenerMedicamentosDeConsulta(idConsulta)
+
+    Esto evita lazy loading y N+1 queries.
+end note
+
+note left of SPConsultaMascota
+    **Retorna consultas completas:**
+    SELECT cm.*, c.FechaCita
+    FROM ConsultaMedica cm
+    INNER JOIN Cita c
+      ON cm.IdCita = c.IdCita
+    INNER JOIN Mascota m
+      ON c.IdMascota = m.IdMascota
+    WHERE m.IdMascota = @IdMascota
+      AND cm.Activo = 1
+    ORDER BY cm.FechaConsulta DESC
+end note
+
+note bottom of MedicamentoRecetado
+    **Propiedad calculada:**
+    NombreCompleto =
+      "{NombreMedicamento} ({Presentacion})"
+
+    Ejemplo:
+    "Amoxicilina 500mg (cápsulas)"
+end note
+
+@enduml

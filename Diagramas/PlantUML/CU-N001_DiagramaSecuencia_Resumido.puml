@@ -1,0 +1,299 @@
+@startuml CU-N001_DiagramaSecuencia_Resumido
+title CU-N001: Gestionar Clientes - Diagrama de Secuencia (Resumido)
+
+actor "Usuario\n(Admin/Recep)" as User
+participant "FormGestionClientes" as Form
+participant "ClienteBLL" as BLL
+participant "ClienteRepository" as Repo
+participant "ClienteAdapter" as Adapter
+participant "Bitacora" as Bitacora
+participant "LoginService" as Login
+database "VetCareDB" as DB
+
+== 1. Listar Clientes (Carga Inicial) ==
+
+User -> Form: Accede a "Gestión de Clientes"
+activate Form
+
+Form -> Form: FormGestionClientes_Load()
+Form -> Form: CargarClientes()
+activate Form #LightGray
+
+Form -> BLL: ListarClientesActivos()
+activate BLL
+
+BLL -> Repo: ObtenerTodos()
+activate Repo
+
+Repo -> DB: EXEC Cliente_SelectAll
+activate DB
+note over DB
+    SELECT * FROM Cliente
+    WHERE Activo = 1
+    ORDER BY Apellido, Nombre
+end note
+DB --> Repo: DataTable (clientes activos)
+deactivate DB
+
+Repo -> Adapter: AdaptarListaDesdeDataTable(dataTable)
+activate Adapter
+Adapter --> Repo: List<Cliente>
+deactivate Adapter
+
+Repo --> BLL: List<Cliente>
+deactivate Repo
+
+BLL --> Form: List<Cliente>
+deactivate BLL
+
+Form -> Form: dgvClientes.DataSource = clientes
+Form -> Form: LimpiarCampos()
+Form -> Form: _modoEdicion = false
+
+deactivate Form
+
+Form --> User: Lista de clientes cargada
+deactivate Form
+
+== 2. Registrar Nuevo Cliente ==
+
+User -> Form: Clic en "Nuevo"
+activate Form
+
+Form -> Form: btnNuevo_Click()
+Form -> Form: LimpiarCampos()
+Form -> Form: _modoEdicion = false
+Form -> Form: Habilita campos de edición
+
+Form --> User: Campos habilitados para ingreso
+deactivate Form
+
+User -> Form: Ingresa datos:\n- Nombre: "Juan"\n- Apellido: "Pérez"\n- DNI: "12345678"\n- Teléfono: "1145678900"\n- Email: "juan@mail.com"
+
+User -> Form: Clic en "Guardar"
+activate Form
+
+Form -> Form: btnGuardar_Click()
+
+Form -> Form: ValidarCampos()
+activate Form #LightCyan
+note right
+    Validaciones UI:
+    - Campos requeridos NO vacíos
+    - DNI numérico 7-8 dígitos
+    - Teléfono formato válido
+    - Email formato válido
+end note
+Form --> Form: Validación OK
+deactivate Form
+
+Form -> Form: Crea entidad Cliente:\nIdCliente = Guid.NewGuid()\nNombre = "Juan"\nApellido = "Pérez"\nDNI = "12345678"\n...
+
+Form -> BLL: RegistrarCliente(cliente)
+activate BLL
+
+BLL -> BLL: cliente.Validar()
+note right
+    Validaciones entidad:
+    - Nombre 2-50 chars
+    - Apellido 2-50 chars
+    - DNI requerido
+end note
+
+BLL -> BLL: ExisteDNI(cliente.DNI)
+activate BLL #LightGoldenRodYellow
+
+BLL -> Repo: ExisteDNI("12345678")
+activate Repo
+
+Repo -> DB: EXEC Cliente_ExisteDNI @DNI='12345678'
+activate DB
+note over DB
+    SELECT COUNT(*)
+    FROM Cliente
+    WHERE DNI = @DNI
+      AND Activo = 1
+end note
+DB --> Repo: 0 (no existe)
+deactivate DB
+
+Repo --> BLL: false
+deactivate Repo
+
+deactivate BLL
+
+alt DNI ya existe
+    BLL --> Form: throw InvalidOperationException\n"El DNI ya está registrado"
+    Form -> Form: Muestra MessageBox error
+    Form --> User: Error: DNI duplicado
+else DNI disponible
+
+    BLL -> Repo: Crear(cliente)
+    activate Repo
+
+    Repo -> DB: EXEC Cliente_Insert\n@IdCliente, @Nombre, @Apellido,\n@DNI, @Telefono, @Email, @Direccion,\n@FechaRegistro
+    activate DB
+    note over DB
+        INSERT INTO Cliente (
+            IdCliente, Nombre, Apellido,
+            DNI, Telefono, Email,
+            Direccion, FechaRegistro, Activo
+        ) VALUES (
+            @IdCliente, @Nombre, @Apellido,
+            @DNI, @Telefono, @Email,
+            @Direccion, GETDATE(), 1
+        )
+    end note
+    DB --> Repo: Filas insertadas: 1
+    deactivate DB
+
+    Repo --> BLL: void
+    deactivate Repo
+
+    BLL -> Login: GetUsuarioLogueado()
+    activate Login
+    Login --> BLL: usuarioLogueado
+    deactivate Login
+
+    BLL -> Bitacora: RegistrarAlta(\nusuarioLogueado.IdUsuario,\nusuarioLogueado.Nombre,\n"Clientes",\n"Cliente",\ncliente.IdCliente.ToString(),\n"Cliente registrado: Juan Pérez - DNI: 12345678")
+    activate Bitacora
+    note right
+        Auditoría en tabla Bitacora:
+        - Módulo: "Clientes"
+        - Acción: "Alta"
+        - Criticidad: Info
+    end note
+    Bitacora --> BLL: void
+    deactivate Bitacora
+
+    BLL --> Form: cliente registrado
+    deactivate BLL
+
+    Form -> Form: Muestra MessageBox:\n"Cliente registrado exitosamente"
+
+    Form -> Form: CargarClientes()
+    note right: Recarga lista
+
+    Form -> Form: LimpiarCampos()
+
+    Form --> User: ✓ Cliente registrado\nLista actualizada
+
+end
+
+deactivate Form
+
+== 3. Modificar Cliente ==
+
+User -> Form: Selecciona cliente en grid
+activate Form
+Form -> Form: dgvClientes_SelectionChanged()
+Form -> Form: _clienteSeleccionado = (Cliente)row.DataBoundItem
+Form -> Form: MostrarClienteEnFormulario(cliente)
+Form --> User: Datos cargados en formulario
+deactivate Form
+
+User -> Form: Modifica datos y clic "Modificar"
+activate Form
+
+Form -> Form: btnModificar_Click()
+Form -> Form: ValidarCampos()
+
+Form -> BLL: ModificarCliente(cliente)
+activate BLL
+
+BLL -> BLL: ExisteDNI(dni, idClienteExcluido)
+note right: Valida DNI único\nexcluyendo el cliente actual
+
+BLL -> Repo: Actualizar(cliente)
+activate Repo
+Repo -> DB: EXEC Cliente_Update\n@IdCliente, @Nombre, ...
+activate DB
+note over DB
+    UPDATE Cliente SET
+      Nombre = @Nombre,
+      Apellido = @Apellido,
+      DNI = @DNI,
+      Telefono = @Telefono,
+      Email = @Email,
+      Direccion = @Direccion
+    WHERE IdCliente = @IdCliente
+end note
+DB --> Repo: Filas actualizadas: 1
+deactivate DB
+Repo --> BLL: void
+deactivate Repo
+
+BLL -> Bitacora: RegistrarModificacion(...)
+activate Bitacora
+Bitacora --> BLL: void
+deactivate Bitacora
+
+BLL --> Form: void
+deactivate BLL
+
+Form -> Form: Muestra mensaje: "Cliente modificado"
+Form -> Form: CargarClientes()
+
+Form --> User: ✓ Cliente actualizado
+
+deactivate Form
+
+== 4. Eliminar Cliente (Soft Delete con Cascada) ==
+
+User -> Form: Selecciona cliente y clic "Eliminar"
+activate Form
+
+Form -> Form: btnEliminar_Click()
+Form -> Form: Muestra confirmación:\n"¿Está seguro de eliminar...?"
+
+User -> Form: Confirma (Sí)
+
+Form -> BLL: EliminarCliente(idCliente)
+activate BLL
+
+BLL -> Repo: Eliminar(idCliente)
+activate Repo
+
+Repo -> DB: EXEC Cliente_Delete @IdCliente
+activate DB
+note over DB #LightYellow
+    **SOFT DELETE CON CASCADA**
+
+    -- Marca cliente como inactivo
+    UPDATE Cliente
+    SET Activo = 0
+    WHERE IdCliente = @IdCliente
+
+    -- Marca mascotas como inactivas
+    UPDATE Mascota
+    SET Activo = 0
+    WHERE IdCliente = @IdCliente
+
+    (NO DELETE físico)
+end note
+DB --> Repo: Filas afectadas
+deactivate DB
+
+Repo --> BLL: void
+deactivate Repo
+
+BLL -> Bitacora: RegistrarBaja(\nusuario, "Clientes", "Cliente",\nidCliente, "Cliente eliminado (soft delete)")
+activate Bitacora
+Bitacora --> BLL: void
+deactivate Bitacora
+
+BLL --> Form: void
+deactivate BLL
+
+Form -> Form: Muestra mensaje: "Cliente eliminado"
+Form -> Form: CargarClientes()
+note right
+    El cliente ya no aparece
+    en la lista (Activo = 0)
+end note
+
+Form --> User: ✓ Cliente eliminado\n(soft delete)\n✓ Mascotas inactivadas
+
+deactivate Form
+
+@enduml

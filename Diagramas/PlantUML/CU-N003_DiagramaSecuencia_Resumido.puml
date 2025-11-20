@@ -1,0 +1,425 @@
+@startuml CU-N003_DiagramaSecuencia_Resumido
+title CU-N003: Gestionar Citas - Diagrama de Secuencia (Resumido)
+
+actor "Usuario\n(Admin/Recep)" as User
+participant "FormGestionCitas" as Form
+participant "CitaBLL" as BLL
+participant "MascotaBLL" as MascBLL
+participant "VeterinarioBLL" as VetBLL
+participant "CitaRepository" as Repo
+participant "CitaAdapter" as Adapter
+participant "Bitacora" as Bitacora
+participant "LoginService" as Login
+database "VetCareDB" as DB
+
+== 1. Listar Citas (Carga Inicial) ==
+
+User -> Form: Accede a "Gestión de Citas"
+activate Form
+
+Form -> Form: FormGestionCitas_Load()
+
+Form -> Form: CargarClientes()
+note right: Carga ComboBox clientes
+
+Form -> Form: CargarVeterinarios()
+note right: Carga ComboBox veterinarios
+
+Form -> Form: CargarCitas()
+activate Form #LightGray
+
+Form -> BLL: ListarCitasActivas()
+activate BLL
+
+BLL -> Repo: ObtenerTodos()
+activate Repo
+
+Repo -> DB: EXEC Cita_SelectAll
+activate DB
+note over DB
+    SELECT c.*,
+           m.Nombre AS MascotaNombre,
+           cl.Nombre AS ClienteNombre,
+           cl.Apellido AS ClienteApellido,
+           cl.DNI AS ClienteDNI,
+           v.Nombre AS VeterinarioNombre
+    FROM Cita c
+    INNER JOIN Mascota m ON c.IdMascota = m.IdMascota
+    INNER JOIN Cliente cl ON m.IdCliente = cl.IdCliente
+    LEFT JOIN Veterinario v ON c.IdVeterinario = v.IdVeterinario
+    WHERE c.Activo = 1
+    ORDER BY c.FechaCita DESC
+end note
+DB --> Repo: DataTable (citas con datos relacionados)
+deactivate DB
+
+Repo -> Adapter: AdaptarListaDesdeDataTable(dataTable)
+activate Adapter
+Adapter --> Repo: List<Cita>
+deactivate Adapter
+
+Repo --> BLL: List<Cita>
+deactivate Repo
+
+BLL --> Form: List<Cita>
+deactivate BLL
+
+Form -> Form: dgvCitas.DataSource = citas
+
+Form -> Form: ColorearFilasSegunEstado()
+activate Form #LightCyan
+note right
+    Código de colores:
+    - Agendada: LightYellow
+    - Confirmada: LightGreen
+    - Completada: LightGray
+    - Cancelada: LightCoral
+    - NoAsistio: LightSalmon
+end note
+deactivate Form
+
+Form -> Form: LimpiarCampos()
+
+deactivate Form
+
+Form --> User: Lista de citas cargada\ncon código de colores
+deactivate Form
+
+== 2. Registrar Nueva Cita (con Validación de Conflicto) ==
+
+User -> Form: Clic en "Nuevo"
+activate Form
+Form -> Form: btnNuevo_Click()
+Form -> Form: LimpiarCampos()
+Form -> Form: _modoEdicion = false
+Form -> Form: dtpFecha.Value = DateTime.Now
+Form -> Form: Habilita campos
+Form --> User: Campos habilitados
+deactivate Form
+
+User -> Form: Selecciona Cliente → carga mascotas
+activate Form
+Form -> Form: cmbCliente_SelectedIndexChanged()
+Form -> MascBLL: ListarMascotasPorCliente(idCliente)
+activate MascBLL
+MascBLL --> Form: List<Mascota>
+deactivate MascBLL
+Form -> Form: cmbMascota.DataSource = mascotas
+Form --> User: Mascotas del cliente cargadas
+deactivate Form
+
+User -> Form: Ingresa datos:\n- Mascota: "Rex"\n- Fecha: 20/01/2025 10:00\n- Tipo: "Vacunación"\n- Motivo: "Vacuna antirrábica"\n- Veterinario: "Dr. Martínez"
+
+User -> Form: Clic en "Guardar"
+activate Form
+
+Form -> Form: btnGuardar_Click()
+
+Form -> Form: ValidarCampos()
+activate Form #LightGoldenRodYellow
+note right
+    Validaciones UI:
+    - Mascota seleccionada
+    - Fecha/hora >= DateTime.Now
+    - TipoConsulta seleccionado
+    - Motivo NO vacío (5-500 chars)
+    - Veterinario seleccionado
+end note
+Form --> Form: Validación OK
+deactivate Form
+
+Form -> Form: Crea entidad Cita:\nIdCita = Guid.NewGuid()\nIdMascota = idMascota\nIdVeterinario = idVeterinario\nFechaCita = 20/01/2025 10:00\nTipoConsulta = "Vacunación"\nMotivo = "Vacuna antirrábica"\nEstado = Agendada
+
+Form -> BLL: RegistrarCita(cita)
+activate BLL
+
+BLL -> BLL: cita.Validar()
+note right
+    Validaciones entidad:
+    - FechaCita no en pasado
+    - Motivo 5-500 chars
+    - TipoConsulta requerido
+end note
+
+BLL -> BLL: ExisteConflictoHorario(cita.FechaCita,\ncita.IdVeterinario, null)
+activate BLL #LightYellow
+
+BLL -> Repo: ExisteConflictoHorario(fechaCita, idVet, null)
+activate Repo
+
+Repo -> DB: EXEC Cita_ExisteConflictoHorario\n@FechaCita, @IdVeterinario, @IdCitaExcluida=NULL
+activate DB
+note over DB
+    SELECT COUNT(*)
+    FROM Cita
+    WHERE IdVeterinario = @IdVeterinario
+      AND FechaCita = @FechaCita
+      AND Estado IN ('Agendada', 'Confirmada')
+      AND Activo = 1
+      AND (@IdCitaExcluida IS NULL
+           OR IdCita <> @IdCitaExcluida)
+end note
+DB --> Repo: 0 (no hay conflicto)
+deactivate DB
+
+Repo --> BLL: false
+deactivate Repo
+
+deactivate BLL
+
+alt Conflicto de horario (veterinario ocupado)
+    BLL --> Form: throw InvalidOperationException\n"El veterinario ya tiene una cita\na las 10:00 del 20/01/2025"
+    Form -> Form: Muestra MessageBox error
+    Form --> User: ✗ Error: Conflicto de horario
+else Sin conflicto
+
+    BLL -> Repo: Crear(cita)
+    activate Repo
+
+    Repo -> DB: EXEC Cita_Insert\n@IdCita, @IdMascota, @IdVeterinario,\n@FechaCita, @TipoConsulta, @Motivo,\n@Estado='Agendada'
+    activate DB
+    note over DB
+        INSERT INTO Cita (
+            IdCita, IdMascota, IdVeterinario,
+            FechaCita, TipoConsulta, Motivo,
+            Estado, Activo
+        ) VALUES (
+            @IdCita, @IdMascota, @IdVeterinario,
+            @FechaCita, @TipoConsulta, @Motivo,
+            'Agendada', 1
+        )
+    end note
+    DB --> Repo: Filas insertadas: 1
+    deactivate DB
+
+    Repo --> BLL: void
+    deactivate Repo
+
+    BLL -> Login: GetUsuarioLogueado()
+    activate Login
+    Login --> BLL: usuarioLogueado
+    deactivate Login
+
+    BLL -> Bitacora: RegistrarAlta(\nusuarioLogueado.IdUsuario,\n"Citas", "Cita", cita.IdCita.ToString(),\n"Cita agendada: Rex - 20/01/2025 10:00\nVet: Dr. Martínez")
+    activate Bitacora
+    Bitacora --> BLL: void
+    deactivate Bitacora
+
+    BLL --> Form: cita registrada
+    deactivate BLL
+
+    Form -> Form: Muestra MessageBox:\n"Cita registrada exitosamente"
+    Form -> Form: CargarCitas()
+    Form -> Form: LimpiarCampos()
+
+    Form --> User: ✓ Cita registrada\nLista actualizada
+
+end
+
+deactivate Form
+
+== 3. Modificar Cita ==
+
+User -> Form: Selecciona cita en grid
+activate Form
+Form -> Form: dgvCitas_SelectionChanged()
+Form -> Form: _citaSeleccionada = (Cita)row.DataBoundItem
+Form -> Form: MostrarCitaEnFormulario(cita)
+Form --> User: Datos cargados en formulario
+deactivate Form
+
+User -> Form: Modifica fecha: 21/01/2025 11:00\nClic "Modificar"
+activate Form
+
+Form -> Form: btnModificar_Click()
+Form -> Form: ValidarCampos()
+
+Form -> BLL: ModificarCita(cita)
+activate BLL
+
+BLL -> BLL: ExisteConflictoHorario(\nnuevaFecha, idVet, idCitaActual)
+note right: Excluye cita actual
+
+BLL -> Repo: Actualizar(cita)
+activate Repo
+Repo -> DB: EXEC Cita_Update\n@IdCita, @FechaCita, @TipoConsulta, @Motivo
+activate DB
+note over DB
+    UPDATE Cita SET
+      FechaCita = @FechaCita,
+      TipoConsulta = @TipoConsulta,
+      Motivo = @Motivo
+    WHERE IdCita = @IdCita
+
+    (NO cambia IdMascota ni Estado)
+end note
+DB --> Repo: Filas actualizadas: 1
+deactivate DB
+Repo --> BLL: void
+deactivate Repo
+
+BLL -> Bitacora: RegistrarModificacion(...)
+activate Bitacora
+Bitacora --> BLL: void
+deactivate Bitacora
+
+BLL --> Form: void
+deactivate BLL
+
+Form -> Form: Muestra mensaje: "Cita modificada"
+Form -> Form: CargarCitas()
+
+Form --> User: ✓ Cita actualizada
+
+deactivate Form
+
+== 4. Cambiar Estado de Cita ==
+
+User -> Form: Selecciona cita en estado "Agendada"
+User -> Form: Clic en "Cambiar Estado" → Selecciona "Confirmada"
+activate Form
+
+Form -> Form: btnCambiarEstado_Click()
+
+Form -> Form: Muestra diálogo de estados:\n- Confirmada\n- Completada\n- Cancelada\n- No Asistió
+
+User -> Form: Selecciona "Confirmada"
+
+Form -> BLL: CambiarEstado(idCita, EstadoCita.Confirmada)
+activate BLL
+
+BLL -> BLL: ValidarTransicionEstado(\nestadoActual=Agendada,\nnuevoEstado=Confirmada)
+activate BLL #LightCyan
+note right
+    Valida transiciones permitidas:
+    - Agendada → cualquier estado ✓
+    - Confirmada → Completada/Cancelada/NoAsistio ✓
+    - Completada → ninguna ✗
+    - Cancelada → ninguna ✗
+    - NoAsistio → ninguna ✗
+end note
+BLL --> BLL: Transición válida
+deactivate BLL
+
+BLL -> Repo: ActualizarEstado(idCita, "Confirmada")
+activate Repo
+
+Repo -> DB: EXEC Cita_UpdateEstado\n@IdCita, @Estado='Confirmada'
+activate DB
+note over DB
+    UPDATE Cita
+    SET Estado = @Estado
+    WHERE IdCita = @IdCita
+end note
+DB --> Repo: Filas actualizadas: 1
+deactivate DB
+
+Repo --> BLL: void
+deactivate Repo
+
+BLL -> Bitacora: RegistrarAccion(\nusuario, "Citas",\n"CambiarEstado",\n"Estado cambiado: Agendada → Confirmada")
+activate Bitacora
+Bitacora --> BLL: void
+deactivate Bitacora
+
+BLL --> Form: void
+deactivate BLL
+
+Form -> Form: CargarCitas()
+Form -> Form: ColorearFilasSegunEstado()
+note right: Fila ahora verde (Confirmada)
+
+Form --> User: ✓ Estado cambiado\nFila actualizada con color
+
+deactivate Form
+
+== 5. Eliminar Cita (Soft Delete con Validaciones) ==
+
+User -> Form: Selecciona cita y clic "Eliminar"
+activate Form
+
+Form -> Form: btnEliminar_Click()
+Form -> Form: Muestra confirmación:\n"¿Está seguro de eliminar la cita?"
+
+User -> Form: Confirma (Sí)
+
+Form -> BLL: EliminarCita(idCita)
+activate BLL
+
+BLL -> Repo: Eliminar(idCita)
+activate Repo
+
+Repo -> DB: EXEC Cita_Delete @IdCita
+activate DB
+
+note over DB #LightYellow
+    **SOFT DELETE CON VALIDACIONES**
+
+    -- Valida estado
+    IF EXISTS (
+        SELECT 1 FROM Cita
+        WHERE IdCita = @IdCita
+          AND Estado = 'Completada'
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar\ncita completada', 16, 1)
+        RETURN
+    END
+
+    -- Valida consulta médica
+    IF EXISTS (
+        SELECT 1 FROM ConsultaMedica
+        WHERE IdCita = @IdCita
+          AND Activo = 1
+    )
+    BEGIN
+        RAISERROR('La cita tiene consulta\nmédica asociada', 16, 1)
+        RETURN
+    END
+
+    -- Soft delete
+    UPDATE Cita
+    SET Activo = 0
+    WHERE IdCita = @IdCita
+end note
+
+alt Cita Completada o tiene ConsultaMedica
+    DB --> Repo: ERROR
+    deactivate DB
+    Repo --> BLL: throw SqlException
+    deactivate Repo
+    BLL --> Form: throw Exception
+    deactivate BLL
+
+    Form -> Form: Muestra MessageBox error:\n"No se puede eliminar la cita"
+
+    Form --> User: ✗ Error: No se puede eliminar
+
+else Puede eliminarse
+    DB --> Repo: Filas afectadas: 1
+    deactivate DB
+    Repo --> BLL: void
+    deactivate Repo
+
+    BLL -> Bitacora: RegistrarBaja(\nusuario, "Citas", "Cita",\nidCita, "Cita eliminada (soft delete)")
+    activate Bitacora
+    Bitacora --> BLL: void
+    deactivate Bitacora
+
+    BLL --> Form: void
+    deactivate BLL
+
+    Form -> Form: Muestra mensaje: "Cita eliminada"
+    Form -> Form: CargarCitas()
+    note right
+        La cita ya no aparece
+        en la lista (Activo = 0)
+    end note
+
+    Form --> User: ✓ Cita eliminada
+
+end
+
+deactivate Form
+
+@enduml

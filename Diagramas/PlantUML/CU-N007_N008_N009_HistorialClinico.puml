@@ -1,0 +1,297 @@
+@startuml CU-N007_N008_N009_HistorialClinico
+title CU-N007, N008, N009: Consultar Historial Clínico (Drill-Down)
+
+actor "Usuario\n(Admin/Recep/Vet)" as User
+participant "FormHistorialClinico\n(CU-N007)" as FormN007
+participant "FormHistorialDetallado\n(CU-N008)" as FormN008
+participant "FormDetalleConsulta\n(CU-N009)" as FormN009
+participant "ClienteBLL" as ClienteBLL
+participant "MascotaBLL" as MascotaBLL
+participant "ConsultaMedicaBLL" as ConsBLL
+participant "VeterinarioBLL" as VetBLL
+participant "ClienteRepository" as ClienteRepo
+participant "MascotaRepository" as MascotaRepo
+database "VetCareDB" as DB
+
+== CU-N007: Consultar Historial Clínico - Buscar Cliente ==
+
+User -> FormN007: Accede a "Historial Clínico"
+activate FormN007
+
+FormN007 -> FormN007: FormHistorialClinico_Load()
+FormN007 -> FormN007: ConfigurarDataGridView():\nColumnas: Mascota, Especie,\nEdad, Ultima Visita
+FormN007 -> FormN007: LimpiarCliente():\ngrpCliente.Visible = false\ndgvMascotas.DataSource = null\nbtnVerHistorial.Enabled = false
+
+FormN007 --> User: Formulario listo\n(esperando DNI)
+
+User -> FormN007: Ingresa DNI: "12345678"\nPresiona Enter o "Buscar"
+activate FormN007 #LightGray
+
+FormN007 -> FormN007: Valida DNI NO vacío
+
+FormN007 -> ClienteBLL: BuscarClientePorDNI("12345678")
+activate ClienteBLL
+ClienteBLL -> ClienteRepo: BuscarPorDNI("12345678")
+activate ClienteRepo
+ClienteRepo -> DB: EXEC Cliente_SelectByDNI @DNI
+activate DB
+DB --> ClienteRepo: DataRow (Cliente o NULL)
+deactivate DB
+ClienteRepo --> ClienteBLL: Cliente entity o NULL
+deactivate ClienteRepo
+ClienteBLL --> FormN007: Cliente o NULL
+deactivate ClienteBLL
+
+alt Cliente NO encontrado
+    FormN007 -> FormN007: Muestra MessageBox:\n"Cliente no encontrado con DNI: 12345678"
+    FormN007 -> FormN007: LimpiarCliente()
+    FormN007 --> User: Error: Cliente no encontrado
+else Cliente encontrado
+
+    FormN007 -> FormN007: _clienteSeleccionado = cliente
+    FormN007 -> FormN007: MostrarCliente():\ntxtClienteInfo.Text =\n"{Nombre} {Apellido} - DNI: {DNI}\nTel: {Telefono}"\ngrpCliente.Visible = true
+
+    FormN007 -> FormN007: CargarMascotas(idCliente)
+    activate FormN007 #LightCyan
+
+    FormN007 -> MascotaBLL: ListarMascotasPorCliente(idCliente)
+    activate MascotaBLL
+    MascotaBLL -> MascotaRepo: ObtenerMascotasPorCliente(idCliente)
+    activate MascotaRepo
+    MascotaRepo -> DB: EXEC Mascota_SelectByCliente\n@IdCliente
+    activate DB
+    DB --> MascotaRepo: DataTable (Mascotas)
+    deactivate DB
+    MascotaRepo --> MascotaBLL: List<Mascota>
+    deactivate MascotaRepo
+    MascotaBLL --> FormN007: List<Mascota>
+    deactivate MascotaBLL
+
+    FormN007 -> FormN007: dgvMascotas.DataSource = mascotas
+
+    loop Para cada mascota en grid
+        FormN007 -> ConsBLL: ObtenerHistorialMascota(idMascota)
+        activate ConsBLL
+        ConsBLL -> DB: EXEC ConsultaMedica_SelectByMascota\n@IdMascota
+        activate DB
+        DB --> ConsBLL: DataTable (Consultas de mascota)
+        deactivate DB
+        ConsBLL --> FormN007: List<ConsultaMedica>
+        deactivate ConsBLL
+
+        FormN007 -> FormN007: ultimaConsulta = consultas\n  .OrderByDescending(c => c.FechaConsulta)\n  .FirstOrDefault()
+
+        alt Tiene consultas
+            FormN007 -> FormN007: row.Cells["UltimaVisita"].Value =\n  ultimaConsulta.FechaConsulta\n    .ToString("dd/MM/yyyy")
+        else Sin consultas
+            FormN007 -> FormN007: row.Cells["UltimaVisita"].Value =\n  "Sin visitas"
+        end
+    end
+
+    FormN007 -> FormN007: ActualizarEstadoBoton():\nbtnVerHistorial.Enabled =\n  dgvMascotas.SelectedRows.Count > 0
+
+    deactivate FormN007
+
+    FormN007 --> User: Cliente encontrado\nMascotas cargadas con última visita
+    note right
+        Grid muestra:
+        Nombre | Especie | Edad | Última Visita
+        Rex | Canino | 5 | 15/01/2025
+        Michi | Felino | 2 | Sin visitas
+    end note
+end
+
+deactivate FormN007
+
+== CU-N007 → CU-N008: Abrir Historial Detallado ==
+
+User -> FormN007: Selecciona mascota "Rex"
+activate FormN007
+FormN007 -> FormN007: dgvMascotas_SelectionChanged()
+FormN007 -> FormN007: btnVerHistorial.Enabled = true
+deactivate FormN007
+
+User -> FormN007: Clic en "Ver Historial"
+activate FormN007
+
+FormN007 -> FormN007: Valida mascota seleccionada != null
+FormN007 -> FormN007: mascotaSeleccionada = (Mascota)row.DataBoundItem
+
+FormN007 -> FormN008: new FormHistorialDetallado(mascota, cliente)\nShowDialog()
+activate FormN008
+
+== CU-N008: Ver Historial Detallado - Cargar Consultas ==
+
+FormN008 -> FormN008: FormHistorialDetallado_Load()
+FormN008 -> FormN008: ConfigurarDataGridView():\nColumnas: Fecha, Diagnostico, Veterinario
+
+FormN008 -> FormN008: MostrarDatosMascota():\ntxtDatosMascota.Text =\n"Mascota: {Nombre} | Especie: {Especie}\n| Edad: {EdadEnAnios} años | Peso: {Peso} kg\nCliente: {Cliente.Nombre} {Cliente.Apellido}\n| Tel: {Telefono}"
+
+FormN008 -> FormN008: CargarHistorialConsultas()
+activate FormN008 #LightGray
+
+FormN008 -> ConsBLL: ObtenerHistorialMascota(idMascota)
+activate ConsBLL
+ConsBLL -> DB: EXEC ConsultaMedica_SelectByMascota\n@IdMascota\nORDER BY FechaConsulta DESC
+activate DB
+DB --> ConsBLL: DataTable (TODAS las consultas)
+deactivate DB
+
+ConsBLL -> ConsBLL: Para cada consulta:\nHidrata medicamentos:\nconsulta.Medicamentos =\n  ObtenerMedicamentosPorConsulta(idConsulta)
+
+ConsBLL --> FormN008: List<ConsultaMedica>\n(con medicamentos hidratados)
+deactivate ConsBLL
+
+FormN008 -> FormN008: dgvConsultas.DataSource = consultas
+
+loop Para cada consulta en grid
+    FormN008 -> VetBLL: ObtenerVeterinarioPorId(idVeterinario)
+    activate VetBLL
+    VetBLL --> FormN008: Veterinario entity
+    deactivate VetBLL
+
+    alt Veterinario encontrado
+        FormN008 -> FormN008: row.Cells["Veterinario"].Value =\n  "Dr. {Nombre}"
+    else Veterinario no encontrado
+        FormN008 -> FormN008: row.Cells["Veterinario"].Value = "N/A"
+    end
+end
+
+alt Sin consultas
+    FormN008 -> FormN008: Muestra MessageBox:\n"Esta mascota no tiene consultas\nmédicas registradas"
+end
+
+FormN008 -> FormN008: ActualizarEstadoBoton():\nbtnVerDetalle.Enabled =\n  dgvConsultas.SelectedRows.Count > 0
+
+deactivate FormN008
+
+FormN008 --> User: Historial completo cargado
+note right
+    Grid muestra:
+    Fecha | Diagnóstico | Veterinario
+    15/01/2025 | Gastroenteritis | Dr. Martínez
+    10/12/2024 | Vacunación | Dr. López
+end note
+
+== CU-N008 → CU-N009: Abrir Detalle de Consulta ==
+
+User -> FormN008: Selecciona consulta\n"15/01/2025 - Gastroenteritis"
+activate FormN008
+FormN008 -> FormN008: dgvConsultas_SelectionChanged()
+FormN008 -> FormN008: btnVerDetalle.Enabled = true
+deactivate FormN008
+
+User -> FormN008: Doble clic en fila\nO clic en "Ver Detalle"
+activate FormN008
+
+FormN008 -> FormN008: Valida consulta seleccionada != null
+FormN008 -> FormN008: consultaSeleccionada =\n  (ConsultaMedica)row.DataBoundItem
+
+FormN008 -> FormN009: new FormDetalleConsulta(consulta)\nShowDialog()
+activate FormN009
+
+== CU-N009: Ver Detalle de Consulta - Solo Lectura ==
+
+FormN009 -> FormN009: FormDetalleConsulta_Load()
+FormN009 -> FormN009: MostrarDetalleConsulta()
+activate FormN009 #LightGray
+
+FormN009 -> VetBLL: ObtenerVeterinarioPorId(consulta.IdVeterinario)
+activate VetBLL
+VetBLL --> FormN009: Veterinario entity
+deactivate VetBLL
+
+FormN009 -> FormN009: nombreVeterinario = "Dr. {Nombre}"
+
+FormN009 -> FormN009: Construye StringBuilder:\ndetalle = new StringBuilder()
+
+FormN009 -> FormN009: detalle.AppendLine(\n  "Fecha: {dd/MM/yyyy} - Hora: {HH:mm}")
+FormN009 -> FormN009: detalle.AppendLine(\n  "Veterinario: {nombreVeterinario}")
+FormN009 -> FormN009: detalle.AppendLine()
+
+FormN009 -> FormN009: detalle.AppendLine("SÍNTOMAS:")
+FormN009 -> FormN009: detalle.AppendLine(consulta.Sintomas)
+FormN009 -> FormN009: detalle.AppendLine()
+
+FormN009 -> FormN009: detalle.AppendLine("DIAGNÓSTICO:")
+FormN009 -> FormN009: detalle.AppendLine(consulta.Diagnostico)
+FormN009 -> FormN009: detalle.AppendLine()
+
+FormN009 -> FormN009: detalle.AppendLine("TRATAMIENTO:")
+FormN009 -> FormN009: detalle.AppendLine(\n  consulta.Tratamiento ?? "No especificado")
+FormN009 -> FormN009: detalle.AppendLine()
+
+alt Tiene medicamentos recetados
+    FormN009 -> FormN009: detalle.AppendLine(\n  "MEDICAMENTOS RECETADOS:")
+
+    loop Para cada medicamento
+        FormN009 -> FormN009: detalle.AppendLine(\n  "• {NombreMedicamento} ({Presentacion})")
+        FormN009 -> FormN009: detalle.AppendLine(\n  "  Cantidad: {Cantidad}")
+
+        alt Tiene indicaciones
+            FormN009 -> FormN009: detalle.AppendLine(\n  "  Indicaciones: {Indicaciones}")
+        end
+
+        FormN009 -> FormN009: detalle.AppendLine()
+    end
+else Sin medicamentos
+    FormN009 -> FormN009: detalle.AppendLine("MEDICAMENTOS:")
+    FormN009 -> FormN009: detalle.AppendLine(\n  "No se recetaron medicamentos")
+end
+
+alt Tiene observaciones
+    FormN009 -> FormN009: detalle.AppendLine("OBSERVACIONES:")
+    FormN009 -> FormN009: detalle.AppendLine(\n  consulta.Observaciones)
+end
+
+FormN009 -> FormN009: txtDetalle.Text = detalle.ToString()
+note right
+    txtDetalle es TextBox:
+    - Multiline = true
+    - ReadOnly = true
+    - ScrollBars = Vertical
+    SOLO LECTURA
+end note
+
+deactivate FormN009
+
+FormN009 --> User: Detalle completo mostrado
+note right
+    Ejemplo de salida:
+    ════════════════════════════════
+    Fecha: 15/01/2025 - Hora: 10:30
+    Veterinario: Dr. Martínez
+
+    SÍNTOMAS:
+    Fiebre alta, decaimiento, vómitos
+
+    DIAGNÓSTICO:
+    Gastroenteritis bacteriana
+
+    TRATAMIENTO:
+    Antibiótico y rehidratación
+
+    MEDICAMENTOS RECETADOS:
+    • Amoxicilina 500mg (cápsulas)
+      Cantidad: 14
+      Indicaciones: Tomar cada 8 horas
+
+    • Suero Oral (sobres)
+      Cantidad: 5
+      Indicaciones: Diluir en 200ml agua
+
+    OBSERVACIONES:
+    Control en 3 días
+    ════════════════════════════════
+end note
+
+User -> FormN009: Clic en "Cerrar"
+deactivate FormN009
+
+FormN008 --> User: Vuelve a historial detallado
+deactivate FormN008
+
+User -> FormN007: Cierra FormHistorialDetallado
+deactivate FormN007
+
+@enduml

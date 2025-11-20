@@ -1,0 +1,647 @@
+================================================================================
+ESPECIFICACIÓN DE CASO DE USO - CU-A003
+GESTIONAR PERMISOS (ROLES Y PERMISOS)
+Sistema VetCare - Veterinaria
+================================================================================
+
+PESTAÑA: General
+================================================================================
+ID:                 CU-A003
+Nombre:             Gestionar Permisos
+Actor Principal:    Administrador
+Tipo:               Arquitectura / Seguridad
+Propósito:          Administrar roles (Familias), permisos (Patentes) y asignación
+                    de permisos a usuarios. Implementa el patrón Composite para
+                    jerarquías de permisos.
+
+================================================================================
+PESTAÑA: Notes
+================================================================================
+Este caso de uso permite al Administrador gestionar el sistema completo de
+autorización del sistema VetCare utilizando el patrón Composite para crear
+jerarquías de permisos. Incluye dos áreas funcionales principales:
+
+1. GESTIÓN DE ROLES (FAMILIAS):
+   - Crear nuevos roles del sistema (ROL_Veterinario, ROL_Recepcionista, etc.)
+   - Asignar permisos (Patentes) a roles de forma masiva
+   - Eliminar roles que no tienen usuarios asignados
+   - Visualizar patentes asignadas a cada rol (recursivo con Composite)
+
+2. GESTIÓN DE PERMISOS DE USUARIOS:
+   - Asignar/cambiar rol de un usuario (cambio atómico con Unit of Work)
+   - Asignar permisos adicionales individuales a usuarios
+   - Quitar permisos específicos de usuarios
+   - Visualizar rol actual y permisos directos del usuario
+
+El formulario utiliza dos pestañas (TabControl) para separar ambas funcionalidades.
+Todas las operaciones críticas se registran en Bitácora para auditoría.
+Las asignaciones/actualizaciones masivas usan Unit of Work para garantizar atomicidad.
+
+PATRÓN COMPOSITE IMPLEMENTADO:
+- Component (abstracto): Clase base para permisos
+- Composite: Familia (puede contener Familias y Patentes)
+- Leaf: Patente (permiso final, no puede contener hijos)
+
+================================================================================
+PESTAÑA: Preconditions
+================================================================================
+1. El usuario debe estar autenticado en el sistema
+2. El usuario debe tener ROL_Administrador
+3. El usuario debe tener la patente "gestionPermisos" asignada
+4. Debe existir al menos un rol en el sistema (ROL_Administrador protegido)
+5. Deben existir patentes (permisos) registradas en la base de datos
+6. La base de datos SecurityVet debe estar accesible
+
+================================================================================
+PESTAÑA: Postconditions
+================================================================================
+ÉXITO:
+1. Roles creados/eliminados según las operaciones realizadas
+2. Permisos asignados/removidos de roles exitosamente
+3. Cambios de rol de usuarios registrados con Unit of Work
+4. Permisos individuales de usuarios actualizados
+5. Todas las operaciones críticas registradas en Bitácora con CriticidadBitacora.Advertencia
+6. Interfaz actualizada reflejando los cambios realizados
+
+FALLO:
+1. Mensaje de error mostrado al usuario con descripción clara
+2. Si falla durante Unit of Work: ROLLBACK automático (sin cambios en BD)
+3. Excepción registrada en Bitacora con criticidad Error
+4. Estado del sistema permanece sin modificaciones
+
+================================================================================
+PESTAÑA: Basic Path (10 pasos resumidos)
+================================================================================
+
+OPERACIÓN 1: CREAR ROL
+-----------------------
+1. Administrador hace clic en "Crear Rol"
+2. Sistema solicita nombre del nuevo rol vía InputBox
+3. Sistema valida nombre (no vacío, 3-50 chars, no duplicado)
+4. Sistema agrega prefijo "ROL_" si no lo tiene
+5. Sistema crea registro en tabla Familia con Guid.NewGuid()
+6. Sistema registra en Bitácora: "Nuevo rol creado: {nombreCompleto}"
+7. Sistema recarga lista de roles y selecciona el nuevo rol
+
+OPERACIÓN 2: ASIGNAR PERMISOS A ROL
+------------------------------------
+1. Administrador selecciona un rol del ComboBox
+2. Sistema carga patentes actuales del rol (recursivo incluyendo familias hijas)
+3. Sistema marca CheckedListBox con patentes asignadas (agrupadas por módulo)
+4. Administrador marca/desmarca permisos según necesidad
+5. Administrador hace clic en "Guardar Cambios"
+6. Sistema inicia Unit of Work con transacción
+7. Sistema elimina patentes desmarcadas (DELETE FamiliaPatente)
+8. Sistema inserta patentes nuevas marcadas (INSERT FamiliaPatente)
+9. Sistema hace COMMIT y registra en Bitácora
+10. Sistema muestra mensaje de éxito
+
+OPERACIÓN 3: ELIMINAR ROL
+-------------------------
+1. Administrador selecciona un rol del ComboBox
+2. Administrador hace clic en "Eliminar Rol"
+3. Sistema verifica que el rol NO es protegido (ROL_Administrador)
+4. Sistema cuenta usuarios con ese rol (ContarUsuariosConRol)
+5. Si tiene usuarios: Sistema muestra advertencia y NO permite eliminar
+6. Si NO tiene usuarios: Sistema solicita confirmación explícita
+7. Sistema inicia Unit of Work con transacción
+8. Sistema elimina relaciones FamiliaPatente del rol
+9. Sistema elimina relaciones FamiliaFamilia (padre/hijo)
+10. Sistema elimina registro de Familia, hace COMMIT y registra en Bitácora
+
+OPERACIÓN 4: ASIGNAR ROL A USUARIO
+----------------------------------
+1. Administrador cambia a pestaña "Gestión Usuarios"
+2. Administrador selecciona un usuario del ComboBox
+3. Sistema muestra rol actual del usuario (lblRolActualValor)
+4. Administrador selecciona nuevo rol del ComboBox "Nuevo Rol"
+5. Administrador hace clic en "Asignar Rol"
+6. Sistema llama UsuarioBLL.CambiarRol() con Unit of Work
+7. Sistema ejecuta: DELETE UsuarioFamilia (rol anterior) + INSERT UsuarioFamilia (nuevo rol)
+8. Sistema hace COMMIT y registra en Bitácora
+9. Sistema actualiza label mostrando el nuevo rol
+10. Sistema muestra mensaje de éxito
+
+OPERACIÓN 5: ASIGNAR PERMISOS INDIVIDUALES A USUARIO
+----------------------------------------------------
+1. Administrador selecciona un usuario del ComboBox
+2. Sistema carga patentes DIRECTAS del usuario (no heredadas del rol)
+3. Sistema marca CheckedListBox con patentes directas
+4. Administrador marca/desmarca permisos adicionales
+5. Administrador hace clic en "Guardar Cambios"
+6. Sistema obtiene patentes actuales del usuario
+7. Sistema quita patentes desmarcadas: UsuarioBLL.QuitarPatente()
+8. Sistema agrega patentes nuevas: UsuarioBLL.AsignarPatente()
+9. Sistema registra cada cambio en Bitácora
+10. Sistema muestra mensaje de éxito
+
+OPERACIÓN 6: CONSULTAR PERMISOS DE ROL (Recursivo con Composite)
+-----------------------------------------------------------------
+1. Administrador selecciona un rol del ComboBox
+2. Sistema obtiene IdComponent de la Familia (rol)
+3. Sistema llama FamiliaBLL.ObtenerTodasLasPatentesDeRol(idFamilia)
+4. Sistema ejecuta método recursivo ObtenerPatentesRecursivo():
+   a. Obtiene patentes directas de la familia actual
+   b. Obtiene familias hijas (FamiliaFamilia)
+   c. Por cada familia hija: llamada recursiva (paso 4)
+5. Sistema elimina patentes duplicadas usando GroupBy(IdComponent)
+6. Sistema marca patentes en CheckedListBox
+7. Administrador visualiza TODOS los permisos (directos + heredados)
+
+================================================================================
+PESTAÑA: Alternate Paths
+================================================================================
+
+FA-1: Nombre de rol vacío o inválido
+-------------------------------------
+En Operación 1, paso 3:
+→ Sistema valida que el nombre no esté vacío
+→ Si está vacío: Lanza ValidacionException("El nombre del rol no puede estar vacío")
+→ MessageBox.Show() con icono Warning
+→ Retorna a InputBox para reintentar
+
+FA-2: Nombre de rol demasiado corto (< 3 caracteres)
+-----------------------------------------------------
+En Operación 1, paso 3:
+→ Sistema valida longitud mínima
+→ Si < 3 chars: Lanza ValidacionException("El nombre del rol debe tener al menos 3 caracteres")
+→ MessageBox.Show() con icono Warning
+→ Retorna a InputBox para reintentar
+
+FA-3: Nombre de rol demasiado largo (> 50 caracteres)
+------------------------------------------------------
+En Operación 1, paso 3:
+→ Sistema valida longitud máxima
+→ Si > 50 chars: Lanza ValidacionException("El nombre del rol no puede superar 50 caracteres")
+→ MessageBox.Show() con icono Warning
+→ Retorna a InputBox para reintentar
+
+FA-4: Rol duplicado (ya existe uno con ese nombre)
+---------------------------------------------------
+En Operación 1, paso 4:
+→ Sistema busca en FamiliaRepository.Current.SelectAll() con nombre igual (OrdinalIgnoreCase)
+→ Si encuentra coincidencia: Lanza ValidacionException("Ya existe un rol con el nombre '{nombreRol}'")
+→ MessageBox.Show() con icono Warning
+→ No se crea el rol, retorna a InputBox
+
+FA-5: Intento de eliminar rol protegido del sistema
+----------------------------------------------------
+En Operación 3, paso 3:
+→ Sistema verifica si el nombre está en rolesProtegidos[] = {"ROL_Administrador", "ROL_ADMINISTRADOR", "ROL_Admin", "ROL_ADMIN"}
+→ Si coincide: Lanza ValidacionException("El rol '{nombreRol}' es un rol del sistema y no puede ser eliminado")
+→ MessageBox.Show() con icono Warning
+→ NO ejecuta eliminación, retorna al formulario
+
+FA-6: Rol tiene usuarios asignados (no se puede eliminar)
+----------------------------------------------------------
+En Operación 3, paso 4-5:
+→ Sistema llama ContarUsuariosConRol(idFamilia)
+→ Si cantidad > 0:
+   - Construye mensaje: "No se puede eliminar el rol '{nombreRol}' porque tiene {cantidad} usuario(s) asignado(s).
+     Primero debe reasignar o eliminar los usuarios con este rol."
+   - MessageBox.Show() con icono Warning
+   - NO ejecuta eliminación, retorna al formulario
+
+FA-7: Usuario cancela confirmación de eliminación
+--------------------------------------------------
+En Operación 3, paso 6:
+→ Sistema muestra MessageBox con DialogResult.YesNo
+→ Si usuario hace clic en "No":
+   - NO ejecuta eliminación
+   - Retorna al formulario sin cambios
+
+FA-8: Error durante Unit of Work (transacción)
+-----------------------------------------------
+En Operación 2 o Operación 3, durante transacción:
+→ Si ocurre excepción durante BEGIN TRAN / operaciones / COMMIT:
+   - unitOfWork.Rollback() automático en bloque catch
+   - Todas las operaciones se revierten (ningún cambio aplicado)
+   - ExceptionManager.Current.Handle(ex) registra error
+   - Lanza Exception("Error al actualizar patentes del rol", ex)
+   - MessageBox.Show() con mensaje de error
+   - Estado del sistema queda sin modificaciones (atomicidad garantizada)
+
+FA-9: No hay rol seleccionado al guardar permisos
+--------------------------------------------------
+En Operación 2, paso 5:
+→ Sistema verifica _familiaSeleccionada != null
+→ Si es null: MessageBox.Show("Por favor, seleccione un rol para modificar")
+→ No ejecuta guardado, retorna al formulario
+
+FA-10: No hay usuario seleccionado al asignar rol
+--------------------------------------------------
+En Operación 4, paso 5:
+→ Sistema verifica _usuarioSeleccionado != null
+→ Si es null: MessageBox.Show("Por favor, seleccione un usuario")
+→ No ejecuta asignación, retorna al formulario
+
+FA-11: No hay nuevo rol seleccionado al cambiar rol de usuario
+---------------------------------------------------------------
+En Operación 4, paso 5:
+→ Sistema verifica cboNuevoRol.SelectedItem != null
+→ Si es null: MessageBox.Show("Por favor, seleccione un nuevo rol")
+→ No ejecuta cambio, retorna al formulario
+
+FA-12: Error al cargar roles desde base de datos
+-------------------------------------------------
+En carga inicial (GestionPermisos_Load):
+→ Si UsuarioBLL.ObtenerRolesDisponibles() lanza excepción:
+   - MessageBox.Show("Error al cargar roles: {ex.Message}")
+   - ComboBox de roles queda vacío
+   - Formulario queda visible pero sin datos
+
+FA-13: Error al cargar patentes desde base de datos
+----------------------------------------------------
+En carga inicial (CargarPatentesDisponibles):
+→ Si UsuarioBLL.ObtenerTodasLasPatentes() lanza excepción:
+   - MessageBox.Show("Error al cargar patentes: {ex.Message}")
+   - CheckedListBox queda vacío
+   - Formulario queda visible pero sin permisos para asignar
+
+================================================================================
+PESTAÑA: Constraints
+================================================================================
+
+TÉCNICAS:
+1. Sistema operativo: Windows 7 o superior
+2. .NET Framework 4.7.2 o superior
+3. Base de datos: SQL Server 2012 o superior
+4. Conexión a SecurityVet debe estar activa
+5. Patrón Composite requiere jerarquía correcta en tablas Familia/FamiliaPatente/FamiliaFamilia
+6. Unit of Work requiere soporte de transacciones en SQL Server
+
+NEGOCIO:
+1. Solo usuarios con ROL_Administrador pueden acceder a este caso de uso
+2. El rol "ROL_Administrador" es PROTEGIDO y no puede ser eliminado
+3. No se pueden eliminar roles que tienen usuarios asignados
+4. Nombres de roles deben ser únicos en el sistema (case-insensitive)
+5. Todos los roles deben tener prefijo "ROL_" para identificación
+6. Nombres de roles: mínimo 3 caracteres, máximo 50 caracteres
+7. Operaciones de asignación masiva de permisos deben ser atómicas (todo o nada)
+8. Cambio de rol de usuario debe ser atómico (DELETE + INSERT en misma transacción)
+9. Los permisos son aditivos: usuario hereda permisos del rol + permisos directos
+10. No se pueden crear patentes desde este formulario (solo asignarlas)
+
+SEGURIDAD:
+1. Todas las operaciones críticas se registran en Bitácora con CriticidadBitacora.Advertencia
+2. Usuario logueado debe estar en LoginService.GetUsuarioLogueado()
+3. Unit of Work garantiza ROLLBACK en caso de error (no deja BD inconsistente)
+4. No se exponen IDs internos (GUIDs) al usuario en mensajes
+
+USABILIDAD:
+1. Patentes agrupadas visualmente por módulo en CheckedListBox
+2. Headers de módulos NO son seleccionables (clase HeaderDisplay)
+3. Formulario con dos pestañas (TabControl) para separar funcionalidades
+4. Labels dinámicos muestran rol actual del usuario seleccionado
+5. Confirmación explícita requerida para eliminación de roles
+6. Mensajes de error específicos y en idioma del usuario (LanguageManager)
+
+================================================================================
+PESTAÑA: Scenarios
+================================================================================
+
+ESCENARIO 1: Crear rol "Veterinario" exitosamente
+--------------------------------------------------
+Precondición: Administrador autenticado, formulario abierto
+1. Clic en "Crear Rol"
+2. Ingresar "Veterinario" en InputBox
+3. Sistema crea "ROL_Veterinario"
+4. Mensaje: "Rol creado exitosamente: ROL_Veterinario"
+5. ComboBox actualizado con nuevo rol
+Resultado: ROL_Veterinario existe en BD, visible en ComboBox
+
+ESCENARIO 2: Asignar 5 permisos a rol "Recepcionista"
+------------------------------------------------------
+Precondición: Rol "ROL_Recepcionista" existe
+1. Seleccionar "ROL_Recepcionista" en ComboBox
+2. Sistema carga patentes actuales (puede ser vacío)
+3. Marcar checks: "Gestión Clientes", "Gestión Mascotas", "Agendar Citas", "Ver Consultas", "Ver Bitácora"
+4. Clic en "Guardar Cambios"
+5. Unit of Work ejecuta DELETE (permisos viejos) + INSERT (5 nuevos)
+6. COMMIT exitoso
+7. Mensaje: "Permisos actualizados exitosamente"
+Resultado: ROL_Recepcionista tiene exactamente esos 5 permisos
+
+ESCENARIO 3: Eliminar rol vacío "Test"
+---------------------------------------
+Precondición: Rol "ROL_Test" existe y NO tiene usuarios asignados
+1. Seleccionar "ROL_Test" en ComboBox
+2. Clic en "Eliminar Rol"
+3. Sistema verifica: 0 usuarios asignados
+4. Confirmación: "¿Está seguro de que desea eliminar el rol 'Test'?"
+5. Usuario confirma "Sí"
+6. Unit of Work ejecuta: DELETE FamiliaPatente + DELETE FamiliaFamilia + DELETE Familia
+7. COMMIT exitoso
+8. Mensaje: "El rol 'Test' ha sido eliminado exitosamente"
+9. ComboBox actualizado sin "ROL_Test"
+Resultado: ROL_Test eliminado físicamente de BD
+
+ESCENARIO 4: Cambiar rol de usuario "juan" de Recepcionista a Veterinario
+--------------------------------------------------------------------------
+Precondición: Usuario "juan" tiene rol "ROL_Recepcionista", rol "ROL_Veterinario" existe
+1. Cambiar a pestaña "Gestión Usuarios"
+2. Seleccionar "juan" en ComboBox usuarios
+3. Sistema muestra: "Rol actual: Recepcionista"
+4. Seleccionar "ROL_Veterinario" en ComboBox "Nuevo Rol"
+5. Clic en "Asignar Rol"
+6. Sistema llama UsuarioBLL.CambiarRol() con Unit of Work
+7. DELETE UsuarioFamilia (Recepcionista) + INSERT UsuarioFamilia (Veterinario)
+8. COMMIT exitoso
+9. Sistema actualiza label: "Rol actual: Veterinario"
+10. Mensaje: "Rol actualizado exitosamente"
+Resultado: Usuario "juan" ahora tiene ROL_Veterinario, hereda todos sus permisos
+
+ESCENARIO 5: Asignar permiso individual "Realizar Backup" a usuario "admin2"
+-----------------------------------------------------------------------------
+Precondición: Usuario "admin2" existe, patente "Realizar Backup" existe
+1. Pestaña "Gestión Usuarios"
+2. Seleccionar "admin2" en ComboBox
+3. Sistema carga permisos directos actuales (puede ser vacío)
+4. Marcar check "Realizar Backup"
+5. Clic en "Guardar Cambios"
+6. Sistema detecta nueva patente marcada
+7. UsuarioBLL.AsignarPatente(admin2.Id, backupPatente.Id)
+8. INSERT UsuarioPatente en BD
+9. Bitácora registra operación
+10. Mensaje: "Permisos actualizados exitosamente"
+Resultado: Usuario "admin2" tiene permiso directo "Realizar Backup" (adicional a su rol)
+
+ESCENARIO 6: Intento de eliminar rol "Administrador" (PROTEGIDO)
+-----------------------------------------------------------------
+Precondición: Rol "ROL_Administrador" existe
+1. Seleccionar "ROL_Administrador" en ComboBox
+2. Clic en "Eliminar Rol"
+3. Sistema detecta que está en rolesProtegidos[]
+4. Lanza ValidacionException
+5. Mensaje: "El rol 'Administrador' es un rol del sistema y no puede ser eliminado"
+Resultado: ROL_Administrador NO se elimina, permanece intacto
+
+ESCENARIO 7: Intento de eliminar rol con 3 usuarios asignados
+--------------------------------------------------------------
+Precondición: Rol "ROL_Recepcionista" tiene 3 usuarios asignados
+1. Seleccionar "ROL_Recepcionista" en ComboBox
+2. Clic en "Eliminar Rol"
+3. Sistema llama ContarUsuariosConRol() → retorna 3
+4. Mensaje: "No se puede eliminar el rol 'Recepcionista' porque tiene 3 usuario(s) asignado(s).
+   Primero debe reasignar o eliminar los usuarios con este rol."
+Resultado: ROL_Recepcionista NO se elimina, permanece con sus 3 usuarios
+
+ESCENARIO 8: Crear rol con nombre duplicado
+--------------------------------------------
+Precondición: Ya existe "ROL_Veterinario"
+1. Clic en "Crear Rol"
+2. Ingresar "Veterinario" en InputBox
+3. Sistema construye "ROL_Veterinario"
+4. Sistema busca en BD y encuentra coincidencia
+5. Lanza ValidacionException("Ya existe un rol con el nombre 'Veterinario'")
+6. Mensaje de validación mostrado
+Resultado: NO se crea rol duplicado, BD queda sin cambios
+
+ESCENARIO 9: Visualizar permisos heredados de jerarquía Composite
+------------------------------------------------------------------
+Precondición: ROL_Supervisor contiene ROL_Usuario como hijo, ROL_Usuario tiene 3 patentes
+1. Seleccionar "ROL_Supervisor" en ComboBox
+2. Sistema llama FamiliaBLL.ObtenerTodasLasPatentesDeRol()
+3. Método recursivo obtiene:
+   a. Patentes directas de ROL_Supervisor (ej: 2 patentes)
+   b. Familias hijas de ROL_Supervisor (encuentra ROL_Usuario)
+   c. Llamada recursiva: patentes de ROL_Usuario (3 patentes)
+4. Sistema elimina duplicados
+5. CheckedListBox muestra 5 patentes marcadas (2 directas + 3 heredadas)
+Resultado: Administrador visualiza TODOS los permisos (directos + heredados)
+
+ESCENARIO 10: Error de BD durante Unit of Work (ROLLBACK automático)
+---------------------------------------------------------------------
+Precondición: Conexión a BD inestable, rol seleccionado con 10 patentes
+1. Seleccionar rol "ROL_Test" en ComboBox
+2. Modificar permisos (agregar 5 nuevos, quitar 3 existentes)
+3. Clic en "Guardar Cambios"
+4. Sistema inicia Unit of Work → BEGIN TRAN
+5. Ejecuta 3 DELETE exitosos
+6. Ejecuta 2 INSERT exitosos
+7. En el 3er INSERT: SQLException (ej: timeout, deadlock)
+8. Bloque catch detecta excepción
+9. unitOfWork.Rollback() ejecutado automáticamente
+10. Todos los cambios revertidos (los 5 DELETE/INSERT)
+11. Mensaje: "Error al actualizar patentes del rol: {mensaje técnico}"
+Resultado: ROL_Test queda con sus 10 patentes ORIGINALES (atomicidad garantizada)
+
+================================================================================
+PESTAÑA: Requirements
+================================================================================
+
+FUNCIONALES:
+FR-1: El sistema debe permitir crear roles con prefijo "ROL_" automático
+FR-2: El sistema debe validar unicidad de nombres de roles (case-insensitive)
+FR-3: El sistema debe permitir asignar múltiples permisos a un rol de forma masiva
+FR-4: El sistema debe usar Unit of Work para garantizar atomicidad en asignaciones masivas
+FR-5: El sistema debe permitir eliminar roles que NO tienen usuarios asignados
+FR-6: El sistema debe proteger roles críticos del sistema (ROL_Administrador) contra eliminación
+FR-7: El sistema debe permitir cambiar el rol de un usuario con transacción atómica
+FR-8: El sistema debe permitir asignar permisos individuales a usuarios (adicionales al rol)
+FR-9: El sistema debe visualizar permisos heredados de jerarquía Composite (recursivo)
+FR-10: El sistema debe agrupar permisos por módulo en interfaz para mejor UX
+FR-11: El sistema debe diferenciar permisos directos de permisos heredados visualmente
+
+NO FUNCIONALES:
+NFR-1: Todas las operaciones críticas deben registrarse en Bitácora para auditoría
+NFR-2: Transacciones de Unit of Work deben completarse en < 2 segundos
+NFR-3: Carga de roles y patentes debe ser < 1 segundo (incluso con 100+ patentes)
+NFR-4: Interfaz debe ser responsiva durante operaciones de BD (async si es necesario)
+NFR-5: Mensajes de error deben ser claros, específicos y en idioma del usuario
+NFR-6: ROLLBACK automático debe garantizar consistencia de BD en caso de error
+NFR-7: Sistema debe soportar jerarquías Composite de hasta 5 niveles de profundidad sin degradación
+NFR-8: Confirmaciones de eliminación deben ser explícitas para prevenir errores
+
+TÉCNICOS:
+TR-1: Implementar patrón Composite con Component (abstracto), Familia (composite), Patente (leaf)
+TR-2: Usar Unit of Work pattern para operaciones con múltiples cambios de BD
+TR-3: Implementar recursión para navegación de jerarquía Composite (ObtenerPatentesRecursivo)
+TR-4: Usar Singleton pattern para BLL (estático) y Repositories (.Current)
+TR-5: Implementar Repository pattern para abstracción de acceso a datos
+TR-6: Usar stored procedures exclusivamente (no SQL inline) para seguridad
+TR-7: Implementar Exception Manager para manejo centralizado de errores
+TR-8: Usar LanguageManager para textos traducibles en interfaz
+
+DATOS:
+DR-1: Tabla Familia almacena roles (Nombre con prefijo "ROL_")
+DR-2: Tabla Patente almacena permisos (FormName, MenuItemName, Orden, Descripcion)
+DR-3: Tabla FamiliaPatente relaciona Familias con Patentes (M:N)
+DR-4: Tabla FamiliaFamilia relaciona Familias entre sí (jerarquía Composite)
+DR-5: Tabla UsuarioFamilia relaciona Usuarios con Familias (rol del usuario)
+DR-6: Tabla UsuarioPatente relaciona Usuarios con Patentes (permisos directos)
+DR-7: GUIDs usados como PKs en todas las tablas de seguridad
+DR-8: Bitacora registra operaciones con campos: IdUsuario, NombreUsuario, Modulo, TipoOperacion, Detalle, CriticidadBitacora, Fecha
+
+================================================================================
+INFORMACIÓN TÉCNICA ADICIONAL
+================================================================================
+
+ARCHIVOS INVOLUCRADOS:
+----------------------
+UI:
+  - UI/WinUi/Administración/gestionPermisos.cs (605 líneas)
+  - UI/WinUi/Administración/gestionPermisos.Designer.cs
+
+BLL:
+  - ServicesSeguridad/BLL/FamiliaBLL.cs (540 líneas)
+  - ServicesSeguridad/BLL/UsuarioBLL.cs
+
+DAL:
+  - ServicesSeguridad/DAL/Implementations/FamiliaRepository.cs
+  - ServicesSeguridad/DAL/Implementations/PatenteRepository.cs
+  - ServicesSeguridad/DAL/Implementations/FamiliaPatenteRepository.cs
+  - ServicesSeguridad/DAL/Implementations/FamiliaFamiliaRepository.cs
+  - ServicesSeguridad/DAL/Implementations/UsuarioFamiliaRepository.cs
+  - ServicesSeguridad/DAL/Implementations/UsuarioPatenteRepository.cs
+  - ServicesSeguridad/DAL/Implementations/SecurityUnitOfWork.cs
+
+DOMAIN MODEL:
+  - ServicesSeguridad/DomainModel/Security/Composite/Component.cs (abstracto)
+  - ServicesSeguridad/DomainModel/Security/Composite/Familia.cs (composite)
+  - ServicesSeguridad/DomainModel/Security/Composite/Patente.cs (leaf)
+  - ServicesSeguridad/DomainModel/Security/FamiliaPatente.cs (relación)
+  - ServicesSeguridad/DomainModel/Security/FamiliaFamilia.cs (relación jerárquica)
+  - ServicesSeguridad/DomainModel/Security/UsuarioFamilia.cs (relación)
+  - ServicesSeguridad/DomainModel/Security/UsuarioPatente.cs (relación)
+
+SERVICES:
+  - ServicesSeguridad/Services/Bitacora.cs (singleton)
+  - ServicesSeguridad/Services/LoginService.cs (estático)
+  - ServicesSeguridad/Services/ExceptionManager.cs (singleton)
+  - ServicesSeguridad/Services/LanguageManager.cs (singleton)
+
+STORED PROCEDURES PRINCIPALES:
+-------------------------------
+Familia:
+  - Familia_SelectAll (obtiene todos los roles)
+  - Familia_SelectOne (@IdFamilia) (obtiene un rol por ID)
+  - Familia_Insert (@IdFamilia, @Nombre) (crea nuevo rol)
+  - Familia_Delete (@IdFamilia) (elimina rol físicamente)
+
+FamiliaPatente:
+  - FamiliaPatente_Insert (@IdFamilia, @IdPatente) (asigna patente a familia)
+  - FamiliaPatente_DeleteRelacion (@IdFamilia, @IdPatente) (quita patente de familia)
+  - FamiliaPatente_GetChildrenRelations (@IdFamilia) (obtiene patentes de una familia)
+
+FamiliaFamilia:
+  - FamiliaFamilia_Insert (@IdFamiliaPadre, @IdFamiliaHijo) (crea relación jerárquica)
+  - FamiliaFamilia_DeleteRelacion (@IdFamiliaPadre, @IdFamiliaHijo) (elimina relación)
+  - FamiliaFamilia_GetChildrenRelations (@IdFamilia) (obtiene familias hijas)
+  - FamiliaFamilia_GetParentRelations (@IdFamilia) (obtiene familias padres)
+
+UsuarioFamilia:
+  - UsuarioFamilia_Insert (@IdUsuario, @IdFamilia) (asigna rol a usuario)
+  - UsuarioFamilia_Delete (@IdUsuario, @IdFamilia) (quita rol de usuario)
+  - UsuarioFamilia_SelectAll (obtiene todas las relaciones)
+
+UsuarioPatente:
+  - UsuarioPatente_Insert (@IdUsuario, @IdPatente) (asigna permiso directo a usuario)
+  - UsuarioPatente_DeleteRelacion (@IdUsuario, @IdPatente) (quita permiso directo)
+  - UsuarioPatente_GetPatentesDelUsuario (@IdUsuario) (obtiene permisos directos)
+
+Patente:
+  - Patente_SelectAll (obtiene todos los permisos disponibles)
+  - Patente_SelectOne (@IdPatente) (obtiene un permiso por ID)
+
+Bitacora:
+  - Bitacora_Insert (@IdUsuario, @NombreUsuario, @Modulo, @Accion, @Detalle, @Criticidad, @TipoEntidad, @IdEntidad)
+
+MÉTODOS CLAVE DEL CÓDIGO:
+--------------------------
+
+FamiliaBLL (estático):
+  - CrearRol(string nombreRol) → Familia
+  - EliminarRol(Guid idFamilia) → void [Unit of Work]
+  - ActualizarPatentesDeRol(Guid idFamilia, List<Patente> patentes) → void [Unit of Work]
+  - ObtenerPatentesDirectasDeFamilia(Guid idFamilia) → IEnumerable<Patente>
+  - ObtenerTodasLasPatentesDeRol(Guid idFamilia) → IEnumerable<Patente> [RECURSIVO]
+  - ObtenerPatentesRecursivo(Familia familia, List<Patente> acumulador) → void [PRIVADO RECURSIVO]
+  - AsignarPatenteAFamilia(Guid idFamilia, Guid idPatente) → void
+  - QuitarPatenteDeFamilia(Guid idFamilia, Guid idPatente) → void
+  - ExisteRol(string nombreRol) → bool
+  - TieneUsuariosAsignados(Guid idFamilia) → bool
+  - ContarUsuariosConRol(Guid idFamilia) → int
+
+UsuarioBLL:
+  - CambiarRol(Guid idUsuario, Guid idNuevaFamiliaRol) → void [Unit of Work]
+  - AsignarPatente(Guid idUsuario, Guid idPatente) → void
+  - QuitarPatente(Guid idUsuario, Guid idPatente) → void
+  - ObtenerPatentesDelUsuario(Guid idUsuario) → IEnumerable<Patente> [Solo directas, no heredadas]
+  - ObtenerRolesDisponibles() → IEnumerable<Familia>
+  - ObtenerTodasLasPatentes() → IEnumerable<Patente>
+
+gestionPermisos.cs (formulario):
+  - BtnCrearRol_Click() → Crea nuevo rol
+  - BtnEliminarRol_Click() → Elimina rol con validaciones
+  - CboRoles_SelectedIndexChanged() → Carga patentes del rol
+  - BtnGuardarRol_Click() → Actualiza permisos del rol con Unit of Work
+  - CboUsuarios_SelectedIndexChanged() → Carga datos del usuario
+  - BtnAsignarRolUsuario_Click() → Cambia rol del usuario con Unit of Work
+  - BtnGuardarPermisosUsuario_Click() → Actualiza permisos individuales del usuario
+  - CargarPatentesDelRol(Familia rol) → Carga y marca patentes en CheckedListBox
+  - HumanizarFormName(string formName) → Convierte "gestionClientes" a "Gestión Clientes"
+
+PATRÓN COMPOSITE - JERARQUÍA DE EJEMPLO:
+-----------------------------------------
+ROL_Administrador (Familia - Composite)
+  ├─ ROL_Supervisor (Familia hija - Composite)
+  │   ├─ ROL_Recepcionista (Familia hija - Composite)
+  │   │   ├─ Patente: "Gestión Clientes" (Leaf)
+  │   │   ├─ Patente: "Gestión Mascotas" (Leaf)
+  │   │   └─ Patente: "Agendar Citas" (Leaf)
+  │   ├─ Patente: "Consultar Bitácora" (Leaf)
+  │   └─ Patente: "Gestionar Mi Cuenta" (Leaf)
+  ├─ Patente: "Gestión Usuarios" (Leaf)
+  ├─ Patente: "Gestión Permisos" (Leaf)
+  └─ Patente: "Realizar Backup" (Leaf)
+
+Si un usuario tiene ROL_Administrador, hereda TODOS los permisos (recursivo):
+→ Los 3 permisos directos de Administrador
+→ Los 2 permisos directos de Supervisor
+→ Los 3 permisos de Recepcionista
+TOTAL: 8 permisos heredados por jerarquía
+
+UNIT OF WORK - FLUJO DE TRANSACCIÓN:
+-------------------------------------
+1. using (var unitOfWork = new SecurityUnitOfWork())
+2. unitOfWork.BeginTransaction()
+3. try {
+     - FamiliaPatenteRepository.Current.DeleteRelacion(fp, unitOfWork)
+     - FamiliaPatenteRepository.Current.Insert(fp, unitOfWork)
+     - ... múltiples operaciones ...
+     - unitOfWork.Commit()  ← COMMIT EXITOSO
+   }
+4. catch (Exception ex) {
+     - unitOfWork.Rollback()  ← ROLLBACK AUTOMÁTICO
+     - throw new Exception("Error...", ex)
+   }
+
+Garantiza ATOMICIDAD: todas las operaciones se completan o ninguna se aplica.
+
+VALIDACIONES IMPLEMENTADAS:
+----------------------------
+1. Nombre de rol: no vacío, 3-50 chars, no duplicado
+2. Prefijo "ROL_" obligatorio (agregado automáticamente si falta)
+3. Roles protegidos no eliminables (ROL_Administrador, variantes)
+4. Roles con usuarios asignados no eliminables
+5. Selección de rol/usuario requerida antes de operaciones
+6. Confirmación explícita requerida para eliminaciones
+7. Verificación de existencia de familia antes de operaciones
+8. Verificación de tipo EsRol antes de operaciones con roles
+
+AUDITORÍA EN BITÁCORA:
+----------------------
+Todas estas operaciones se registran con CriticidadBitacora.Advertencia:
+- "CrearRol": "Nuevo rol creado: {nombreCompleto}"
+- "EliminarRol": "Rol eliminado: {nombreCompleto}"
+- "ActualizarPatentes": "Patentes actualizadas para rol {nombre}: {cantidad} patentes asignadas ({primeras 5})"
+- "AsignarPatenteAFamilia": "Patente asignada a familia {nombreFamilia}: {nombrePatente}"
+- "QuitarPatenteDeFamilia": "Patente removida de familia {nombreFamilia}: {nombrePatente}"
+
+Registro incluye: IdUsuario, NombreUsuario, Módulo="Permisos", Acción, Detalle, Fecha=GETDATE()
+
+================================================================================
+ÚLTIMA ACTUALIZACIÓN: 2025-01-16
+VERSIÓN: 1.0
+================================================================================

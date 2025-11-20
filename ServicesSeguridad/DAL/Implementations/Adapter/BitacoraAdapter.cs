@@ -4,11 +4,18 @@ using System;
 
 namespace ServicesSecurity.DAL.Implementations.Adapter
 {
+    /// <summary>
+    /// Adaptador para transformar filas de base de datos en objetos Bitacora (registro de auditoría).
+    /// Implementa el patrón Adapter y Singleton.
+    /// </summary>
     public sealed class BitacoraAdapter : IAdapter<Bitacora>
     {
         #region Singleton
         private readonly static BitacoraAdapter _instance = new BitacoraAdapter();
 
+        /// <summary>
+        /// Obtiene la instancia única del adaptador (patrón Singleton).
+        /// </summary>
         public static BitacoraAdapter Current
         {
             get
@@ -17,6 +24,9 @@ namespace ServicesSecurity.DAL.Implementations.Adapter
             }
         }
 
+        /// <summary>
+        /// Constructor privado para patrón Singleton.
+        /// </summary>
         private BitacoraAdapter()
         {
             // Initialization code
@@ -24,7 +34,7 @@ namespace ServicesSecurity.DAL.Implementations.Adapter
         #endregion
 
         /// <summary>
-        /// Adapta un array de valores de la base de datos a una entidad Bitacora
+        /// Adapta un array de valores de la base de datos a una entidad Bitacora.
         /// Orden esperado: IdBitacora, IdUsuario, NombreUsuario, FechaHora, Modulo, Accion,
         /// Descripcion, Tabla, IdRegistro, Criticidad, IP
         /// </summary>

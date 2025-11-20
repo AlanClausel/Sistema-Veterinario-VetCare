@@ -1,0 +1,792 @@
+================================================================================
+ESPECIFICACIÓN PARA ENTERPRISE ARCHITECT
+CU-A001: INICIAR SESIÓN
+================================================================================
+
+INSTRUCCIONES:
+En Enterprise Architect, haz doble clic en el caso de uso "CU-A001: Iniciar Sesión"
+y copia/pega cada sección en el tab correspondiente.
+
+================================================================================
+TAB: GENERAL
+================================================================================
+
+Name: CU-A001: Iniciar Sesión
+Alias: Login, Autenticación
+Stereotype: <<SystemUseCase>>
+Author: Sistema VetCare
+Status: Approved
+Phase: Implementation
+Version: 1.0
+Complexity: High
+Difficulty: High
+
+================================================================================
+TAB: NOTES (Descripción General)
+================================================================================
+
+Permite a un usuario autenticarse en el sistema mediante nombre de usuario y contraseña. El sistema valida las credenciales, verifica la integridad de los datos del usuario mediante DVH (Dígito Verificador Horizontal), carga sus permisos de forma recursiva utilizando el patrón Composite, registra el evento en la bitácora y sincroniza el registro de veterinario en VetCareDB si corresponde.
+
+Este caso de uso es crítico para la seguridad del sistema y aplica múltiples patrones de diseño: Composite para permisos jerárquicos, Singleton para servicios, Observer para cambio de idioma, Repository para acceso a datos y Static Service para el contexto de sesión.
+
+Componentes principales:
+- UI Layer: Login.cs
+- Service Layer: LoginService, CryptographyService, Bitacora, LanguageManager
+- BLL Layer: ValidationBLL, UsuarioBLL, VeterinarioBLL, BitacoraBLL
+- DAL Layer: UsuarioRepository, FamiliaRepository, PatenteRepository
+- Database: SecurityVet, VetCareDB
+
+================================================================================
+TAB: SPECIFICATION → PRECONDITIONS
+================================================================================
+
+1. El usuario debe estar registrado en la base de datos SecurityVet (tabla Usuario)
+2. El usuario debe tener estado "Activo" (campo Estado != "Bloqueado")
+3. La aplicación debe tener conexión activa a las bases de datos SecurityVet y VetCareDB
+4. Los servicios del sistema deben estar disponibles: LoginService, CryptographyService, Bitacora
+5. Los archivos de recursos de idioma deben existir (idioma.es-AR, idioma.en-GB)
+6. El DVH (Dígito Verificador Horizontal) del usuario debe ser válido (sin compromisos de integridad)
+
+================================================================================
+TAB: SPECIFICATION → POSTCONDITIONS (SUCCESS)
+================================================================================
+
+1. Usuario autenticado con sesión activa almacenada en LoginService._usuarioLogueado (contexto estático)
+2. Todos los permisos del usuario cargados en memoria (colección usuario.Permisos) mediante patrón Composite:
+   - Familias directas del usuario
+   - Familias heredadas (jerarquía recursiva)
+   - Patentes (permisos) de cada familia
+   - Patentes directas del usuario
+3. Evento de login exitoso registrado en tabla Bitacora (base de datos SecurityVet) con:
+   - Acción: "Login"
+   - Criticidad: "Info"
+   - Descripción: "Usuario '[nombre]' inició sesión exitosamente"
+   - FechaHora: timestamp del momento del login
+4. Idioma del sistema configurado según:
+   - Primera prioridad: idioma seleccionado en la pantalla de login (_idiomaSeleccionadoEnLogin)
+   - Segunda prioridad: usuario.IdiomaPreferido
+   - Por defecto: "es-AR"
+5. Si el usuario tiene rol "Veterinario": registro sincronizado en tabla Veterinario de base de datos VetCareDB
+6. Formulario Login oculto (this.Hide())
+7. Formulario Menu principal mostrado (menuForm.Show()) con opciones según permisos del usuario
+8. El menú dinámico construido basado en las Patentes del usuario (permisos de acceso a formularios)
+
+================================================================================
+TAB: SPECIFICATION → POSTCONDITIONS (FAILURE)
+================================================================================
+
+1. Intento de login fallido registrado en tabla Bitacora con:
+   - Acción: "LoginFallido"
+   - Criticidad: "Advertencia"
+   - Descripción: motivo del fallo (usuario no encontrado / contraseña incorrecta / DVH inválido)
+   - IdUsuario: NULL (no se pudo autenticar)
+2. Usuario permanece en la pantalla de login (formulario Login visible)
+3. Campo de contraseña limpiado por seguridad (txtContraseña.Clear())
+4. Foco del cursor movido al campo correspondiente:
+   - Si usuario no existe: foco en txtUsuario
+   - Si contraseña incorrecta: foco en txtContraseña
+5. Mensaje de error mostrado al usuario mediante MessageBox con:
+   - Título traducido según idioma actual
+   - Mensaje de error específico según la excepción capturada
+   - Icono de error o advertencia según severidad
+6. Sesión NO iniciada (LoginService._usuarioLogueado permanece null)
+7. Permisos NO cargados
+
+================================================================================
+TAB: SPECIFICATION → BASIC PATH (Flujo Principal)
+================================================================================
+
+PASO 1: ENTRADA DE CREDENCIALES (UI LAYER)
+El usuario ingresa su Nombre de Usuario en el campo txtUsuario.
+
+PASO 2: ENTRADA DE CONTRASEÑA (UI LAYER)
+El usuario ingresa su Contraseña en el campo txtContraseña.
+
+PASO 3: ACCIÓN DE LOGIN (UI LAYER)
+El usuario hace clic en el botón "Ingresar" (evento: btnIngresar_Click).
+
+PASO 4: VALIDACIÓN DE CAMPOS (BLL LAYER)
+El sistema invoca ValidationBLL.ValidarCredencialesLogin(usuario, contraseña).
+- Valida que el campo usuario no esté vacío
+- Valida que el campo contraseña no esté vacío
+- Si alguna validación falla, lanza ValidacionException
+
+PASO 5: INICIO DE AUTENTICACIÓN (SERVICE LAYER)
+El sistema invoca LoginService.Login(usuario.Trim(), contraseña).
+
+PASO 6: BÚSQUEDA DE USUARIO (DAL LAYER → DATABASE)
+El sistema invoca UsuarioRepository.Current.SelectOneByName(nombreUsuario).
+- Ejecuta stored procedure: Usuario_SelectByUsername
+- Parámetro de entrada: @NombreUsuario (NVARCHAR)
+- Retorna: DataRow con todos los campos del usuario incluido el DVH
+- El repository valida automáticamente el DVH del usuario
+
+PASO 7: VERIFICACIÓN DE EXISTENCIA (SERVICE LAYER)
+El sistema verifica que el usuario existe (usuarioDB != null).
+Si el usuario no existe, se ejecuta el Flujo Alternativo FA-2.
+
+PASO 8: HASHING DE CONTRASEÑA (SERVICE LAYER)
+El sistema invoca CryptographyService.HashPassword(contraseñaIngresada).
+- Algoritmo: SHA256
+- Encoding: Unicode (UTF-16) para compatibilidad con NVARCHAR de SQL Server
+- Retorna: String hexadecimal en mayúsculas (64 caracteres)
+
+PASO 9: COMPARACIÓN DE HASH (SERVICE LAYER)
+El sistema compara el hash generado con el campo usuarioDB.Clave.
+Si no coinciden, se ejecuta el Flujo Alternativo FA-3.
+
+PASO 10: CARGA DE PERMISOS (SERVICE LAYER - PATRÓN COMPOSITE)
+El sistema invoca LoginService.CargarPermisosUsuario(usuario).
+
+  PASO 10.1: INICIALIZACIÓN
+  El sistema limpia la colección de permisos: usuario.Permisos.Clear()
+
+  PASO 10.2: CARGA DE FAMILIAS DIRECTAS
+  El sistema consulta la tabla UsuarioFamilia para obtener las Familias asignadas al usuario.
+  Para cada relación UsuarioFamilia encontrada:
+    - Carga la Familia completa: FamiliaRepository.Current.SelectOne(idFamilia)
+    - Invoca LoginService.CargarHijosDeFamilia(familia) [RECURSIVO]
+    - Agrega la familia a usuario.Permisos
+
+  PASO 10.3: CARGA RECURSIVA DE HIJOS (PATRÓN COMPOSITE)
+  Para cada Familia, el método CargarHijosDeFamilia() ejecuta:
+
+    A) OBTENCIÓN DE FAMILIAS HIJAS:
+       - Ejecuta SP: Familia_Familia_SelectParticular con @IdFamiliaPadre
+       - Obtiene lista de IdFamiliaHija (GUIDs)
+
+    B) PROCESAMIENTO POST-ORDER:
+       Para cada IdFamiliaHija:
+         - Carga la familia hija: FamiliaRepository.Current.SelectOne(idFamiliaHija)
+         - RECURSIÓN: Invoca CargarHijosDeFamilia(familiaHija)
+         - Agrega familia hija al padre: familia.Add(familiaHija)
+
+    C) CARGA DE PATENTES (HOJAS):
+       - Invoca FamiliaPatenteRepository.Current.GetChildren(familia)
+       - Carga todas las Patentes de esta familia
+       - Agrega Patentes como hijos de la familia (nodos hoja del árbol)
+
+  PASO 10.4: CARGA DE PATENTES DIRECTAS
+  El sistema consulta la tabla UsuarioPatente para obtener Patentes asignadas directamente al usuario.
+  Para cada relación UsuarioPatente encontrada:
+    - Carga la Patente: PatenteRepository.Current.SelectOne(idPatente)
+    - Agrega la patente a usuario.Permisos
+
+PASO 11: ALMACENAMIENTO DE SESIÓN (SERVICE LAYER)
+El sistema almacena el usuario autenticado en la variable estática:
+LoginService._usuarioLogueado = usuario
+
+PASO 12: REGISTRO EN BITÁCORA (SERVICE LAYER → DATABASE)
+El sistema invoca Bitacora.Current.RegistrarLogin(usuario.IdUsuario, usuario.Nombre).
+- Invoca BitacoraBLL.Registrar()
+- Ejecuta SP: Bitacora_Insert con los siguientes parámetros:
+  * @IdUsuario: usuario.IdUsuario (GUID)
+  * @NombreUsuario: usuario.Nombre (NVARCHAR)
+  * @Modulo: "Sistema" (NVARCHAR)
+  * @Accion: "Login" (NVARCHAR)
+  * @Descripcion: "Usuario '[nombre]' inició sesión exitosamente" (NVARCHAR)
+  * @Criticidad: "Info" (NVARCHAR)
+  * @FechaHora: DateTime.Now
+  * @Tabla: NULL
+  * @IdRegistro: NULL
+  * @Ip: NULL (opcional)
+
+PASO 13: RETORNO AL FORMULARIO (SERVICE LAYER → UI LAYER)
+LoginService.Login() retorna el objeto Usuario completo al formulario Login.cs.
+
+PASO 14: SINCRONIZACIÓN DE VETERINARIO (BLL LAYER → DATABASE VetCareDB)
+El sistema invoca Login.SincronizarVeterinarioSiCorresponde(usuario).
+
+  PASO 14.1: VERIFICACIÓN DE ROL
+  El sistema obtiene el nombre del rol: nombreRol = usuario.ObtenerNombreRol()
+  Nota: este método retorna "Veterinario" sin el prefijo "ROL_"
+
+  PASO 14.2: VALIDACIÓN DE ROL VETERINARIO
+  Si nombreRol == "Veterinario":
+
+    PASO 14.2.1: VERIFICACIÓN EN VetCareDB
+    El sistema invoca VeterinarioBLL.Current.EsVeterinario(usuario.IdUsuario)
+    - Consulta tabla Veterinario en VetCareDB
+    - Busca por campo IdUsuario (FK a SecurityVet.Usuario)
+
+    PASO 14.2.2: CREACIÓN SI NO EXISTE
+    Si no existe el registro:
+      - Invoca VeterinarioBLL.Current.CrearDesdeUsuario(usuario.IdUsuario, usuario.Nombre)
+      - Ejecuta SP: Veterinario_Insert en VetCareDB
+      - Campos insertados:
+        * IdUsuario: usuario.IdUsuario (FK)
+        * Nombre: usuario.Nombre
+        * Apellido: "" (vacío por defecto)
+        * Matricula: "" (vacío, se completa después)
+        * Especialidad: "" (vacío, se completa después)
+        * Telefono: NULL
+        * Email: NULL
+        * Activo: 1
+
+  PASO 14.3: MANEJO DE ERRORES
+  Si ocurre alguna excepción en este proceso:
+    - Se captura silenciosamente (try-catch)
+    - Se registra en LoggerService con nivel Warning
+    - NO se interrumpe el flujo de login (error no crítico)
+
+PASO 15: REDIRECCIÓN POR ROL (UI LAYER)
+El sistema invoca Login.RedirigirPorRol(usuario).
+
+  PASO 15.1: DETERMINACIÓN DE IDIOMA
+  El sistema determina el idioma a utilizar con la siguiente prioridad:
+    1. _idiomaSeleccionadoEnLogin (si el usuario cambió idioma en la pantalla de login)
+    2. usuario.IdiomaPreferido (idioma almacenado en BD)
+    3. "es-AR" (idioma por defecto)
+
+  Asignación: idiomaAUsar = _idiomaSeleccionadoEnLogin ?? usuario.IdiomaPreferido ?? "es-AR"
+
+  PASO 15.2: APLICACIÓN DE IDIOMA
+  El sistema invoca LanguageManager.CambiarIdioma(idiomaAUsar).
+    - Carga el archivo de recursos correspondiente:
+      * UI/Resources/I18n/idioma.es-AR (para español)
+      * UI/Resources/I18n/idioma.en-GB (para inglés)
+    - Notifica a todos los observers registrados (patrón Observer)
+    - Cada formulario abierto que implemente ILanguageObserver actualiza sus textos
+
+  PASO 15.3: ACTUALIZACIÓN DE IDIOMA PREFERIDO (SI DIFIERE)
+  Si _idiomaSeleccionadoEnLogin no es null Y difiere de usuario.IdiomaPreferido:
+
+    PASO 15.3.1: ACTUALIZACIÓN EN BASE DE DATOS
+    El sistema invoca UsuarioBLL.CambiarIdiomaPreferido(usuario.IdUsuario, _idiomaSeleccionadoEnLogin).
+    - Ejecuta SP: Usuario_UpdateIdioma
+    - Parámetros: @IdUsuario, @IdiomaPreferido
+
+    PASO 15.3.2: ACTUALIZACIÓN EN MEMORIA
+    El sistema actualiza: usuario.IdiomaPreferido = _idiomaSeleccionadoEnLogin
+
+    PASO 15.3.3: MANEJO DE ERRORES
+    Si falla la actualización:
+      - Se captura la excepción
+      - Se registra en Console.WriteLine() (log de consola)
+      - NO se interrumpe el flujo de login
+
+  PASO 15.4: VERIFICACIÓN DE ROL ASIGNADO
+  El sistema invoca usuario.ObtenerNombreRol() para verificar que el usuario tenga al menos un rol.
+  Si el string retornado es vacío o null, se ejecuta el Flujo Alternativo FA-6.
+
+  PASO 15.5: CREACIÓN DEL MENÚ PRINCIPAL
+  El sistema crea una instancia del formulario Menu: menuForm = new menu(usuario)
+  - El constructor del menú recibe el objeto usuario completo
+  - El menú construye dinámicamente las opciones según las Patentes del usuario
+
+  PASO 15.6: VISUALIZACIÓN DEL MENÚ
+  El sistema muestra el formulario menú: menuForm.Show()
+
+  PASO 15.7: OCULTAMIENTO DEL LOGIN
+  El sistema oculta el formulario Login: this.Hide()
+  Nota: No se cierra (Close) sino que se oculta para poder volver si es necesario
+
+PASO 16: USUARIO AUTENTICADO (FIN EXITOSO)
+El usuario está autenticado y ve el menú principal del sistema con las opciones correspondientes a sus permisos.
+
+================================================================================
+TAB: SPECIFICATION → ALTERNATE PATHS
+================================================================================
+
+====================
+FA-1: CAMPOS VACÍOS
+====================
+
+PUNTO DE EXTENSIÓN: Paso 4 (Validación de Campos)
+CONDICIÓN DE ACTIVACIÓN: Usuario o contraseña están vacíos
+
+FA-1.1: El método ValidationBLL.ValidarCredencialesLogin() detecta que uno o ambos campos están vacíos.
+
+FA-1.2: El método lanza excepción ValidacionException con mensaje descriptivo:
+        - "El nombre de usuario es requerido" (si txtUsuario vacío)
+        - "La contraseña es requerida" (si txtContraseña vacío)
+
+FA-1.3: El formulario Login.cs captura la excepción en el bloque catch (ValidacionException vex).
+
+FA-1.4: El sistema muestra MessageBox con:
+        - Mensaje: vex.Message (mensaje de la excepción)
+        - Título: LanguageManager.Translate("error_validacion")
+        - Botones: OK
+        - Icono: Warning
+
+FA-1.5: El usuario hace clic en OK y cierra el MessageBox.
+
+FA-1.6: El usuario permanece en la pantalla de Login.
+
+FA-1.7: FIN DEL CASO DE USO (fallo por validación).
+
+
+==================================
+FA-2: USUARIO NO ENCONTRADO
+==================================
+
+PUNTO DE EXTENSIÓN: Paso 7 (Verificación de Existencia)
+CONDICIÓN DE ACTIVACIÓN: UsuarioRepository.SelectOneByName() retorna null
+
+FA-2.1: El sistema detecta que usuarioDB == null (el usuario no existe en la base de datos).
+
+FA-2.2: El sistema invoca Bitacora.Current.RegistrarLoginFallido(nombreUsuario, "Usuario no encontrado").
+        - Ejecuta SP: Bitacora_Insert con:
+          * @IdUsuario: NULL (no se puede autenticar)
+          * @NombreUsuario: nombreUsuario ingresado por el usuario
+          * @Modulo: "Sistema"
+          * @Accion: "LoginFallido"
+          * @Descripcion: "Intento de login fallido para usuario '[nombreUsuario]': Usuario no encontrado"
+          * @Criticidad: "Advertencia"
+          * @FechaHora: DateTime.Now
+
+FA-2.3: LoginService lanza excepción UsuarioNoEncontradoException(nombreUsuario).
+
+FA-2.4: El formulario Login.cs captura la excepción en el bloque catch (UsuarioNoEncontradoException uex).
+
+FA-2.5: El sistema muestra MessageBox con:
+        - Mensaje: uex.Message (ej: "Usuario 'XXX' no encontrado")
+        - Título: LanguageManager.Translate("error_autenticacion")
+        - Botones: OK
+        - Icono: Error
+
+FA-2.6: El sistema limpia el campo de contraseña: txtContraseña.Clear()
+
+FA-2.7: El sistema mueve el foco al campo de usuario: txtUsuario.Focus()
+
+FA-2.8: El usuario permanece en la pantalla de Login.
+
+FA-2.9: FIN DEL CASO DE USO (fallo por usuario no encontrado).
+
+NOTA DE SEGURIDAD: Por mejores prácticas de seguridad, el mensaje mostrado al usuario debería ser genérico ("Credenciales inválidas") para no revelar si el usuario existe o no. Actualmente el sistema muestra un mensaje específico, lo cual es una vulnerabilidad menor de enumeración de usuarios.
+
+
+==================================
+FA-3: CONTRASEÑA INCORRECTA
+==================================
+
+PUNTO DE EXTENSIÓN: Paso 9 (Comparación de Hash)
+CONDICIÓN DE ACTIVACIÓN: hashGenerado != usuarioDB.Clave
+
+FA-3.1: El sistema detecta que el hash de la contraseña ingresada no coincide con el hash almacenado en la base de datos.
+
+FA-3.2: El sistema invoca Bitacora.Current.RegistrarLoginFallido(nombreUsuario, "Contraseña incorrecta").
+        - Ejecuta SP: Bitacora_Insert con estructura similar a FA-2.2 pero con descripción "Contraseña incorrecta"
+
+FA-3.3: LoginService lanza excepción ContraseñaInvalidaException().
+
+FA-3.4: El formulario Login.cs captura la excepción en el bloque catch (ContraseñaInvalidaException cex).
+
+FA-3.5: El sistema muestra MessageBox con:
+        - Mensaje: cex.Message (ej: "Contraseña incorrecta")
+        - Título: LanguageManager.Translate("error_autenticacion")
+        - Botones: OK
+        - Icono: Error
+
+FA-3.6: El sistema limpia el campo de contraseña: txtContraseña.Clear()
+
+FA-3.7: El sistema mueve el foco al campo de contraseña: txtContraseña.Focus()
+
+FA-3.8: El usuario permanece en la pantalla de Login.
+
+FA-3.9: FIN DEL CASO DE USO (fallo por contraseña incorrecta).
+
+
+===========================================
+FA-4: VIOLACIÓN DE INTEGRIDAD (DVH INVÁLIDO)
+===========================================
+
+PUNTO DE EXTENSIÓN: Paso 6 (Búsqueda de Usuario) o cualquier operación de base de datos
+CONDICIÓN DE ACTIVACIÓN: El DVH calculado no coincide con el DVH almacenado
+
+FA-4.1: Durante la ejecución de UsuarioRepository.SelectOneByName(), el repository calcula el DVH del usuario cargado.
+
+FA-4.2: El repository compara el DVH calculado con el DVH almacenado en la base de datos.
+
+FA-4.3: Si no coinciden, el repository detecta una violación de integridad de datos (datos comprometidos o modificación manual en BD).
+
+FA-4.4: El repository lanza excepción IntegridadException con mensaje descriptivo.
+
+FA-4.5: LoginService captura la IntegridadException en su bloque catch específico.
+
+FA-4.6: El sistema invoca Bitacora.Current.LogCritical() para registrar el evento en archivos de log:
+        - Mensaje: "Intento de login con datos comprometidos: [nombreUsuario] - [detalle del error]"
+        - EventLevel: Critical
+        - Usuario: nombreUsuario
+
+FA-4.7: El sistema invoca Bitacora.Current.RegistrarViolacionDVH():
+        - Ejecuta SP: Bitacora_Insert con:
+          * @Modulo: "Seguridad"
+          * @Accion: "ViolacionDVH"
+          * @Descripcion: "Intento de login con usuario comprometido: [nombreUsuario] - Detalle: [mensaje de error]"
+          * @Criticidad: "Critico"
+          * @FechaHora: DateTime.Now
+
+FA-4.8: LoginService re-lanza la IntegridadException (throw).
+
+FA-4.9: El formulario Login.cs captura la excepción en el bloque catch (Exception ex) genérico.
+
+FA-4.10: El sistema muestra MessageBox con:
+         - Mensaje: LanguageManager.Translate("error_inesperado") + ": " + ex.Message
+         - Título: LanguageManager.Translate("error")
+         - Botones: OK
+         - Icono: Error
+
+FA-4.11: El usuario permanece en la pantalla de Login.
+
+FA-4.12: FIN DEL CASO DE USO (fallo crítico por violación de integridad).
+
+ACCIÓN REQUERIDA DEL ADMINISTRADOR:
+- Investigar la causa de la violación de integridad
+- Verificar si hubo modificación manual en la base de datos
+- Ejecutar script 04_RecalcularDVH.sql para recalcular todos los DVH
+- Verificar logs de auditoría en Bitacora para identificar posibles accesos no autorizados
+
+
+====================================
+FA-5: ERROR GENERAL INESPERADO
+====================================
+
+PUNTO DE EXTENSIÓN: Cualquier paso del flujo principal
+CONDICIÓN DE ACTIVACIÓN: Excepción no controlada (ej: error de conexión BD, timeout, etc.)
+
+FA-5.1: Durante la ejecución del caso de uso, ocurre una excepción no esperada (ej: SqlException, TimeoutException, etc.).
+
+FA-5.2: LoginService captura la excepción en su bloque catch (Exception ex) genérico.
+
+FA-5.3: El sistema invoca Bitacora.Current.LogError() para registrar el error en archivos de log:
+        - Mensaje: "Error inesperado en Login para usuario '[nombreUsuario]': [tipo de excepción] - [mensaje]"
+        - EventLevel: Error
+        - Usuario: "System"
+
+FA-5.4: El sistema invoca ExceptionManager.Current.Handle(ex) para manejo centralizado de excepciones.
+
+FA-5.5: LoginService lanza nueva excepción AutenticacionException("Error al procesar la autenticación", ex) encapsulando la excepción original.
+
+FA-5.6: El formulario Login.cs captura la excepción en el bloque catch (Exception ex) genérico.
+
+FA-5.7: El sistema muestra MessageBox con:
+        - Mensaje: LanguageManager.Translate("error_inesperado") + ": " + ex.Message
+        - Título: LanguageManager.Translate("error")
+        - Botones: OK
+        - Icono: Error
+
+FA-5.8: El usuario permanece en la pantalla de Login.
+
+FA-5.9: FIN DEL CASO DE USO (fallo por error inesperado).
+
+EJEMPLOS DE ERRORES POSIBLES:
+- Error de conexión a base de datos (servidor no disponible)
+- Timeout en consultas SQL (base de datos sobrecargada)
+- Permisos insuficientes en base de datos
+- Archivos de recursos de idioma no encontrados
+- OutOfMemoryException durante carga de permisos
+
+
+================================
+FA-6: USUARIO SIN ROL ASIGNADO
+================================
+
+PUNTO DE EXTENSIÓN: Paso 15.4 (Verificación de Rol Asignado)
+CONDICIÓN DE ACTIVACIÓN: usuario.ObtenerNombreRol() retorna string vacío o null
+
+FA-6.1: El sistema invoca usuario.ObtenerNombreRol() para obtener el nombre del rol principal del usuario.
+
+FA-6.2: El método retorna string vacío o null (el usuario no tiene ninguna Familia asignada).
+
+FA-6.3: El sistema muestra MessageBox con:
+        - Mensaje: LanguageManager.Translate("usuario_sin_rol")
+          (ej: "El usuario no tiene un rol asignado. Contacte al administrador.")
+        - Título: LanguageManager.Translate("error_autorizacion")
+        - Botones: OK
+        - Icono: Error
+
+FA-6.4: El método RedirigirPorRol() ejecuta return sin abrir el menú.
+
+FA-6.5: El usuario permanece en la pantalla de Login.
+
+FA-6.6: FIN DEL CASO DE USO (fallo por falta de autorización).
+
+NOTA IMPORTANTE: El login técnicamente fue exitoso (se registró en bitácora en el Paso 12), pero no se permite acceso al sistema por falta de roles. El administrador debe asignar al menos una Familia al usuario desde el módulo de Gestión de Permisos.
+
+
+============================================
+FA-7: ERROR AL SINCRONIZAR VETERINARIO
+============================================
+
+PUNTO DE EXTENSIÓN: Paso 14 (Sincronización de Veterinario)
+CONDICIÓN DE ACTIVACIÓN: Falla VeterinarioBLL.CrearDesdeUsuario()
+
+FA-7.1: Durante la ejecución de VeterinarioBLL.Current.CrearDesdeUsuario(), ocurre una excepción (ej: error de conexión a VetCareDB, violación de constraint, etc.).
+
+FA-7.2: El método SincronizarVeterinarioSiCorresponde() captura la excepción en su bloque catch.
+
+FA-7.3: El sistema invoca LoggerService.WriteLog() para registrar el error en archivos de log:
+        - Mensaje: "Error al sincronizar veterinario para usuario [nombre]: [mensaje de error]"
+        - EventLevel: Warning (no es error crítico)
+        - Usuario: nombre del usuario
+
+FA-7.4: El sistema NO interrumpe el flujo de login (error silencioso).
+
+FA-7.5: El sistema continúa con el Paso 15 (Redirección por Rol) normalmente.
+
+FA-7.6: El usuario accede al sistema exitosamente.
+
+FA-7.7: CONTINÚA FLUJO PRINCIPAL desde el Paso 15.
+
+NOTA IMPORTANTE: Este error no impide el login porque la sincronización del veterinario es una operación secundaria de consistencia entre bases de datos, no es crítica para la autenticación. El administrador puede crear manualmente el registro de veterinario desde el módulo de Gestión de Veterinarios si es necesario.
+
+ACCIÓN REQUERIDA:
+- Verificar conectividad con VetCareDB
+- Revisar logs en LoggerService para identificar la causa
+- Crear manualmente el registro de veterinario si es necesario
+
+================================================================================
+TAB: SPECIFICATION → CONSTRAINTS
+================================================================================
+
+SEGURIDAD:
+1. Las contraseñas NUNCA se almacenan en texto plano, solo su hash SHA256
+2. El encoding del hash DEBE ser Unicode (UTF-16) para compatibilidad con NVARCHAR de SQL Server
+3. Todos los intentos de login (exitosos y fallidos) DEBEN registrarse en la tabla Bitacora
+4. El DVH (Dígito Verificador Horizontal) DEBE validarse en cada lectura de usuario desde BD
+5. Una violación de DVH DEBE registrarse como evento crítico y debe ser investigada
+6. Los mensajes de error no deben revelar información sensible (idealmente usar mensajes genéricos)
+
+PERFORMANCE:
+1. La carga recursiva de permisos puede generar múltiples consultas a BD (potencial cuello de botella)
+2. Se recomienda optimización futura: usar CTE recursivo en SQL para cargar jerarquía completa en una consulta
+3. El número de niveles de jerarquía de Familias debe ser limitado (máximo recomendado: 5 niveles)
+
+DISPONIBILIDAD:
+1. El sistema requiere conexión simultánea a dos bases de datos: SecurityVet y VetCareDB
+2. Si VetCareDB no está disponible, la sincronización de veterinario falla pero el login continúa
+3. Si SecurityVet no está disponible, el login falla completamente
+
+CONCURRENCIA:
+1. LoginService._usuarioLogueado es variable estática (un solo usuario por instancia de aplicación)
+2. El sistema NO soporta múltiples sesiones simultáneas en la misma instancia
+3. Esto es aceptable para aplicación WinForms de escritorio (una sesión por proceso)
+
+INTEGRIDAD:
+1. El DVH garantiza que los datos del usuario no han sido modificados manualmente en BD
+2. Si se modifica un usuario directamente en SQL, el DVH queda inválido y el login falla
+3. Para corregir DVH: ejecutar script 04_RecalcularDVH.sql
+
+================================================================================
+TAB: SPECIFICATION → EXTENSION POINTS
+================================================================================
+
+1. NOMBRE: validación fallida
+   UBICACIÓN: Paso 4 (después de ValidationBLL.ValidarCredencialesLogin)
+   CONDICIÓN: Campos vacíos o formato inválido
+   CASO DE USO EXTENDIDO: Ninguno (se maneja con excepción ValidacionException)
+
+2. NOMBRE: autenticación fallida
+   UBICACIÓN: Paso 7 (usuario no encontrado) y Paso 9 (contraseña incorrecta)
+   CONDICIÓN: Credenciales inválidas (usuario no existe o contraseña incorrecta)
+   CASO DE USO EXTENDIDO: Registrar Login Fallido
+   DESCRIPCIÓN: Se registra el intento fallido en Bitacora y se lanza excepción específica
+
+3. NOMBRE: integridad comprometida
+   UBICACIÓN: Paso 6 (durante búsqueda de usuario en BD)
+   CONDICIÓN: DVH calculado no coincide con DVH almacenado
+   CASO DE USO EXTENDIDO: Registrar Violación DVH
+   DESCRIPCIÓN: Se registra evento crítico en Bitacora y archivos de log, se lanza IntegridadException
+
+================================================================================
+TAB: SCENARIOS (Escenarios de Prueba)
+================================================================================
+
+ESCENARIO 1: LOGIN EXITOSO - USUARIO ADMINISTRADOR
+Tipo: Success Path
+Actor: Administrador
+Precondiciones: Usuario "admin" existe con contraseña "admin123", rol "ROL_Administrador"
+Datos de entrada:
+  - Usuario: admin
+  - Contraseña: admin123
+Resultado esperado:
+  - Login exitoso
+  - Registro en Bitacora con acción "Login"
+  - Permisos de administrador cargados (todas las Familias y Patentes)
+  - Menú completo mostrado con todas las opciones
+  - Idioma: es-AR (por defecto)
+
+ESCENARIO 2: LOGIN EXITOSO - USUARIO VETERINARIO
+Tipo: Success Path
+Actor: Veterinario
+Precondiciones: Usuario "vet001" existe con rol "ROL_Veterinario"
+Datos de entrada:
+  - Usuario: vet001
+  - Contraseña: [contraseña válida]
+Resultado esperado:
+  - Login exitoso
+  - Registro sincronizado en tabla Veterinario de VetCareDB
+  - Permisos de veterinario cargados
+  - Menú mostrado con opciones de veterinario (Mis Citas, Consultas Médicas)
+
+ESCENARIO 3: CAMPOS VACÍOS
+Tipo: Alternate Path (FA-1)
+Datos de entrada:
+  - Usuario: [vacío]
+  - Contraseña: [vacío]
+Resultado esperado:
+  - ValidacionException lanzada
+  - MessageBox: "El nombre de usuario es requerido"
+  - Usuario permanece en login
+
+ESCENARIO 4: USUARIO NO ENCONTRADO
+Tipo: Alternate Path (FA-2)
+Datos de entrada:
+  - Usuario: usuarioInexistente
+  - Contraseña: cualquiera
+Resultado esperado:
+  - Registro en Bitacora: acción "LoginFallido", motivo "Usuario no encontrado"
+  - MessageBox con error de autenticación
+  - Foco en campo usuario
+
+ESCENARIO 5: CONTRASEÑA INCORRECTA
+Tipo: Alternate Path (FA-3)
+Datos de entrada:
+  - Usuario: admin
+  - Contraseña: contraseñaIncorrecta
+Resultado esperado:
+  - Registro en Bitacora: acción "LoginFallido", motivo "Contraseña incorrecta"
+  - MessageBox con error de autenticación
+  - Campo contraseña limpiado
+  - Foco en campo contraseña
+
+ESCENARIO 6: DVH INVÁLIDO
+Tipo: Alternate Path (FA-4)
+Precondiciones: Registro de usuario modificado manualmente en BD, DVH no recalculado
+Datos de entrada:
+  - Usuario: usuarioConDVHInvalido
+  - Contraseña: [contraseña válida]
+Resultado esperado:
+  - IntegridadException lanzada
+  - Registro en Bitacora: acción "ViolacionDVH", criticidad "Critico"
+  - Registro en LoggerService con EventLevel.Critical
+  - MessageBox con error inesperado
+  - Login fallido
+
+ESCENARIO 7: USUARIO SIN ROL
+Tipo: Alternate Path (FA-6)
+Precondiciones: Usuario existe pero no tiene Familias asignadas
+Datos de entrada:
+  - Usuario: usuarioSinRol
+  - Contraseña: [contraseña válida]
+Resultado esperado:
+  - Login exitoso hasta el paso 12 (registrado en Bitacora)
+  - MessageBox: "usuario_sin_rol" (contactar administrador)
+  - No se abre menú
+  - Usuario permanece en login
+
+ESCENARIO 8: CAMBIO DE IDIOMA EN LOGIN
+Tipo: Success Path con variante
+Precondiciones: Usuario con IdiomaPreferido = "es-AR"
+Datos de entrada:
+  - Usuario: admin
+  - Contraseña: admin123
+  - Acción previa: Click en "English" antes de ingresar
+Resultado esperado:
+  - Login exitoso
+  - Idioma cambiado a "en-GB"
+  - IdiomaPreferido actualizado en BD
+  - Menú mostrado en inglés
+
+ESCENARIO 9: PERMISOS JERÁRQUICOS
+Tipo: Success Path - Validación de Composite
+Precondiciones: Usuario con familia "ROL_Supervisor" que contiene "ROL_Usuario"
+Datos de entrada:
+  - Usuario: supervisor001
+  - Contraseña: [contraseña válida]
+Resultado esperado:
+  - Login exitoso
+  - Permisos cargados recursivamente
+  - usuario.Permisos contiene:
+    * Familia "ROL_Supervisor" con sus hijos:
+      - Familia "ROL_Usuario" con sus Patentes
+      - Patentes directas de ROL_Supervisor
+  - Menú con opciones de ambos roles
+
+ESCENARIO 10: ERROR DE CONEXIÓN BD
+Tipo: Alternate Path (FA-5)
+Precondiciones: Servidor de BD no disponible
+Datos de entrada:
+  - Usuario: admin
+  - Contraseña: admin123
+Resultado esperado:
+  - SqlException capturada
+  - Registro en LoggerService
+  - AutenticacionException lanzada
+  - MessageBox con error inesperado
+  - Login fallido
+
+================================================================================
+TAB: REQUIREMENTS (Requisitos Relacionados)
+================================================================================
+
+REQ-SEC-001: Autenticación de Usuarios
+Descripción: El sistema debe validar la identidad de los usuarios mediante credenciales únicas
+Tipo: Funcional - Seguridad
+Prioridad: Crítica
+Estado: Implementado
+
+REQ-SEC-002: Gestión de Permisos por Roles
+Descripción: El sistema debe implementar control de acceso basado en roles (RBAC) con jerarquía
+Tipo: Funcional - Seguridad
+Prioridad: Crítica
+Estado: Implementado
+Patrón: Composite
+
+REQ-SEC-003: Auditoría de Accesos
+Descripción: El sistema debe registrar todos los intentos de login exitosos y fallidos
+Tipo: Funcional - Seguridad
+Prioridad: Alta
+Estado: Implementado
+Tabla: SecurityVet.Bitacora
+
+REQ-SEC-004: Integridad de Datos (DVH)
+Descripción: El sistema debe validar la integridad de los datos de usuario mediante DVH
+Tipo: Funcional - Seguridad
+Prioridad: Alta
+Estado: Implementado
+Algoritmo: SHA256
+
+REQ-FUN-001: Soporte Multi-Idioma
+Descripción: El sistema debe soportar múltiples idiomas (es-AR, en-GB)
+Tipo: Funcional - Usabilidad
+Prioridad: Media
+Estado: Implementado
+Patrón: Observer
+
+REQ-NFR-001: Seguridad de Contraseñas
+Descripción: Las contraseñas deben almacenarse hasheadas (nunca en texto plano)
+Tipo: No Funcional - Seguridad
+Prioridad: Crítica
+Estado: Implementado
+Algoritmo: SHA256 + Unicode
+
+REQ-NFR-002: Trazabilidad de Acciones
+Descripción: Todas las acciones críticas deben ser auditables
+Tipo: No Funcional - Auditabilidad
+Prioridad: Alta
+Estado: Implementado
+
+REQ-INT-001: Sincronización entre Bases de Datos
+Descripción: Los usuarios con rol Veterinario deben tener registro en VetCareDB
+Tipo: Integridad Referencial
+Prioridad: Media
+Estado: Implementado
+
+================================================================================
+FIN DEL TEMPLATE PARA ENTERPRISE ARCHITECT
+================================================================================
+
+INSTRUCCIONES FINALES:
+
+1. Abre Enterprise Architect
+2. Importa el diagrama desde el archivo .puml o .xmi
+3. Haz doble clic en el caso de uso "CU-A001: Iniciar Sesión"
+4. Copia/pega cada sección de este archivo en el tab correspondiente de EA
+5. Guarda los cambios
+
+Con esto tendrás el caso de uso completamente documentado en Enterprise Architect
+con toda la especificación detallada basada en el código real del sistema.
+
+¿Necesitas la especificación de otro caso de uso?

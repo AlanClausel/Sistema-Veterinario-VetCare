@@ -1,0 +1,288 @@
+@startuml CU-A004_ConsultarBitacora
+
+' ============================================================================
+' CASO DE USO: CU-A004 - CONSULTAR BITÁCORA
+' Sistema: VetCare - Veterinaria
+' Módulo: Auditoría
+' Tipo: Arquitectura/Consulta
+' ============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+
+' ============================================================================
+' ACTORES
+' ============================================================================
+
+actor "Administrador" as Admin #LightBlue
+
+' ============================================================================
+' CASOS DE USO PRINCIPALES
+' ============================================================================
+
+rectangle "CU-A004: Consultar Bitácora" {
+
+  usecase "Consultar Bitácora" as UC_ConsultarBitacora #Technology
+
+  ' --- Operaciones principales ---
+  usecase "Filtrar Registros\npor Criterios" as UC_FiltrarRegistros
+  usecase "Exportar a Excel" as UC_ExportarExcel
+  usecase "Limpiar Filtros" as UC_LimpiarFiltros
+  usecase "Actualizar Registros" as UC_ActualizarRegistros
+
+  ' --- Operaciones de soporte ---
+  usecase "Cargar Registros\ndesde BD" as UC_CargarRegistros
+  usecase "Aplicar Colores\npor Criticidad" as UC_AplicarColores
+  usecase "Actualizar ComboBoxes\nDinámicos" as UC_ActualizarCombos
+  usecase "Validar Rango\nde Fechas" as UC_ValidarRangoFechas
+  usecase "Generar Archivo\nExcel" as UC_GenerarExcel
+
+  ' --- Flujos alternativos ---
+  usecase "Sin Resultados\nEncontrados" as UC_SinResultados
+  usecase "Error al Cargar\nRegistros" as UC_ErrorCargar
+  usecase "Error al Exportar" as UC_ErrorExportar
+  usecase "Cancelar Exportación" as UC_CancelarExportacion
+
+}
+
+' ============================================================================
+' RELACIONES DEL ACTOR PRINCIPAL
+' ============================================================================
+
+Admin --> UC_ConsultarBitacora : "Consulta historial\n de auditoría"
+
+' ============================================================================
+' RELACIONES INCLUDE (SIEMPRE EJECUTADAS)
+' ============================================================================
+
+UC_ConsultarBitacora .down.> UC_FiltrarRegistros : <<include>>
+UC_ConsultarBitacora .down.> UC_ExportarExcel : <<include>>
+UC_ConsultarBitacora .down.> UC_LimpiarFiltros : <<include>>
+UC_ConsultarBitacora .down.> UC_ActualizarRegistros : <<include>>
+
+' Filtrar y Cargar usan las mismas operaciones
+UC_FiltrarRegistros .down.> UC_CargarRegistros : <<include>>
+UC_LimpiarFiltros .down.> UC_CargarRegistros : <<include>>
+UC_ActualizarRegistros .down.> UC_CargarRegistros : <<include>>
+
+' Cargar registros siempre aplica colores y actualiza combos
+UC_CargarRegistros .down.> UC_AplicarColores : <<include>>
+UC_CargarRegistros .down.> UC_ActualizarCombos : <<include>>
+
+' Filtrar valida fechas
+UC_FiltrarRegistros .down.> UC_ValidarRangoFechas : <<include>>
+
+' Exportar genera archivo
+UC_ExportarExcel .down.> UC_GenerarExcel : <<include>>
+
+' ============================================================================
+' RELACIONES EXTEND (CONDICIONALES/OPCIONALES)
+' ============================================================================
+
+UC_SinResultados .up.> UC_FiltrarRegistros : <<extend>>\n[0 registros encontrados]
+UC_ErrorCargar .up.> UC_CargarRegistros : <<extend>>\n[SQLException]
+UC_ErrorExportar .up.> UC_GenerarExcel : <<extend>>\n[IOException, error escritura]
+UC_CancelarExportacion .up.> UC_ExportarExcel : <<extend>>\n[usuario cancela SaveFileDialog]
+
+' ============================================================================
+' NOTAS TÉCNICAS
+' ============================================================================
+
+note right of UC_ConsultarBitacora
+  **CU-A004: Consultar Bitácora**
+  ================================
+  **Propósito:** Consultar historial de
+  auditoría con filtros avanzados.
+
+  **5 Operaciones Principales:**
+  1. Filtrar Registros (fecha, módulo,
+     acción, criticidad)
+  2. Exportar a Excel
+  3. Limpiar Filtros (reset a defecto)
+  4. Actualizar Registros (refrescar)
+  5. Visualizar con colores por criticidad
+
+  **Tipo:** SOLO LECTURA
+  (No modifica registros de bitácora)
+
+  **Formulario:** FormBitacora.cs
+  **Base de Datos:** SecurityVet.Bitacora
+end note
+
+note left of UC_AplicarColores
+  **COLORES POR CRITICIDAD**
+  ==========================
+  - CRÍTICO: Rojo claro + texto rojo oscuro
+    (LightCoral + DarkRed)
+
+  - ERROR: Naranja claro
+    (LightSalmon)
+
+  - ADVERTENCIA: Amarillo claro
+    (LightYellow)
+
+  - INFO: Blanco
+    (White)
+
+  Aplicado automáticamente en
+  evento CellFormatting del grid.
+end note
+
+note left of UC_FiltrarRegistros
+  **FILTROS DISPONIBLES**
+  =======================
+  1. **Fecha Desde / Hasta**
+     - DateTimePicker con checkbox
+     - Defecto: últimos 7 días
+     - Opcional (checkbox desmarcado)
+
+  2. **Módulo**
+     - ComboBox dinámico
+     - Opción "Todos"
+     - Ejemplos: Login, Usuarios, Permisos
+
+  3. **Acción**
+     - ComboBox dinámico
+     - Opción "Todos"
+     - Ejemplos: Login, Alta, Baja, Modificacion
+
+  4. **Criticidad**
+     - ComboBox fijo
+     - Opciones: Todos, Info, Advertencia,
+       Error, Crítico
+
+  **Límite:** 1000 registros por consulta
+end note
+
+note right of UC_ExportarExcel
+  **EXPORTACIÓN A EXCEL**
+  =======================
+  - Formato: .xlsx
+  - Nombre sugerido:
+    "Bitacora_yyyyMMdd_HHmmss.xlsx"
+
+  - Exporta TODOS los registros
+    filtrados (no solo visibles)
+
+  - Columnas exportadas:
+    * Fecha y Hora
+    * Usuario
+    * Módulo
+    * Acción
+    * Descripción
+    * Criticidad
+    * Tabla
+    * IP
+
+  - Usa librería externa para
+    generación de Excel
+end note
+
+note bottom of UC_CargarRegistros
+  **CARGA DE REGISTROS**
+  ======================
+  Llama: BitacoraBLL.ObtenerPorFiltros(
+    fechaDesde, fechaHasta, idUsuario,
+    modulo, accion, criticidad, top=1000)
+
+  Ejecuta SP: Bitacora_SelectPorFiltros
+  con WHERE dinámico:
+  - AND FechaHora >= @FechaDesde (opcional)
+  - AND FechaHora <= @FechaHasta (opcional)
+  - AND Modulo = @Modulo (opcional)
+  - AND Accion = @Accion (opcional)
+  - AND Criticidad = @Criticidad (opcional)
+  - TOP 1000
+
+  Retorna: List<Bitacora>
+end note
+
+note bottom of UC_ActualizarCombos
+  **COMBOS DINÁMICOS**
+  ====================
+  Después de cargar registros,
+  actualiza ComboBoxes con valores
+  DISTINTOS encontrados:
+
+  - Módulos: SELECT DISTINCT Modulo
+    FROM registros cargados
+
+  - Acciones: SELECT DISTINCT Accion
+    FROM registros cargados
+
+  Permite filtrar solo por valores
+  que existen en el resultado actual.
+
+  Preserva selección anterior si
+  el valor todavía existe.
+end note
+
+note left of UC_SinResultados
+  **SIN RESULTADOS**
+  ==================
+  NO es un error.
+  Es un resultado válido.
+
+  Comportamiento:
+  - Grid vacío
+  - Contador: "Total: 0"
+  - ComboBoxes solo con "Todos"
+  - NO muestra MessageBox
+end note
+
+note left of UC_ErrorCargar
+  **ERROR AL CARGAR**
+  ===================
+  Si BitacoraBLL.ObtenerPorFiltros()
+  lanza SQLException:
+
+  1. Captura en catch
+  2. MessageBox con mensaje de error
+  3. Registra excepción en Bitácora
+     (ironía: error al leer bitácora
+     se registra en bitácora)
+  4. Grid queda vacío
+end note
+
+' ============================================================================
+' METADATOS
+' ============================================================================
+
+legend bottom
+  **ARCHIVOS RELACIONADOS:**
+  - Especificación: CU-A004_Template_EA.txt
+  - Código UI: UI/WinUi/Administración/FormBitacora.cs (346 líneas)
+  - Código BLL: ServicesSeguridad/BLL/BitacoraBLL.cs (207 líneas)
+  - Código DAL: ServicesSeguridad/DAL/Implementations/BitacoraRepository.cs
+  - Utilidad Excel: (librería externa)
+
+  **STORED PROCEDURES:**
+  - Bitacora_SelectPorFiltros (con filtros dinámicos)
+  - Bitacora_SelectAll (todos los registros)
+  - Bitacora_SelectPorUsuario (de un usuario específico)
+  - Bitacora_SelectPorRangoFechas (rango de fechas)
+
+  **PATRONES APLICADOS:**
+  - Singleton: BitacoraBLL (estático), BitacoraRepository (.Current)
+  - Repository: Abstracción de acceso a datos
+  - Adapter: BitacoraAdapter (DataRow → Bitacora entity)
+
+  **CARACTERÍSTICAS:**
+  - SOLO LECTURA (no modifica registros)
+  - Filtros opcionales combinables
+  - Colores automáticos por criticidad
+  - Exportación a Excel
+  - Límite de 1000 registros por performance
+  - ComboBoxes dinámicos basados en datos
+
+  **CRITICIDAD (ENUM):**
+  - Info: Operaciones normales
+  - Advertencia: Operaciones administrativas importantes
+  - Error: Errores de operaciones, excepciones
+  - Crítico: Fallas graves, violaciones de seguridad
+
+  **ÚLTIMA ACTUALIZACIÓN:** 2025-01-16
+  **VERSIÓN:** 1.0
+endlegend
+
+@enduml

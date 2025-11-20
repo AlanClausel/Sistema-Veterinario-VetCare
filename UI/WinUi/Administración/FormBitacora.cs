@@ -324,7 +324,22 @@ namespace UI.WinUi.Administrador
 
                 if (saveFileDialog.ShowDialog() == DialogResult.OK)
                 {
-                    ExportarAExcel.Exportar(_registros, saveFileDialog.FileName);
+                    // Definir columnas a exportar
+                    var columnas = new Dictionary<string, Func<ServicesSecurity.DomainModel.Security.Bitacora, string>>
+                    {
+                        { "Fecha y Hora", r => r.FechaHora.ToString("dd/MM/yyyy HH:mm:ss") },
+                        { "Usuario", r => r.NombreUsuario },
+                        { "Módulo", r => r.Modulo },
+                        { "Acción", r => r.Accion },
+                        { "Descripción", r => r.Descripcion },
+                        { "Criticidad", r => r.Criticidad },
+                        { "Tabla", r => r.Tabla },
+                        { "IP", r => r.IP }
+                    };
+
+                    // Exportar usando el servicio genérico
+                    ExportarAExcel.Current.ExportarACSV(_registros.ToList(), saveFileDialog.FileName, columnas);
+
                     MessageBox.Show("Registros exportados exitosamente", "Éxito",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }

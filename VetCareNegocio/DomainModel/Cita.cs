@@ -4,15 +4,31 @@ using System.Collections.Generic;
 namespace DomainModel
 {
     /// <summary>
-    /// Entidad de dominio que representa una Cita veterinaria
+    /// Entidad de dominio que representa una Cita veterinaria.
+    /// Gestiona las citas programadas entre mascotas y veterinarios, incluyendo su estado y seguimiento.
     /// </summary>
     public class Cita
     {
         #region Propiedades
 
+        /// <summary>
+        /// Identificador único de la cita (GUID)
+        /// </summary>
         public Guid IdCita { get; set; }
+
+        /// <summary>
+        /// Identificador de la mascota para esta cita (FK a Mascota)
+        /// </summary>
         public Guid IdMascota { get; set; }
+
+        /// <summary>
+        /// Fecha y hora programada para la cita
+        /// </summary>
         public DateTime FechaCita { get; set; }
+
+        /// <summary>
+        /// Tipo de consulta a realizar (Ej: Vacunación, Consulta general, Cirugía, etc.)
+        /// </summary>
         public string TipoConsulta { get; set; }
 
         /// <summary>
@@ -21,23 +37,66 @@ namespace DomainModel
         public Guid? IdVeterinario { get; set; }
 
         /// <summary>
-        /// Nombre del veterinario (campo legacy, se mantiene para compatibilidad)
+        /// Nombre del veterinario (campo legacy, se mantiene para compatibilidad).
         /// DEPRECATED: Usar IdVeterinario en nuevas citas
         /// </summary>
         public string Veterinario { get; set; }
 
+        /// <summary>
+        /// Estado actual de la cita (Agendada, Confirmada, Completada, Cancelada, NoAsistio)
+        /// </summary>
         public EstadoCita Estado { get; set; }
+
+        /// <summary>
+        /// Observaciones adicionales sobre la cita
+        /// </summary>
         public string Observaciones { get; set; }
+
+        /// <summary>
+        /// Fecha y hora en que se registró la cita en el sistema
+        /// </summary>
         public DateTime FechaRegistro { get; set; }
+
+        /// <summary>
+        /// Indica si la cita está activa en el sistema (para baja lógica)
+        /// </summary>
         public bool Activo { get; set; }
 
         // Propiedades de navegación (no mapeadas directamente desde DB)
+
+        /// <summary>
+        /// Objeto Mascota asociado a esta cita (propiedad de navegación)
+        /// </summary>
         public Mascota Mascota { get; set; }
+
+        /// <summary>
+        /// Nombre de la mascota (campo desnormalizado para optimización de consultas)
+        /// </summary>
         public string MascotaNombre { get; set; }
+
+        /// <summary>
+        /// Nombre del cliente dueño de la mascota (campo desnormalizado)
+        /// </summary>
         public string ClienteNombre { get; set; }
+
+        /// <summary>
+        /// Apellido del cliente dueño de la mascota (campo desnormalizado)
+        /// </summary>
         public string ClienteApellido { get; set; }
+
+        /// <summary>
+        /// DNI del cliente dueño de la mascota (campo desnormalizado)
+        /// </summary>
         public string ClienteDNI { get; set; }
+
+        /// <summary>
+        /// Teléfono del cliente dueño de la mascota (campo desnormalizado)
+        /// </summary>
         public string ClienteTelefono { get; set; }
+
+        /// <summary>
+        /// Identificador del cliente dueño de la mascota (campo desnormalizado)
+        /// </summary>
         public Guid IdCliente { get; set; }
 
         #endregion
@@ -124,6 +183,10 @@ namespace DomainModel
 
         #region Constructores
 
+        /// <summary>
+        /// Constructor por defecto. Inicializa una nueva cita con valores predeterminados.
+        /// Genera un nuevo GUID, establece el estado como Agendada y marca la cita como activa.
+        /// </summary>
         public Cita()
         {
             IdCita = Guid.NewGuid();
@@ -138,32 +201,38 @@ namespace DomainModel
         #region Métodos
 
         /// <summary>
-        /// Verifica si la cita puede ser modificada según su estado
+        /// Verifica si la cita puede ser modificada según su estado actual.
+        /// Solo se pueden modificar citas en estado Agendada o Confirmada.
         /// </summary>
+        /// <returns>True si la cita puede ser modificada, false en caso contrario</returns>
         public bool PuedeSerModificada()
         {
             return Estado == EstadoCita.Agendada || Estado == EstadoCita.Confirmada;
         }
 
         /// <summary>
-        /// Verifica si la cita puede ser cancelada
+        /// Verifica si la cita puede ser cancelada según su estado actual.
+        /// Solo se pueden cancelar citas en estado Agendada o Confirmada.
         /// </summary>
+        /// <returns>True si la cita puede ser cancelada, false en caso contrario</returns>
         public bool PuedeSerCancelada()
         {
             return Estado == EstadoCita.Agendada || Estado == EstadoCita.Confirmada;
         }
 
         /// <summary>
-        /// Verifica si la cita ya ocurrió (fecha pasada)
+        /// Verifica si la cita ya ocurrió comparando la fecha con la fecha actual
         /// </summary>
+        /// <returns>True si la fecha de la cita es anterior a la fecha actual, false en caso contrario</returns>
         public bool EsCitaPasada()
         {
             return FechaCita < DateTime.Now;
         }
 
         /// <summary>
-        /// Verifica si la cita es del día de hoy
+        /// Verifica si la cita está programada para el día de hoy
         /// </summary>
+        /// <returns>True si la cita es para hoy, false en caso contrario</returns>
         public bool EsCitaHoy()
         {
             return FechaCita.Date == DateTime.Today;
@@ -174,8 +243,10 @@ namespace DomainModel
         #region Validaciones
 
         /// <summary>
-        /// Valida que los datos de la cita sean correctos
+        /// Valida que los datos de la cita cumplan con las reglas de negocio.
+        /// Verifica campos obligatorios, longitudes máximas y consistencia de datos.
         /// </summary>
+        /// <returns>Lista de mensajes de error. Si está vacía, la cita es válida</returns>
         public List<string> Validar()
         {
             var errores = new List<string>();
@@ -216,10 +287,29 @@ namespace DomainModel
     /// </summary>
     public enum EstadoCita
     {
+        /// <summary>
+        /// Cita creada y agendada, pendiente de confirmación
+        /// </summary>
         Agendada,
+
+        /// <summary>
+        /// Cita confirmada por el cliente
+        /// </summary>
         Confirmada,
+
+        /// <summary>
+        /// Cita completada con consulta médica finalizada
+        /// </summary>
         Completada,
+
+        /// <summary>
+        /// Cita cancelada por el cliente o la clínica
+        /// </summary>
         Cancelada,
+
+        /// <summary>
+        /// Cliente no asistió a la cita programada
+        /// </summary>
         NoAsistio
     }
 }

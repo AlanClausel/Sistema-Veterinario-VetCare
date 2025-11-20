@@ -1,0 +1,376 @@
+@startuml CU-N010_DiagramaSecuencia_Resumido
+title CU-N010: Gestionar Medicamentos - Diagrama de Secuencia (Resumido)
+
+actor "Usuario\n(Admin/Vet)" as User
+participant "FormGestionMedicamentos" as Form
+participant "MedicamentoBLL" as BLL
+participant "MedicamentoRepository" as Repo
+participant "MedicamentoAdapter" as Adapter
+participant "Bitacora" as Bitacora
+participant "LoginService" as Login
+database "VetCareDB" as DB
+
+== 1. Listar Medicamentos (Carga Inicial con Alertas Visuales) ==
+
+User -> Form: Accede a "Gestión de Medicamentos"
+activate Form
+
+Form -> Form: FormGestionMedicamentos_Load()
+Form -> Form: CargarMedicamentos()
+activate Form #LightGray
+
+Form -> BLL: ListarMedicamentosActivos()
+activate BLL
+
+BLL -> Repo: ObtenerTodos()
+activate Repo
+
+Repo -> DB: EXEC Medicamento_SelectAll
+activate DB
+note over DB
+    SELECT * FROM Medicamento
+    WHERE Activo = 1
+    ORDER BY Nombre
+end note
+DB --> Repo: DataTable (medicamentos activos)
+deactivate DB
+
+Repo -> Adapter: AdaptarListaDesdeDataTable(dataTable)
+activate Adapter
+Adapter --> Repo: List<Medicamento>
+deactivate Adapter
+
+Repo --> BLL: List<Medicamento>
+deactivate Repo
+
+BLL --> Form: List<Medicamento>
+deactivate BLL
+
+Form -> Form: dgvMedicamentos.DataSource = medicamentos
+
+Form -> Form: ColorearFilasStockBajo()
+activate Form #LightYellow
+note right
+    Para cada fila:
+    - Si Stock <= StockMinimo:
+      BackColor = LightYellow/Orange (alerta)
+    - Si FechaVencimiento < DateTime.Now:
+      BackColor = LightCoral (vencido)
+    - Caso contrario:
+      BackColor = White
+end note
+deactivate Form
+
+Form -> Form: LimpiarCampos()
+
+deactivate Form
+
+Form --> User: Lista de medicamentos cargada\ncon alertas visuales
+note right
+    Grid muestra:
+    ════════════════════════════════════════════
+    Nombre        | Presentación | Stock | Precio
+    Amoxicilina   | 500mg cápsulas | 15   | $250
+    Ibuprofeno    | 400mg tabletas | 5    | $180 ⚠️ (amarillo)
+    Aspirina      | 100mg tabletas | 0    | $120 🔴 (stock 0)
+    ════════════════════════════════════════════
+end note
+
+deactivate Form
+
+== 2. Registrar Nuevo Medicamento ==
+
+User -> Form: Clic en "Nuevo"
+activate Form
+
+Form -> Form: btnNuevo_Click()
+Form -> Form: LimpiarCampos()
+Form -> Form: _modoEdicion = false
+Form -> Form: Habilita campos de edición
+Form -> Form: numStock.Value = 0
+Form -> Form: numStockMinimo.Value = 10 (defecto)
+
+Form --> User: Campos habilitados para ingreso
+deactivate Form
+
+User -> Form: Ingresa datos:\n- Nombre: "Amoxicilina"\n- Presentación: "500mg cápsulas"\n- Stock: 50\n- Stock Mínimo: 10\n- Precio: $250.00\n- Fecha Vencimiento: 31/12/2026
+
+User -> Form: Clic en "Guardar"
+activate Form
+
+Form -> Form: btnGuardar_Click()
+
+Form -> Form: ValidarCampos()
+activate Form #LightCyan
+note right
+    Validaciones UI:
+    - Nombre NO vacío
+    - Presentación NO vacía
+    - Stock >= 0
+    - StockMinimo >= 0
+    - PrecioUnitario > 0
+    - FechaVencimiento > hoy (si ingresada)
+end note
+Form --> Form: Validación OK
+deactivate Form
+
+Form -> Form: Crea entidad Medicamento:\nIdMedicamento = Guid.NewGuid()\nNombre = "Amoxicilina"\nPresentacion = "500mg cápsulas"\nStock = 50\nStockMinimo = 10\nPrecioUnitario = 250.00\nFechaVencimiento = 31/12/2026
+
+Form -> BLL: RegistrarMedicamento(medicamento)
+activate BLL
+
+BLL -> BLL: medicamento.Validar()
+note right
+    Validaciones entidad:
+    - Nombre 3-100 chars
+    - Presentacion requerida
+    - Stock >= 0
+    - PrecioUnitario > 0
+end note
+
+BLL -> Repo: Crear(medicamento)
+activate Repo
+
+Repo -> DB: EXEC Medicamento_Insert\n@IdMedicamento, @Nombre, @Presentacion,\n@Stock, @StockMinimo, @PrecioUnitario,\n@FechaVencimiento
+activate DB
+note over DB
+    INSERT INTO Medicamento (
+        IdMedicamento, Nombre, Presentacion,
+        Stock, StockMinimo, PrecioUnitario,
+        FechaVencimiento, Activo
+    ) VALUES (
+        @IdMedicamento, @Nombre, @Presentacion,
+        @Stock, @StockMinimo, @PrecioUnitario,
+        @FechaVencimiento, 1
+    )
+
+    -- Validación nombre único
+    IF EXISTS (SELECT 1 FROM Medicamento
+               WHERE Nombre = @Nombre
+                 AND Activo = 1
+                 AND IdMedicamento <> @IdMedicamento)
+    BEGIN
+        RAISERROR('Nombre de medicamento ya existe', 16, 1)
+    END
+end note
+DB --> Repo: Filas insertadas: 1
+deactivate DB
+
+Repo --> BLL: void
+deactivate Repo
+
+BLL -> Login: GetUsuarioLogueado()
+activate Login
+Login --> BLL: usuarioLogueado
+deactivate Login
+
+BLL -> Bitacora: RegistrarAlta(\nusuarioLogueado.IdUsuario,\n"Medicamentos",\n"Medicamento",\nmedicamento.IdMedicamento.ToString(),\n"Medicamento registrado: Amoxicilina 500mg - Stock: 50")
+activate Bitacora
+Bitacora --> BLL: void
+deactivate Bitacora
+
+BLL --> Form: medicamento registrado
+deactivate BLL
+
+Form -> Form: Muestra MessageBox:\n"Medicamento registrado exitosamente"
+
+Form -> Form: CargarMedicamentos()
+note right: Recarga lista
+
+Form -> Form: LimpiarCampos()
+
+Form --> User: ✓ Medicamento registrado\nLista actualizada
+
+deactivate Form
+
+== 3. Modificar Medicamento (Actualizar Stock) ==
+
+User -> Form: Selecciona medicamento "Amoxicilina" en grid
+activate Form
+Form -> Form: dgvMedicamentos_SelectionChanged()
+Form -> Form: _medicamentoSeleccionado = (Medicamento)row.DataBoundItem
+Form -> Form: MostrarMedicamentoEnFormulario(medicamento)
+Form --> User: Datos cargados en formulario
+deactivate Form
+
+User -> Form: Modifica Stock: 50 → 30\n(salida de 20 unidades)\nClic "Modificar"
+activate Form
+
+Form -> Form: btnModificar_Click()
+Form -> Form: ValidarCampos()
+
+Form -> BLL: ModificarMedicamento(medicamento)
+activate BLL
+
+BLL -> BLL: medicamento.Validar()
+
+BLL -> Repo: Actualizar(medicamento)
+activate Repo
+
+Repo -> DB: EXEC Medicamento_Update\n@IdMedicamento, @Nombre, @Presentacion,\n@Stock, @StockMinimo, @PrecioUnitario,\n@FechaVencimiento
+activate DB
+note over DB
+    UPDATE Medicamento SET
+      Nombre = @Nombre,
+      Presentacion = @Presentacion,
+      Stock = @Stock,
+      StockMinimo = @StockMinimo,
+      PrecioUnitario = @PrecioUnitario,
+      FechaVencimiento = @FechaVencimiento
+    WHERE IdMedicamento = @IdMedicamento
+end note
+DB --> Repo: Filas actualizadas: 1
+deactivate DB
+
+Repo --> BLL: void
+deactivate Repo
+
+BLL -> Bitacora: RegistrarModificacion(\nusuario, "Medicamentos", "Medicamento",\nidMedicamento,\n"Stock actualizado: 50 → 30")
+activate Bitacora
+Bitacora --> BLL: void
+deactivate Bitacora
+
+BLL --> Form: void
+deactivate BLL
+
+Form -> Form: Muestra mensaje: "Medicamento modificado"
+Form -> Form: CargarMedicamentos()
+Form -> Form: ColorearFilasStockBajo()
+note right
+    Si Stock (30) <= StockMinimo (10):
+    NO se colorea (30 > 10)
+    Si fuera Stock = 8:
+    Fila se colorea amarillo (alerta)
+end note
+
+Form --> User: ✓ Medicamento actualizado
+
+deactivate Form
+
+== 4. Buscar Medicamentos por Nombre ==
+
+User -> Form: Escribe en txtBuscar: "amox"
+activate Form
+
+Form -> Form: txtBuscar_TextChanged()
+
+Form -> BLL: BuscarMedicamentoPorNombre("amox")
+activate BLL
+
+BLL -> Repo: BuscarPorNombre("amox")
+activate Repo
+
+Repo -> DB: EXEC Medicamento_SelectByNombre\n@Nombre='amox'
+activate DB
+note over DB
+    SELECT * FROM Medicamento
+    WHERE Nombre LIKE '%' + @Nombre + '%'
+      AND Activo = 1
+    ORDER BY Nombre
+end note
+DB --> Repo: DataTable (medicamentos coincidentes)
+deactivate DB
+
+Repo --> BLL: List<Medicamento>
+deactivate Repo
+
+BLL --> Form: List<Medicamento> (filtrados)
+deactivate BLL
+
+Form -> Form: dgvMedicamentos.DataSource = medicamentosFiltrados
+Form -> Form: ColorearFilasStockBajo()
+
+Form --> User: Lista filtrada:\n"Amoxicilina 500mg cápsulas"\n"Amoxicilina inyectable 1g"
+
+deactivate Form
+
+== 5. Eliminar Medicamento (Soft Delete con Validación) ==
+
+User -> Form: Selecciona medicamento y clic "Eliminar"
+activate Form
+
+Form -> Form: btnEliminar_Click()
+Form -> Form: Muestra confirmación:\n"¿Está seguro de eliminar\nel medicamento Amoxicilina?"
+
+User -> Form: Confirma (Sí)
+
+Form -> BLL: EliminarMedicamento(idMedicamento)
+activate BLL
+
+BLL -> BLL: ExisteEnConsultas(idMedicamento)
+activate BLL #LightYellow
+
+BLL -> Repo: ExisteEnConsultas(idMedicamento)
+activate Repo
+
+Repo -> DB: EXEC Medicamento_ExisteEnConsultas\n@IdMedicamento
+activate DB
+note over DB
+    SELECT COUNT(*)
+    FROM ConsultaMedicamento
+    WHERE IdMedicamento = @IdMedicamento
+end note
+DB --> Repo: count
+deactivate DB
+
+Repo --> BLL: existe (true/false)
+deactivate Repo
+
+deactivate BLL
+
+alt Medicamento usado en consultas
+    BLL --> Form: throw InvalidOperationException\n"El medicamento está siendo usado\nen consultas médicas"
+    Form -> Form: Muestra MessageBox error
+    Form --> User: ✗ Error: Medicamento en uso\n(no se puede eliminar)
+
+else Medicamento NO usado
+
+    BLL -> Repo: Eliminar(idMedicamento)
+    activate Repo
+
+    Repo -> DB: EXEC Medicamento_Delete @IdMedicamento
+    activate DB
+    note over DB
+        -- Valida uso
+        IF EXISTS (
+            SELECT 1 FROM ConsultaMedicamento
+            WHERE IdMedicamento = @IdMedicamento
+        )
+        BEGIN
+            RAISERROR('Medicamento usado en consultas', 16, 1)
+            RETURN
+        END
+
+        -- Soft delete
+        UPDATE Medicamento
+        SET Activo = 0
+        WHERE IdMedicamento = @IdMedicamento
+    end note
+    DB --> Repo: Filas afectadas: 1
+    deactivate DB
+
+    Repo --> BLL: void
+    deactivate Repo
+
+    BLL -> Bitacora: RegistrarBaja(\nusuario, "Medicamentos", "Medicamento",\nidMedicamento,\n"Medicamento eliminado: Amoxicilina (soft delete)")
+    activate Bitacora
+    Bitacora --> BLL: void
+    deactivate Bitacora
+
+    BLL --> Form: void
+    deactivate BLL
+
+    Form -> Form: Muestra mensaje: "Medicamento eliminado"
+    Form -> Form: CargarMedicamentos()
+    note right
+        El medicamento ya no aparece
+        en la lista (Activo = 0)
+    end note
+
+    Form --> User: ✓ Medicamento eliminado
+
+end
+
+deactivate Form
+
+@enduml

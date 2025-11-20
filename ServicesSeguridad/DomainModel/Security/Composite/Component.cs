@@ -14,30 +14,50 @@ using System.IO;
 namespace ServicesSecurity.DomainModel.Security.Composite
 {
     /// <summary>
-    /// This class (a) declares the interface for objects in the composition, (b)
-    /// implements default behaviour for the interface common to all classes, as
-    /// appropriate, (c) declares an interface for accessing and managing its child
-    /// components, and (d) optionally defines an interface for accessing a component's
-    /// parent in the recursive structure and implements it if that's appropriate.
+    /// Clase abstracta base del patrón Composite para el sistema de permisos.
+    /// Define la interfaz común para objetos en la composición (Familia y Patente).
+    /// Implementa el patrón de diseño Composite para crear una jerarquía de permisos flexible.
     /// </summary>
+    /// <remarks>
+    /// Este patrón permite:
+    /// - Declarar la interfaz para objetos en la composición
+    /// - Implementar comportamiento predeterminado común a todas las clases
+    /// - Declarar una interfaz para acceder y gestionar componentes hijos
+    /// - Tratar uniformemente objetos individuales (Patente) y composiciones (Familia)
+    /// </remarks>
     public abstract class Component
     {
+        /// <summary>
+        /// Identificador único del componente (GUID).
+        /// Puede ser IdPatente o IdFamilia según el tipo concreto.
+        /// </summary>
         public Guid IdComponent { get; set; }
 
-        /// 
-        /// <param name="component"></param>
+        /// <summary>
+        /// Agrega un componente hijo a este componente.
+        /// Para Familia: agrega un hijo a la colección.
+        /// Para Patente: lanza una excepción ya que es un nodo hoja.
+        /// </summary>
+        /// <param name="component">Componente a agregar (Familia o Patente)</param>
+        /// <exception cref="Exception">En Patente, no se pueden agregar hijos a elementos primitivos</exception>
         public abstract void Add(Component component);
 
-        /// 
-        /// <param name="component"></param>
+        /// <summary>
+        /// Remueve un componente hijo de este componente.
+        /// Para Familia: remueve el hijo de la colección.
+        /// Para Patente: lanza una excepción ya que es un nodo hoja.
+        /// </summary>
+        /// <param name="component">Componente a remover (Familia o Patente)</param>
+        /// <exception cref="Exception">En Patente, no se pueden remover hijos de elementos primitivos</exception>
         public abstract void Remove(Component component);
 
         /// <summary>
-        /// Retorna la cantidad de hijos del elemento:
-        /// Patente: 0
-        /// Familia: >0
+        /// Retorna la cantidad de hijos directos del componente.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>
+        /// - Patente: siempre retorna 0 (elemento hoja sin hijos)
+        /// - Familia: retorna el número de componentes hijos (>= 0)
+        /// </returns>
         public abstract int ChildrenCount();
 
     }//end Component

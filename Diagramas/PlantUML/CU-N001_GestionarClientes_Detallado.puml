@@ -1,0 +1,154 @@
+@startuml CU-N001_GestionarClientes_Detallado
+title CU-N001: Gestionar Clientes - Casos de Uso Detallados
+
+left to right direction
+
+' ═══════════════════════════════════════════════════════════════
+'  ACTORES
+' ═══════════════════════════════════════════════════════════════
+
+actor "Administrador" as Admin
+actor "Recepcionista" as Recep
+
+' ═══════════════════════════════════════════════════════════════
+'  CASO DE USO PRINCIPAL
+' ═══════════════════════════════════════════════════════════════
+
+package "CU-N001: Gestión de Clientes" {
+
+    ' Caso de uso principal (contenedor)
+    usecase "Gestionar Clientes" as UCPrincipal
+
+    ' Casos de uso específicos (CRUD)
+    usecase "CU-N001.1\nRegistrar Cliente" as UC1_1
+    usecase "CU-N001.2\nModificar Cliente" as UC1_2
+    usecase "CU-N001.3\nDar de Baja Cliente" as UC1_3
+    usecase "CU-N001.4\nBuscar Cliente" as UC1_4
+    usecase "CU-N001.5\nListar Clientes" as UC1_5
+    usecase "CU-N001.6\nVer Detalle Cliente" as UC1_6
+
+    ' Casos de uso relacionados
+    usecase "Validar DNI Único" as UCValidarDNI
+    usecase "Validar Email" as UCValidarEmail
+    usecase "Registrar en Bitácora" as UCBitacora
+
+    ' Navegación a mascotas
+    usecase "CU-N002\nGestionar Mascotas\ndel Cliente" as UCMascotas
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES CON ACTORES
+' ═══════════════════════════════════════════════════════════════
+
+Admin --> UC1_1
+Admin --> UC1_2
+Admin --> UC1_3
+Admin --> UC1_4
+Admin --> UC1_5
+Admin --> UC1_6
+
+Recep --> UC1_1
+Recep --> UC1_2
+Recep --> UC1_3
+Recep --> UC1_4
+Recep --> UC1_5
+Recep --> UC1_6
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES <<include>> - Validaciones Obligatorias
+' ═══════════════════════════════════════════════════════════════
+
+UC1_1 ..> UCValidarDNI : <<include>>
+UC1_1 ..> UCValidarEmail : <<include>>
+UC1_1 ..> UCBitacora : <<include>>
+
+UC1_2 ..> UCValidarDNI : <<include>>
+UC1_2 ..> UCValidarEmail : <<include>>
+UC1_2 ..> UCBitacora : <<include>>
+
+UC1_3 ..> UCBitacora : <<include>>
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES <<extend>> - Navegación Opcional
+' ═══════════════════════════════════════════════════════════════
+
+UC1_6 ..> UCMascotas : <<extend>>
+UC1_4 ..> UC1_6 : <<extend>>
+UC1_5 ..> UC1_6 : <<extend>>
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of UC1_1
+    **Entidad: Cliente**
+
+    **Atributos:**
+    - IdCliente (Guid, PK)
+    - Nombre (string, requerido)
+    - Apellido (string, requerido)
+    - DNI (string, único, requerido)
+    - Telefono (string)
+    - Email (string, formato válido)
+    - Direccion (string)
+    - Activo (bool)
+
+    **Validaciones:**
+    ✓ DNI debe ser único
+    ✓ Email debe tener formato válido
+    ✓ Nombre y Apellido obligatorios
+
+    **Stored Procedures:**
+    - Cliente_Insert
+    - Cliente_Update
+    - Cliente_Delete (soft delete)
+    - Cliente_SelectOne
+    - Cliente_SelectAll
+    - Cliente_SelectByDNI
+end note
+
+note bottom of UC1_3
+    **Baja de Cliente:**
+    - Soft delete (Activo = 0)
+    - Cascada: Inactiva todas las mascotas
+    - No elimina datos físicamente
+    - Registra en bitácora
+
+    **SP Usado:** Cliente_Delete
+
+    **Validación:**
+    - Advertir si tiene mascotas activas
+    - Confirmar acción con el usuario
+end note
+
+note left of UCValidarDNI
+    **Validación DNI:**
+    - Formato: Solo números
+    - Longitud: 7-8 dígitos
+    - Unicidad: No puede repetirse
+    - Excepción: Al modificar,
+      permite mismo DNI del cliente
+end note
+
+note top of UCMascotas
+    **Navegación:**
+    Desde detalle de cliente,
+    se puede acceder a:
+    - Listar mascotas del cliente
+    - Registrar nueva mascota
+    - Ver historial de citas
+end note
+
+note bottom of UC1_4
+    **Búsqueda por:**
+    - DNI (exacto)
+    - Nombre (parcial)
+    - Apellido (parcial)
+    - Nombre completo (parcial)
+
+    **Resultado:**
+    - Lista de coincidencias
+    - Click para ver detalle
+end note
+
+@enduml

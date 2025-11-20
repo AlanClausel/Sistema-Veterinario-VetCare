@@ -1,0 +1,272 @@
+@startuml DER_Parcial_CU-N007_HistorialClinico
+title DER Parcial - CU-N007/N008/N009: Consultar Historial Clínico
+
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) <i>x</i>
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES - DRILL DOWN COMPLETO
+' ═══════════════════════════════════════════════════════════════
+
+entity "Cliente" as Cliente {
+  primary_key(IdCliente) : Guid <<PK>>
+  --
+  Nombre : string
+  Apellido : string
+  DNI : string <<UNIQUE>>
+  Telefono : string
+}
+
+entity "Mascota" as Mascota {
+  primary_key(IdMascota) : Guid <<PK>>
+  --
+  foreign_key(IdCliente) : Guid <<FK>>
+  Nombre : string
+  Especie : string
+  Raza : string
+  FechaNacimiento : DateTime
+  Peso : decimal
+}
+
+entity "Cita" as Cita {
+  primary_key(IdCita) : Guid <<PK>>
+  --
+  foreign_key(IdMascota) : Guid <<FK>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  FechaHora : DateTime
+  Estado : string
+  TipoConsulta : string
+}
+
+entity "ConsultaMedica" as ConsultaMedica {
+  primary_key(IdConsultaMedica) : Guid <<PK>>
+  --
+  foreign_key(IdCita) : Guid <<FK, UNIQUE>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  Diagnostico : string
+  Tratamiento : string
+  Sintomas : string
+  Observaciones : string
+  FechaConsulta : DateTime
+}
+
+entity "ConsultaMedicamento" as ConsultaMedicamento {
+  primary_key(IdConsultaMedicamento) : Guid <<PK>>
+  --
+  foreign_key(IdConsulta) : Guid <<FK>>
+  foreign_key(IdMedicamento) : Guid <<FK>>
+  Cantidad : int
+  Indicaciones : string
+}
+
+entity "Medicamento" as Medicamento {
+  primary_key(IdMedicamento) : Guid <<PK>>
+  --
+  Nombre : string
+  Presentacion : string
+}
+
+entity "Veterinario" as Veterinario {
+  primary_key(IdVeterinario) : Guid <<PK>>
+  --
+  Nombre : string
+  Matricula : string
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+Cliente ||--o{ Mascota : "tiene"
+Mascota ||--o{ Cita : "agenda"
+Veterinario ||--o{ Cita : "atiende"
+Cita ||--o| ConsultaMedica : "genera"
+Veterinario ||--o{ ConsultaMedica : "realiza"
+ConsultaMedica ||--o{ ConsultaMedicamento : "prescribe"
+Medicamento ||--o{ ConsultaMedicamento : "es recetado"
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS - NAVEGACIÓN DRILL-DOWN
+' ═══════════════════════════════════════════════════════════════
+
+note top of Cliente
+  **CU-N007: Consultar Historial Clínico**
+  **NIVEL 1 - Buscar Cliente**
+
+  Punto de entrada:
+  - Buscar cliente por DNI o Nombre
+  - Seleccionar de lista
+
+  Muestra:
+  - Datos del cliente
+  - Lista de todas sus mascotas
+  - Resumen por mascota:
+    • Total de citas
+    • Última consulta
+    • Estado de salud
+end note
+
+note right of Mascota
+  **CU-N008: Ver Historial Detallado**
+  **NIVEL 2 - Seleccionar Mascota**
+
+  Al hacer click en una mascota:
+
+  Muestra:
+  - Ficha de la mascota
+  - Lista de TODAS las consultas médicas
+  - Ordenadas por fecha (más reciente primero)
+
+  Para cada consulta se ve:
+  - Fecha de la consulta
+  - Veterinario que atendió
+  - Diagnóstico (resumen)
+  - Medicamentos recetados (cantidad)
+
+  Acción:
+  - Click en consulta → Ver detalle completo
+end note
+
+note bottom of ConsultaMedica
+  **CU-N009: Ver Detalle de Consulta**
+  **NIVEL 3 - Consulta Específica**
+
+  Al hacer click en una consulta:
+
+  Muestra información completa:
+
+  **Datos de la Consulta:**
+  - Fecha y hora
+  - Veterinario (nombre y matrícula)
+  - Síntomas reportados
+  - Diagnóstico completo
+  - Tratamiento indicado
+  - Observaciones generales
+
+  **Medicamentos Recetados:**
+  Lista de todos los medicamentos:
+  - Nombre del medicamento
+  - Presentación
+  - Cantidad recetada
+  - Indicaciones de uso
+
+  **Acciones disponibles:**
+  - Imprimir receta
+  - Exportar a PDF
+  - Volver al historial
+end note
+
+note left of Cita
+  **Relación Cita → ConsultaMedica:**
+
+  Filtrado importante:
+  - Solo se muestran Citas "Completadas"
+  - Que tengan ConsultaMedica asociada
+  - Ordenadas por FechaConsulta DESC
+
+  **Query conceptual:**
+  SELECT C.*, CM.*
+  FROM ConsultaMedica CM
+  JOIN Cita C ON CM.IdCita = C.IdCita
+  JOIN Mascota M ON C.IdMascota = M.IdMascota
+  WHERE M.IdMascota = @IdMascota
+    AND C.Estado = 'Completada'
+  ORDER BY CM.FechaConsulta DESC
+
+  Esto garantiza:
+  - Solo consultas finalizadas
+  - Ordenamiento cronológico
+  - Historial completo y preciso
+end note
+
+note bottom of ConsultaMedicamento
+  **Detalle de Medicamentos:**
+
+  Para cada consulta, se cargan:
+
+  SELECT
+    CM.Cantidad,
+    CM.Indicaciones,
+    M.Nombre,
+    M.Presentacion
+  FROM ConsultaMedicamento CM
+  JOIN Medicamento M
+    ON CM.IdMedicamento = M.IdMedicamento
+  WHERE CM.IdConsulta = @IdConsultaMedica
+
+  **Presentación al usuario:**
+
+  "Amoxicilina 500mg x 20 comprimidos"
+  Cantidad: 1 caja
+  Indicaciones: "1 comprimido cada 8 horas
+                 por 10 días, después de comer"
+
+  Esto permite:
+  - Reimprimir receta
+  - Consultar tratamientos previos
+  - Detectar alergias o reacciones
+  - Continuar tratamientos
+end note
+
+note top of Veterinario
+  **Información del Veterinario:**
+
+  En cada consulta se muestra:
+  - Nombre completo
+  - Matrícula profesional
+
+  Útil para:
+  - Trazabilidad
+  - Responsabilidad médica
+  - Contacto para consultas
+  - Auditoría profesional
+
+  Restricción:
+  - Solo el veterinario asignado
+    a la cita puede registrar
+    la consulta médica
+end note
+
+note bottom of Cliente
+  **Navegación Completa (Drill-Down):**
+
+  Nivel 1 (CU-N007):
+  Cliente → Ver lista de mascotas
+
+  Nivel 2 (CU-N008):
+  Mascota → Ver lista de consultas
+
+  Nivel 3 (CU-N009):
+  Consulta → Ver detalle completo + medicamentos
+
+  **Breadcrumb sugerido:**
+  Clientes > Juan Pérez > Max (Perro) > Consulta 15/11/2024
+
+  Cada nivel permite:
+  - Navegar hacia abajo (más detalle)
+  - Volver hacia arriba (menos detalle)
+  - Mantener contexto de navegación
+end note
+
+note top of Medicamento
+  **Historial de Medicamentos:**
+
+  Desde el detalle de consulta,
+  se puede ver:
+
+  1. Qué medicamentos se recetaron
+  2. En qué cantidad
+  3. Con qué indicaciones
+
+  **Análisis posible:**
+  - Medicamentos más usados en la mascota
+  - Tratamientos recurrentes
+  - Alergias detectadas
+  - Efectividad de tratamientos
+
+  **Reporte adicional:**
+  "Historial de medicamentos por mascota"
+  Útil para detectar patrones
+end note
+
+@enduml

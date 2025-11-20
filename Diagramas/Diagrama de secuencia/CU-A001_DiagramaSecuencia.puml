@@ -1,0 +1,218 @@
+@startuml CU-A001_DiagramaSecuencia
+!theme plain
+title Diagrama de Secuencia: CU-A001 - Iniciar Sesión\nSistema VetCare
+
+' ========== ACTORES Y PARTICIPANTES ==========
+actor "Usuario" as User
+participant "Login.cs\n(UI)" as UI
+participant "ValidationBLL" as ValBLL
+participant "LoginService" as LoginSvc
+participant "UsuarioRepository" as UserRepo
+participant "BD SecurityVet" as BDSG
+participant "CryptographyService" as CryptoSvc
+participant "Bitacora" as Bitacora
+participant "FamiliaRepository" as FamRepo
+participant "PatenteRepository" as PatRepo
+participant "LanguageManager" as LangMgr
+participant "VeterinarioBLL" as VetBLL
+participant "BD VetCareDB" as BDVC
+participant "Menu.cs\n(UI)" as Menu
+
+' ========== FLUJO PRINCIPAL ==========
+
+User -> UI: 1. Ingresa usuario y contraseña\ny hace clic en "Ingresar"
+activate UI
+
+UI -> ValBLL: 2. ValidarCredencialesLogin(user, pass)
+activate ValBLL
+ValBLL --> UI: OK (o lanza ValidacionException)
+deactivate ValBLL
+
+UI -> LoginSvc: 3. Login(user, pass)
+activate LoginSvc
+
+LoginSvc -> UserRepo: 4. SelectOneByName(user)
+activate UserRepo
+UserRepo -> BDSG: 5. SP: Usuario_SelectByUsername\n(@NombreUsuario)
+activate BDSG
+BDSG --> UserRepo: DataRow con usuario + DVH
+deactivate BDSG
+UserRepo -> UserRepo: 6. Validar DVH
+UserRepo --> LoginSvc: Usuario (o null)
+deactivate UserRepo
+
+alt Usuario NO encontrado
+    LoginSvc -> Bitacora: RegistrarLoginFallido(user, "Usuario no encontrado")
+    activate Bitacora
+    Bitacora -> BDSG: SP: Bitacora_Insert\n(acción: LoginFallido)
+    deactivate Bitacora
+    LoginSvc --> UI: throw UsuarioNoEncontradoException
+    UI --> User: MessageBox: "Credenciales inválidas"
+else Usuario encontrado
+
+    LoginSvc -> CryptoSvc: 7. HashPassword(pass)
+    activate CryptoSvc
+    CryptoSvc --> LoginSvc: hashGenerado (SHA256)
+    deactivate CryptoSvc
+
+    LoginSvc -> LoginSvc: 8. Comparar hash\ncon usuario.Clave
+
+    alt Contraseña INCORRECTA
+        LoginSvc -> Bitacora: RegistrarLoginFallido(user, "Contraseña incorrecta")
+        activate Bitacora
+        Bitacora -> BDSG: SP: Bitacora_Insert\n(acción: LoginFallido)
+        deactivate Bitacora
+        LoginSvc --> UI: throw ContraseñaInvalidaException
+        UI --> User: MessageBox: "Contraseña incorrecta"
+    else Contraseña CORRECTA
+
+        ' ========== CARGA DE PERMISOS (COMPOSITE) ==========
+        LoginSvc -> LoginSvc: 9. CargarPermisosUsuario(usuario)
+        activate LoginSvc #LightBlue
+
+        note right of LoginSvc
+            **Patrón Composite:**
+            Carga recursiva de
+            Familias y Patentes
+        end note
+
+        LoginSvc -> FamRepo: 10. Obtener Familias del usuario
+        activate FamRepo
+        FamRepo -> BDSG: Query: UsuarioFamilia
+        BDSG --> FamRepo: Lista de IdFamilia
+        deactivate FamRepo
+
+        loop Para cada Familia del usuario
+            LoginSvc -> FamRepo: SelectOne(idFamilia)
+            activate FamRepo
+            FamRepo --> LoginSvc: Familia
+            deactivate FamRepo
+
+            LoginSvc -> LoginSvc: 11. CargarHijosDeFamilia(familia)\n[RECURSIVO]
+            activate LoginSvc #LightYellow
+
+            LoginSvc -> BDSG: SP: Familia_Familia_SelectParticular\n(@IdFamiliaPadre)
+            BDSG --> LoginSvc: Lista de IdFamiliaHija
+
+            loop Para cada Familia hija (RECURSIÓN)
+                LoginSvc -> LoginSvc: CargarHijosDeFamilia(familiaHija)
+                note right: Recursión\npara jerarquía
+            end
+
+            LoginSvc -> PatRepo: GetChildren(familia)
+            activate PatRepo
+            PatRepo -> BDSG: Query: FamiliaPatente
+            BDSG --> PatRepo: Lista de Patentes
+            PatRepo --> LoginSvc: Patentes (hojas)
+            deactivate PatRepo
+
+            deactivate LoginSvc
+
+            LoginSvc -> LoginSvc: Agregar familia\na usuario.Permisos
+        end
+
+        deactivate LoginSvc
+
+        ' ========== ALMACENAR SESIÓN ==========
+        LoginSvc -> LoginSvc: 12. _usuarioLogueado = usuario\n(variable estática)
+
+        ' ========== REGISTRAR EN BITÁCORA ==========
+        LoginSvc -> Bitacora: 13. RegistrarLogin(IdUsuario, Nombre)
+        activate Bitacora
+        Bitacora -> BDSG: SP: Bitacora_Insert\n(acción: Login, criticidad: Info)
+        activate BDSG
+        BDSG --> Bitacora: OK
+        deactivate BDSG
+        deactivate Bitacora
+
+        LoginSvc --> UI: 14. return Usuario
+        deactivate LoginSvc
+
+        ' ========== SINCRONIZAR VETERINARIO ==========
+        UI -> UI: 15. SincronizarVeterinarioSiCorresponde()
+        activate UI #LightGreen
+
+        alt Si rol == "Veterinario"
+            UI -> VetBLL: EsVeterinario(IdUsuario)
+            activate VetBLL
+            VetBLL -> BDVC: Query: Veterinario\nWHERE IdUsuario = ?
+            BDVC --> VetBLL: Existe / No existe
+
+            alt NO existe en VetCareDB
+                VetBLL -> BDVC: SP: Veterinario_Insert\n(IdUsuario, Nombre)
+                BDVC --> VetBLL: OK
+            end
+            deactivate VetBLL
+        end
+
+        deactivate UI
+
+        ' ========== CONFIGURAR IDIOMA ==========
+        UI -> LangMgr: 16. CambiarIdioma(idioma)
+        activate LangMgr
+        LangMgr -> LangMgr: Cargar recursos\n(idioma.es-AR o idioma.en-GB)
+        LangMgr -> LangMgr: Notificar observers\n(Patrón Observer)
+        deactivate LangMgr
+
+        alt Idioma diferente al preferido
+            UI -> BDSG: SP: Usuario_UpdateIdioma\n(@IdUsuario, @Idioma)
+        end
+
+        ' ========== VERIFICAR ROL ==========
+        UI -> UI: 17. Verificar rol asignado
+
+        alt Usuario SIN rol
+            UI --> User: MessageBox:\n"Usuario sin rol"
+        else Usuario CON rol
+
+            ' ========== MOSTRAR MENÚ ==========
+            UI -> Menu: 18. new Menu(usuario)
+            activate Menu
+            Menu -> Menu: Construir menú dinámico\nsegún permisos
+            Menu --> UI: menuForm
+            deactivate Menu
+
+            UI -> Menu: 19. Show()
+            activate Menu
+
+            UI -> UI: 20. Hide()
+
+            deactivate UI
+
+            Menu --> User: **MENÚ PRINCIPAL**\ncon opciones según permisos
+
+            deactivate Menu
+        end
+    end
+end
+
+' ========== LEYENDA ==========
+legend bottom
+**Caso de Uso:** CU-A001 - Iniciar Sesión
+**Actores:** Usuario del Sistema
+**Bases de Datos:**
+- SecurityVet: Usuarios, Permisos, Bitácora
+- VetCareDB: Veterinarios (negocio)
+
+**Patrones de Diseño:**
+- Composite: Carga recursiva de permisos (Familias y Patentes)
+- Singleton: Servicios (LoginService, Bitacora)
+- Observer: Cambio de idioma (LanguageManager)
+- Repository: Acceso a datos
+
+**Flujos Alternativos:**
+- Usuario no encontrado → UsuarioNoEncontradoException
+- Contraseña incorrecta → ContraseñaInvalidaException
+- DVH inválido → IntegridadException (validado en paso 6)
+- Usuario sin rol → No abre menú
+- Error sync veterinario → No interrumpe login
+
+**Excepciones:**
+- ValidacionException (campos vacíos)
+- UsuarioNoEncontradoException
+- ContraseñaInvalidaException
+- IntegridadException (DVH)
+- AutenticacionException (genérica)
+end legend
+
+@enduml

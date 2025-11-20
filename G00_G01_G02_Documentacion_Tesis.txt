@@ -1,0 +1,346 @@
+================================================================================
+DOCUMENTACIÓN DE TESIS - VETCARE
+CARPETA DE PROYECTO - Puntos G00, G01, G02
+================================================================================
+
+================================================================================
+G00. DESCRIPCIÓN GLOBAL DEL PRODUCTO
+================================================================================
+
+VetCare es un sistema de información integral para la gestión de clínicas
+veterinarias, desarrollado como aplicación de escritorio bajo la plataforma
+.NET Framework 4.7.2 con interfaz Windows Forms.
+
+El sistema abarca la gestión completa del ciclo operativo de una clínica
+veterinaria, incluyendo:
+
+- Gestión de Clientes y Mascotas: Registro y administración de propietarios
+  y sus animales de compañía
+
+- Administración de Citas: Programación y seguimiento de turnos médicos con
+  control de estados
+
+- Consultas Médicas: Registro detallado de historiales clínicos, diagnósticos
+  y tratamientos
+
+- Control de Medicamentos: Gestión de inventario farmacéutico con control de
+  stock y trazabilidad de prescripciones
+
+- Gestión de Veterinarios: Administración del personal médico profesional
+
+Adicionalmente, el sistema incorpora un módulo de seguridad robusto que incluye:
+
+- Sistema de autenticación y autorización basado en roles jerárquicos
+  (patrón Composite)
+- Auditoría completa de operaciones (Bitacora)
+- Verificación de integridad de datos (DVH - Dígito Verificador Horizontal)
+- Gestión de permisos granular a nivel de formularios y funcionalidades
+- Soporte multiidioma con cambio dinámico (patrón Observer)
+
+La arquitectura del sistema emplea un diseño dual de bases de datos, separando
+el dominio de negocio (VetCareDB) del dominio de seguridad y auditoría
+(SecurityVet), garantizando la independencia y escalabilidad de ambos contextos
+delimitados.
+
+
+================================================================================
+G01. PROPÓSITO
+================================================================================
+
+El desarrollo del sistema VetCare surge de la necesidad de modernizar y
+optimizar los procesos administrativos y clínicos en establecimientos
+veterinarios de pequeña y mediana escala, que tradicionalmente operan con
+sistemas manuales, registros en papel o soluciones informáticas fragmentadas.
+
+
+PROBLEMÁTICAS QUE SE BUSCAN RESOLVER:
+--------------------------------------
+
+1. Desorganización en el manejo de información clínica: Los registros en papel
+   dificultan el acceso rápido al historial médico completo de las mascotas,
+   afectando la calidad de atención.
+
+2. Falta de trazabilidad en tratamientos: Ausencia de seguimiento sistemático
+   de medicamentos recetados y su relación con el inventario disponible.
+
+3. Gestión ineficiente de citas: Problemas de doble agendamiento, falta de
+   recordatorios y seguimiento del estado de las consultas.
+
+4. Ausencia de controles de seguridad: Falta de auditoría sobre quién realiza
+   modificaciones, acceso no controlado a información sensible, y ausencia de
+   respaldos sistemáticos.
+
+5. Carencia de integridad de datos: Riesgo de manipulación o corrupción de
+   información sin mecanismos de detección.
+
+
+OBJETIVOS DEL SISTEMA:
+----------------------
+
+- Centralizar la información de clientes, mascotas y consultas en un
+  repositorio único y seguro
+
+- Automatizar procesos de agendamiento, prescripción médica y control de
+  inventario
+
+- Garantizar trazabilidad completa mediante auditoría exhaustiva de todas
+  las operaciones
+
+- Asegurar la integridad y confidencialidad de los datos mediante mecanismos
+  criptográficos y control de acceso basado en roles
+
+- Mejorar la experiencia del usuario con una interfaz intuitiva y soporte
+  multiidioma
+
+- Facilitar la toma de decisiones mediante reportes y consultas estructuradas
+  sobre la información operativa
+
+Con VetCare se espera mejorar la calidad del servicio veterinario, reducir
+errores administrativos, incrementar la seguridad de la información y
+proporcionar una plataforma escalable que pueda adaptarse a las necesidades
+cambiantes del establecimiento.
+
+
+================================================================================
+G02. DESCRIPCIÓN FUNCIONAL DEL PRODUCTO Y ALCANCE
+================================================================================
+
+GESTIONES ORGANIZACIONALES INCLUIDAS EN EL ALCANCE
+---------------------------------------------------
+
+El sistema VetCare abarca las siguientes gestiones organizacionales de una
+clínica veterinaria:
+
+
+1. GESTIÓN DE CLIENTES
+-----------------------
+
+Comprende la administración del registro maestro de propietarios de mascotas
+que mantienen relación comercial con la clínica veterinaria. Esta gestión
+permite identificar unívocamente a cada cliente, mantener sus datos de contacto
+actualizados y establecer la vinculación con sus mascotas asociadas.
+
+Alcance de la gestión:
+Se incluye el mantenimiento completo del registro de clientes (altas, bajas,
+modificaciones y consultas) con garantía de integridad referencial hacia las
+mascotas dependientes. Se excluye la gestión financiera (facturación, cobros,
+cuentas corrientes) y las comunicaciones automatizadas externas.
+
+
+2. GESTIÓN DE MASCOTAS
+-----------------------
+
+Abarca el registro y mantenimiento de la información identificatoria y sanitaria
+básica de los animales que son atendidos en la clínica. Esta gestión constituye
+el eje central del sistema, ya que toda la actividad clínica gira en torno a
+las mascotas como pacientes.
+
+Alcance de la gestión:
+Se contempla el mantenimiento del registro de mascotas vinculadas a sus
+propietarios, permitiendo el acceso al historial clínico a través de las
+consultas médicas registradas. Se excluye la gestión documental de imágenes
+médicas, sistemas de recordatorios preventivos y registros genealógicos.
+
+
+3. GESTIÓN DE AGENDA Y TURNOS
+------------------------------
+
+Cubre la planificación y organización temporal de las atenciones veterinarias,
+coordinando la disponibilidad de profesionales con las necesidades de atención
+de las mascotas. Incluye el control del ciclo de vida completo de cada turno
+desde su agendamiento hasta su resolución.
+
+Alcance de la gestión:
+Incluye el agendamiento, seguimiento de estados, reprogramación y cancelación
+de turnos. Se excluyen las notificaciones automáticas a clientes, gestión de
+recursos físicos (consultorios, quirófanos), y sistemas de recordatorios
+externos.
+
+
+4. GESTIÓN CLÍNICA Y CONSULTAS MÉDICAS
+---------------------------------------
+
+Engloba el registro del acto médico veterinario propiamente dicho, incluyendo
+anamnesis, diagnóstico, prescripción terapéutica y observaciones clínicas. Esta
+gestión constituye el núcleo del historial médico de cada mascota y permite
+la trazabilidad completa del tratamiento dispensado.
+
+Alcance de la gestión:
+Abarca el registro de consultas vinculadas a turnos previos, prescripción de
+medicamentos con impacto en inventario, y construcción del historial clínico.
+Se excluye la generación de documentación oficial (recetas, certificados),
+adjunción de estudios complementarios, y gestión de planes de tratamiento
+prolongados.
+
+
+5. GESTIÓN DE INVENTARIO FARMACÉUTICO
+--------------------------------------
+
+Comprende el control del stock de medicamentos disponibles en la clínica y su
+trazabilidad en las prescripciones realizadas durante las consultas médicas.
+Permite mantener información actualizada sobre la disponibilidad de productos
+terapéuticos y su consumo.
+
+Alcance de la gestión:
+Incluye el mantenimiento del catálogo de medicamentos, control de existencias,
+y reducción automática de stock por prescripciones. Se excluye la gestión de
+compras y proveedores, alertas de stock crítico, control de lotes y
+vencimientos, y aspectos de valorización de inventarios.
+
+
+6. GESTIÓN DE RECURSOS HUMANOS PROFESIONALES
+---------------------------------------------
+
+Abarca el registro y mantenimiento de la información del plantel de médicos
+veterinarios que prestan servicios en la clínica. Esta gestión permite
+identificar a los profesionales responsables de cada atención y validar su
+habilitación profesional.
+
+Alcance de la gestión:
+Contempla el mantenimiento del registro de veterinarios con sus datos
+profesionales básicos y su vinculación a las consultas realizadas. Se excluye
+la gestión de agendas personalizadas, control horario, registro de
+especialidades certificadas, y legajos profesionales completos.
+
+
+7. GESTIÓN DE SEGURIDAD Y ACCESOS
+----------------------------------
+
+Constituye el sistema transversal que regula quién puede acceder al sistema,
+qué puede ver y qué operaciones puede realizar. Implementa un modelo de
+seguridad basado en roles jerárquicos con permisos granulares, garantizando
+la confidencialidad e integridad de la información.
+
+Alcance de la gestión:
+Incluye autenticación de usuarios, autorización basada en roles compuestos,
+gestión de permisos a nivel funcional, y verificación de integridad de datos
+críticos mediante dígitos verificadores. Se excluye autenticación multifactor,
+integración con directorios corporativos (LDAP/AD), y gestión de sesiones
+distribuidas.
+
+
+8. GESTIÓN DE AUDITORÍA Y TRAZABILIDAD
+---------------------------------------
+
+Comprende el registro sistemático de todas las operaciones significativas
+realizadas en el sistema, permitiendo reconstruir el historial de cambios,
+identificar responsables de modificaciones, y detectar anomalías o intentos
+de violación de seguridad.
+
+Alcance de la gestión:
+Abarca el registro automático de operaciones de negocio (CRUD), eventos de
+seguridad (accesos, cambios de permisos), violaciones de integridad, y
+consulta/exportación de logs. Se excluyen alertas en tiempo real, análisis
+predictivo de comportamiento, y políticas automatizadas de retención.
+
+
+9. GESTIÓN DE ADMINISTRACIÓN DE USUARIOS
+-----------------------------------------
+
+Engloba la administración del personal que tiene acceso al sistema de
+información, incluyendo la asignación de credenciales, configuración de
+permisos, y gestión del ciclo de vida de las cuentas de usuario.
+
+Alcance de la gestión:
+Incluye creación y mantenimiento de usuarios, asignación de roles, configuración
+de permisos individuales, y gestión de preferencias personales (idioma). Se
+excluye autoregistro de usuarios, políticas de rotación de contraseñas,
+delegación temporal de privilegios, y workflows de aprobación de accesos.
+
+
+10. GESTIÓN DE INTERNACIONALIZACIÓN
+------------------------------------
+
+Abarca la adaptación del sistema para operar en múltiples idiomas, permitiendo
+a cada usuario interactuar en su lengua preferida sin requerir múltiples
+versiones de la aplicación.
+
+Alcance de la gestión:
+Contempla la traducción de la interfaz completa (etiquetas, mensajes,
+validaciones), cambio dinámico de idioma en tiempo de ejecución, y persistencia
+de preferencias por usuario. Se excluye la traducción automática de contenido
+ingresado por usuarios, formatos regionales automáticos, y la adición de nuevos
+idiomas sin desarrollo.
+
+
+================================================================================
+ALCANCE EXPLÍCITO: LO QUE NO ESTÁ INCLUIDO
+================================================================================
+
+Para delimitar nítidamente la solución, se especifica que VetCare NO incluye:
+
+
+GESTIÓN FINANCIERA Y COMERCIAL:
+--------------------------------
+- Facturación electrónica (AFIP, comprobantes fiscales)
+- Gestión de cobros, pagos y cuentas corrientes
+- Control de caja y conciliaciones bancarias
+- Gestión de precios, descuentos y promociones
+
+
+GESTIÓN DE COMPRAS Y PROVEEDORES:
+----------------------------------
+- Órdenes de compra y gestión de proveedores
+- Control de recepciones y remitos
+- Gestión de costos y márgenes
+
+
+FUNCIONALIDADES AVANZADAS:
+---------------------------
+- Integración con dispositivos médicos (balanzas, analizadores)
+- Telemedicina o consultas virtuales
+- Portal web para clientes
+- Aplicación móvil
+
+
+COMUNICACIONES EXTERNAS:
+-------------------------
+- Envío automático de emails o SMS
+- Recordatorios de citas o vacunaciones
+- Marketing digital o campañas
+
+
+GESTIÓN DOCUMENTAL:
+-------------------
+- Almacenamiento de imágenes médicas (radiografías, ecografías)
+- Gestión de archivos adjuntos (análisis, certificados)
+- Firma digital de documentos
+
+
+INTEGRACIONES:
+--------------
+- Sistemas de laboratorios externos
+- Colegios profesionales
+- Obras sociales o seguros veterinarios
+
+
+GESTIÓN DE RECURSOS:
+---------------------
+- Control de quirófanos, salas o jaulas
+- Gestión de turnos del personal
+- Control de asistencia y recursos humanos
+
+
+================================================================================
+ARQUITECTURA DE DESPLIEGUE
+================================================================================
+
+Alcance: Sistema desktop monousuario o multiusuario en red local (LAN)
+
+No incluye: Versión web, cloud, o acceso remoto vía internet
+
+
+================================================================================
+CONCLUSIÓN
+================================================================================
+
+Este alcance define un sistema robusto y completo para la gestión
+clínico-administrativa central de una veterinaria pequeña o mediana, con
+énfasis en seguridad, auditoría e integridad de datos, dejando fuera aspectos
+financieros, comerciales y de comunicación externa que podrían ser incorporados
+en versiones futuras o integraciones con sistemas especializados.
+
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================

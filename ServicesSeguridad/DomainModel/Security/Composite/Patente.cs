@@ -14,30 +14,69 @@ using System.IO;
 namespace ServicesSecurity.DomainModel.Security.Composite
 {
     /// <summary>
-    /// This class (a) represents leaf objects in the composition, and (b) defines
-    /// behaviour for primitive objects in the composition.
+    /// Representa un permiso individual (nodo hoja) en el patrón Composite del sistema de permisos.
+    /// Una Patente define el acceso a un formulario o funcionalidad específica de la aplicación.
+    /// No puede contener hijos, es un elemento primitivo terminal en la jerarquía.
     /// </summary>
+    /// <remarks>
+    /// Las Patentes son permisos atómicos que se asignan directamente a usuarios o se agrupan en Familias.
+    /// Ejemplos: "FormGestionClientes", "FormGestionMascotas", "FormReportes", etc.
+    /// </remarks>
     public class Patente : Component
     {
-
+        /// <summary>
+        /// Nombre del formulario o componente al que da acceso este permiso.
+        /// Debe coincidir con el nombre de la clase del formulario en la UI.
+        /// </summary>
+        /// <example>FormGestionClientes, FormGestionMascotas, FormBitacora</example>
         public string FormName { get; set; }
 
+        /// <summary>
+        /// Texto que se muestra en el menú de la aplicación para este permiso.
+        /// Nombre amigable para el usuario.
+        /// </summary>
+        /// <example>Gestión de Clientes, Gestión de Mascotas, Bitácora</example>
         public string MenuItemName { get; set; }
 
+        /// <summary>
+        /// Orden de aparición en el menú o listados (valor numérico como string).
+        /// Permite ordenar los elementos del menú de forma personalizada.
+        /// </summary>
         public string Orden { get; set; }
 
+        /// <summary>
+        /// Descripción detallada del permiso y las acciones que habilita.
+        /// Ayuda a los administradores a entender qué funcionalidad otorga este permiso.
+        /// </summary>
         public string Descripcion { get; set; }
 
+        /// <summary>
+        /// Intenta agregar un componente hijo a esta Patente.
+        /// Lanza una excepción porque las Patentes son nodos hoja y no pueden tener hijos.
+        /// </summary>
+        /// <param name="component">Componente que se intenta agregar</param>
+        /// <exception cref="Exception">Siempre lanza excepción indicando que no se pueden agregar elementos a primitivos</exception>
         public override void Add(Component component)
         {
             throw new Exception("No se pueden agregar elementos sobre primitivos");
         }
 
+        /// <summary>
+        /// Retorna la cantidad de hijos de esta Patente.
+        /// Siempre retorna 0 porque las Patentes son nodos hoja sin hijos.
+        /// </summary>
+        /// <returns>Siempre retorna 0</returns>
         public override int ChildrenCount()
         {
             return 0;
         }
 
+        /// <summary>
+        /// Intenta remover un componente hijo de esta Patente.
+        /// Lanza una excepción porque las Patentes son nodos hoja y no pueden tener hijos.
+        /// </summary>
+        /// <param name="component">Componente que se intenta remover</param>
+        /// <exception cref="Exception">Siempre lanza excepción indicando que no se pueden quitar elementos de primitivos</exception>
         public override void Remove(Component component)
         {
             throw new Exception("No se pueden quitar elementos sobre primitivos");

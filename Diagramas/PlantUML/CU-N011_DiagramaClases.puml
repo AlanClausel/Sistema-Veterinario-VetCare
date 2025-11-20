@@ -1,0 +1,376 @@
+@startuml CU-N011_DiagramaClases
+title CU-N011: Generar Reportes - Diagrama de Clases (Resumido)
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA PRESENTACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "UI - Presentación" {
+    class FormReportes {
+        - _usuarioLogueado : Usuario
+        + FormReportes()
+        + FormReportes_Load()
+        + btnCargar_Click()
+        + btnSemanaActual_Click()
+        + btnMesActual_Click()
+        + btnExportar_Click()
+        - CargarReporteSemana()
+        - CargarVeterinarios()
+        - ActualizarEstadisticas(citas)
+        - ColorearFilasSegunEstado()
+        - CalcularFechasSemana() : (DateTime, DateTime)
+        - CalcularFechasMes() : (DateTime, DateTime)
+    }
+
+    class SaveFileDialog {
+        + Filter : string
+        + FileName : string
+        + ShowDialog() : DialogResult
+        + FileName : string <<get>>
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA LÓGICA DE NEGOCIO (BLL)
+' ═══════════════════════════════════════════════════════════════
+
+package "BLL - Lógica de Negocio" {
+    class CitaBLL <<Singleton>> {
+        {static} + Current : CitaBLL
+        + ObtenerCitasPorRangoYVeterinario(fechaDesde, fechaHasta, veterinario) : List<Cita>
+        + ObtenerCitasPorFecha(fecha) : List<Cita>
+    }
+
+    class VeterinarioBLL <<Singleton>> {
+        {static} + Current : VeterinarioBLL
+        + ListarVeterinariosActivos() : List<Veterinario>
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA ACCESO A DATOS (REPOSITORY)
+' ═══════════════════════════════════════════════════════════════
+
+package "DAL - Acceso a Datos" {
+    interface ICitaRepository {
+        + ObtenerPorRangoYVeterinario(desde, hasta, vet) : List<Cita>
+    }
+
+    class CitaRepository <<Singleton>> {
+        {static} + Current : CitaRepository
+        + ObtenerPorRangoYVeterinario(desde, hasta, vet) : List<Cita>
+    }
+
+    class CitaAdapter {
+        {static} + AdaptarListaDesdeDataTable(dt) : List<Cita>
+    }
+
+    class SqlHelper {
+        {static} + ExecuteDataTable(sp, params)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA DOMINIO (ENTIDADES)
+' ═══════════════════════════════════════════════════════════════
+
+package "Domain - Entidades" {
+    class Cita {
+        + IdCita : Guid
+        + IdMascota : Guid
+        + IdVeterinario : Guid?
+        + FechaCita : DateTime
+        + TipoConsulta : string
+        + Estado : EstadoCita
+        + MascotaNombre : string
+        + ClienteNombre : string
+        + ClienteApellido : string
+        + VeterinarioNombre : string
+        + HoraCita : string <<get>>
+        + EstadoDescripcion : string <<get>>
+    }
+
+    class Veterinario {
+        + IdVeterinario : Guid
+        + Nombre : string
+        + Matricula : string
+        + Activo : bool
+    }
+
+    class Mascota {
+        + IdMascota : Guid
+        + Nombre : string
+        + Especie : string
+    }
+
+    class Cliente {
+        + IdCliente : Guid
+        + Nombre : string
+        + Apellido : string
+        + NombreCompleto : string <<get>>
+    }
+
+    enum EstadoCita {
+        Agendada
+        Confirmada
+        Completada
+        Cancelada
+        NoAsistio
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  STORED PROCEDURES (BASE DE DATOS)
+' ═══════════════════════════════════════════════════════════════
+
+package "Database - Stored Procedures" {
+    class "SP: Cita_SelectByRangoYVeterinario" as SPRango <<Stored Procedure>> {
+        + @FechaDesde : DateTime
+        + @FechaHasta : DateTime
+        + @Veterinario : string (nullable)
+        + Retorna: citas en rango de fechas
+        + Filtro opcional por veterinario
+        + JOIN con Mascota, Cliente, Veterinario
+        + ORDER BY FechaCita ASC
+    }
+
+    class "SP: Veterinario_SelectAll" as SPVeterinarios <<Stored Procedure>> {
+        + Retorna: veterinarios activos
+        + ORDER BY Nombre
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  SERVICIOS DE SEGURIDAD (CROSS-CUTTING)
+' ═══════════════════════════════════════════════════════════════
+
+package "ServicesSecurity - Servicios" {
+    class ExportarAExcel <<Singleton>> {
+        {static} + Current : ExportarAExcel
+        {static} + Exportar(registros, rutaArchivo) [Legacy]
+        + ExportarDataGridViewACSV(dgv, rutaArchivo, incluirOcultas)
+        + ExportarACSV<T>(datos, rutaArchivo, columnas)
+        + ExportarDatosSimples(encabezados, filas, rutaArchivo)
+        + NormalizarRutaCSV(rutaArchivo) : string
+        + ValidarYCrearDirectorio(rutaArchivo)
+        - EscaparCsv(valor) : string
+    }
+
+    class Bitacora <<Singleton>> {
+        {static} + Current : Bitacora
+        + RegistrarEvento(idUsuario, nombre, modulo, accion, descripcion, criticidad, tabla, idEntidad)
+        + RegistrarExcepcion(ex, idUsuario, nombre, modulo)
+        + LogInfo(mensaje, usuario)
+        + LogError(mensaje, usuario)
+    }
+
+    class LanguageManager <<Singleton>> {
+        {static} + Translate(key) : string
+        {static} + CambiarIdioma(idioma)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  COMPONENTES DE EXPORTACIÓN (INTERNOS DE ExportService)
+' ═══════════════════════════════════════════════════════════════
+
+package "System.IO" {
+    class StreamWriter {
+        + StreamWriter(path, append, encoding)
+        + WriteLine(text)
+        + Close()
+        + Dispose()
+    }
+
+    class Encoding {
+        {static} + UTF8 : Encoding
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+' UI → BLL
+FormReportes ..> CitaBLL : usa
+FormReportes ..> VeterinarioBLL : usa
+
+' UI → Servicios
+FormReportes ..> ExportarAExcel : usa
+FormReportes ..> Bitacora : registra eventos
+FormReportes ..> LanguageManager : traduce textos
+
+' UI → Componentes de diálogo
+FormReportes ..> SaveFileDialog : usa
+
+' ExportarAExcel → System.IO (interno)
+ExportarAExcel ..> StreamWriter : usa internamente
+ExportarAExcel ..> Encoding : usa internamente
+
+' BLL → Repository
+CitaBLL ..> ICitaRepository : usa
+CitaBLL ..> CitaRepository : Current
+
+' Repository → Adapter y SqlHelper
+CitaRepository ..|> ICitaRepository : implementa
+CitaRepository ..> CitaAdapter : usa
+CitaRepository ..> SqlHelper : usa
+
+' Repository → Stored Procedures
+CitaRepository ..> SPRango : ejecuta
+VeterinarioBLL ..> SPVeterinarios : ejecuta
+
+' BLL → Entidades
+CitaBLL ..> Cita : gestiona
+VeterinarioBLL ..> Veterinario : gestiona
+
+' Dominio - Relaciones
+Cita "N" --> "1" Mascota : para
+Cita "N" --> "0..1" Veterinario : atendida por
+Mascota "N" --> "1" Cliente : pertenece a
+Cita --> EstadoCita : tiene
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS
+' ═══════════════════════════════════════════════════════════════
+
+note top of FormReportes
+    **Funcionalidades principales:**
+
+    **1. Filtrado:**
+    - Por rango de fechas (dtpDesde - dtpHasta)
+    - Por veterinario (ComboBox con "Todos")
+    - Atajos: Semana Actual, Mes Actual
+
+    **2. Estadísticas:**
+    - Cuenta por estado (LINQ Count)
+    - Total de citas
+    - Agendadas, Confirmadas, Completadas
+    - Canceladas, No Asistió
+
+    **3. Exportación CSV (refactorizado):**
+    - SaveFileDialog para ubicación
+    - **Delega a ExportarAExcel.Current**
+    - Registra en Bitacora (éxito y errores)
+    - Nombre: "Reporte_Citas_yyyyMMdd_HHmmss.csv"
+    - ExportarAExcel maneja encoding UTF-8
+    - ExportarAExcel maneja escape de caracteres
+
+    **4. Código de colores:**
+    - Agendada: LightYellow
+    - Confirmada: LightGreen
+    - Completada: LightGray
+    - Cancelada: LightCoral
+    - NoAsistio: LightSalmon
+end note
+
+note right of SPRango
+    **SP con filtro opcional:**
+
+    SELECT c.*, m.Nombre AS MascotaNombre,
+           cl.Nombre AS ClienteNombre,
+           cl.Apellido AS ClienteApellido,
+           v.Nombre AS VeterinarioNombre
+    FROM Cita c
+    INNER JOIN Mascota m ON c.IdMascota = m.IdMascota
+    INNER JOIN Cliente cl ON m.IdCliente = cl.IdCliente
+    LEFT JOIN Veterinario v
+      ON c.IdVeterinario = v.IdVeterinario
+    WHERE c.FechaCita >= @FechaDesde
+      AND c.FechaCita <= @FechaHasta
+      AND (@Veterinario IS NULL OR
+           v.Nombre = @Veterinario)
+      AND c.Activo = 1
+    ORDER BY c.FechaCita ASC
+
+    Si @Veterinario = NULL: todas las citas
+    Si @Veterinario = "Dr. Martínez": solo ese vet
+end note
+
+note left of ExportarAExcel
+    **Servicio genérico de exportación:**
+
+    **Método usado en reportes:**
+    ExportarDataGridViewACSV(dgv, ruta)
+
+    **Características:**
+    - Patrón Singleton (ExportarAExcel.Current)
+    - Exporta automáticamente todas las columnas visibles
+    - Encoding UTF-8 por defecto
+    - Escape automático de caracteres especiales (RFC 4180)
+    - Manejo de valores nulos
+    - Validación de datos antes de exportar
+
+    **Otros métodos disponibles:**
+    - ExportarACSV<T>(): Listas genéricas con columnas personalizadas
+    - ExportarDatosSimples(): Datos simples (encabezados + filas)
+    - Exportar() [Legacy]: Mantiene compatibilidad con Bitacora
+
+    **Beneficios:**
+    - Reutilizable en toda la aplicación
+    - Lógica centralizada
+    - Fácil de testear
+    - Extensible (Excel, PDF en el futuro)
+    - Mantiene retrocompatibilidad
+end note
+
+note right of Bitacora
+    **Auditoría de exportaciones:**
+
+    **Al exportar exitosamente:**
+    RegistrarEvento(
+      idUsuario, nombreUsuario,
+      "Reportes", "Exportacion",
+      "Reporte de citas exportado: archivo.csv",
+      CriticidadBitacora.Info,
+      "Cita", null
+    )
+
+    **Al fallar:**
+    RegistrarExcepcion(ex, idUsuario, nombreUsuario, "Reportes")
+
+    **Trazabilidad:**
+    - Quién exportó
+    - Cuándo
+    - Qué archivo
+    - Desde qué módulo
+end note
+
+note bottom of FormReportes
+    **Atajos de fecha:**
+
+    **Semana Actual:**
+    hoy = DateTime.Today
+    inicioSemana = hoy.AddDays(-(int)hoy.DayOfWeek)
+    finSemana = inicioSemana.AddDays(6)
+
+    Ejemplo: si hoy = Miércoles 17/01/2025
+    inicioSemana = Domingo 14/01/2025
+    finSemana = Sábado 20/01/2025
+
+    **Mes Actual:**
+    hoy = DateTime.Today
+    inicioMes = new DateTime(hoy.Year, hoy.Month, 1)
+    finMes = inicioMes.AddMonths(1).AddDays(-1)
+
+    Ejemplo: si hoy = 17/01/2025
+    inicioMes = 01/01/2025
+    finMes = 31/01/2025
+end note
+
+note right of CitaBLL
+    **Método principal:**
+
+    ObtenerCitasPorRangoYVeterinario(
+        DateTime fechaDesde,
+        DateTime fechaHasta,
+        string veterinario  // nullable
+    )
+
+    Retorna:
+    - Citas ordenadas por FechaCita ASC
+    - Con datos hidratados (mascota, cliente, vet)
+    - Filtradas por veterinario (si aplica)
+end note
+
+@enduml

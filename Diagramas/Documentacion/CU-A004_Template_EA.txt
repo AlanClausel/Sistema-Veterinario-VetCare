@@ -1,0 +1,570 @@
+================================================================================
+CU-A004: CONSULTAR BITÁCORA
+Template para Enterprise Architect - VERSIÓN RESUMIDA
+================================================================================
+
+ID:			CU-A004
+Nombre:			Consultar Bitácora
+Actor Principal:	Administrador
+Tipo:			Arquitectura / Auditoría
+
+Propósito:
+	Consultar el historial de auditoría del sistema.
+	Filtrar registros por fecha, módulo, acción y criticidad.
+	Exportar registros a Excel para análisis externo.
+	Monitorear actividad del sistema y detectar anomalías.
+
+================================================================================
+PRECONDICIONES
+================================================================================
+
+1. Usuario autenticado en el sistema
+2. Usuario tiene patente "FormBitacora" asignada
+3. Existen registros en la tabla Bitacora
+4. Base de datos SecurityVet accesible
+
+================================================================================
+POSTCONDICIONES
+================================================================================
+
+ÉXITO:
+	- Registros de auditoría mostrados en pantalla
+	- Filtros aplicados correctamente
+	- Registros colorados según criticidad (rojo=Crítico, amarillo=Advertencia)
+	- Archivo Excel generado (si se exportó)
+
+FALLO:
+	- Mensaje de error mostrado
+	- Excepción registrada en Bitácora
+	- Grid queda vacío o con datos anteriores
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 1: CONSULTAR BITÁCORA CON FILTROS
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Abre formulario Bitácora
+
+					2. Configura filtros por defecto:
+					   - Fecha Desde: Hoy - 7 días
+					   - Fecha Hasta: Hoy
+					   - Módulo: Todos
+					   - Acción: Todos
+					   - Criticidad: Todos
+
+					3. Carga registros con filtros
+					   por defecto (últimos 7 días)
+
+					4. Llama BitacoraBLL.ObtenerPorFiltros(
+					   fechaDesde, fechaHasta, null,
+					   null, null, null, 1000)
+
+					5. Ejecuta SP Bitacora_SelectPorFiltros
+					   con parámetros opcionales
+
+					6. Muestra registros en DataGridView
+					   (max 1000 registros)
+
+					7. Aplica colores por criticidad:
+					   - Crítico: Rojo (LightCoral)
+					   - Error: Naranja (LightSalmon)
+					   - Advertencia: Amarillo (LightYellow)
+					   - Info: Blanco
+
+					8. Muestra contador:
+					   "Total de registros: {cantidad}"
+
+					9. Actualiza ComboBox de Módulos
+					   con módulos distintos encontrados
+
+					10. Actualiza ComboBox de Acciones
+					    con acciones distintas encontradas
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 2: FILTRAR REGISTROS
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Modifica filtros:
+   - Cambia rango de fechas
+   - Selecciona módulo específico
+   - Selecciona acción específica
+   - Selecciona criticidad
+
+2. Hace clic en "Buscar"
+
+					3. Obtiene valores de filtros:
+					   - fechaDesde (si checkbox marcado)
+					   - fechaHasta (si checkbox marcado)
+					   - modulo (si != "Todos")
+					   - accion (si != "Todos")
+					   - criticidad (si != "Todos")
+
+					4. Llama BitacoraBLL.ObtenerPorFiltros
+					   con filtros aplicados
+
+					5. Ejecuta SP Bitacora_SelectPorFiltros
+					   con WHERE dinámico:
+					   - WHERE FechaHora >= @FechaDesde
+					   - AND FechaHora <= @FechaHasta
+					   - AND Modulo = @Modulo
+					   - AND Accion = @Accion
+					   - AND Criticidad = @Criticidad
+
+					6. Retorna registros filtrados
+					   (max 1000)
+
+					7. Actualiza DataGridView con
+					   registros filtrados
+
+					8. Aplica colores por criticidad
+
+					9. Actualiza contador total
+
+					10. Actualiza ComboBoxes dinámicos
+					    (módulos y acciones disponibles)
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 3: EXPORTAR A EXCEL
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Hace clic en "Exportar"
+
+					2. Verifica que hay registros
+					   cargados en grid
+
+					3. Si NO hay registros:
+					   Muestra MessageBox
+					   "No hay registros para exportar"
+					   → FIN
+
+					4. Muestra SaveFileDialog:
+					   - Filtro: "*.xlsx"
+					   - Nombre sugerido:
+					     "Bitacora_yyyyMMdd_HHmmss.xlsx"
+
+5. Selecciona ubicación y
+   nombre de archivo
+
+6. Confirma guardado (Aceptar)
+
+					7. Llama ExportarAExcel.Exportar(
+					   _registros, rutaArchivo)
+
+					8. Crea archivo Excel con
+					   todas las columnas:
+					   - FechaHora
+					   - NombreUsuario
+					   - Módulo
+					   - Acción
+					   - Descripción
+					   - Criticidad
+					   - Tabla
+					   - IP
+
+					9. Escribe todos los registros
+					   filtrados al archivo
+
+					10. Cierra archivo Excel
+
+					11. Muestra MessageBox:
+					    "Registros exportados
+					    exitosamente"
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 4: LIMPIAR FILTROS
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Hace clic en "Limpiar Filtros"
+
+					2. Restaura filtros por defecto:
+					   - Fecha Desde: Hoy - 7 días
+					   - Fecha Hasta: Hoy
+					   - Módulo: "Todos"
+					   - Acción: "Todos"
+					   - Criticidad: "Todos"
+					   - Checkboxes: Marcados
+
+					3. Carga registros con filtros
+					   por defecto (últimos 7 días)
+
+					4. Actualiza DataGridView
+
+					5. Actualiza contador total
+
+					6. Actualiza ComboBoxes dinámicos
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 5: ACTUALIZAR REGISTROS
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Hace clic en "Actualizar"
+
+					2. Mantiene filtros actuales
+					   (no los reinicia)
+
+					3. Vuelve a ejecutar consulta
+					   con filtros existentes
+
+					4. Carga registros desde BD
+
+					5. Actualiza DataGridView
+
+					6. Actualiza contador total
+
+					7. Permite ver registros nuevos
+					   que se hayan generado
+
+================================================================================
+FLUJOS ALTERNATIVOS
+================================================================================
+
+FA-1: Sin registros encontrados con filtros aplicados
+En Operación 2, paso 6:
+	ACTOR				SISTEMA
+	--------------------------------------------------------------
+					1. SP retorna 0 filas
+
+					2. DataGridView queda vacío
+
+					3. Muestra contador:
+					   "Total de registros: 0"
+
+					4. ComboBoxes dinámicos quedan
+					   solo con opción "Todos"
+
+					5. NO muestra mensaje de error
+					   (es un resultado válido)
+
+FA-2: Usuario cancela exportación
+En Operación 3, paso 6:
+	ACTOR				SISTEMA
+	--------------------------------------------------------------
+	1. Hace clic en "Cancelar"
+	   en SaveFileDialog
+
+					2. NO genera archivo Excel
+
+					3. Retorna al formulario
+					   sin cambios
+
+FA-3: Error al cargar registros desde BD
+En Operación 1, paso 4-5:
+	ACTOR				SISTEMA
+	--------------------------------------------------------------
+					1. BitacoraBLL.ObtenerPorFiltros
+					   lanza SQLException
+
+					2. Captura excepción en
+					   bloque catch
+
+					3. Muestra MessageBox:
+					   "Error al cargar registros
+					   de bitácora: {mensaje}"
+
+					4. Registra excepción en Bitácora:
+					   BitacoraService.Current.
+					   RegistrarExcepcion(ex, ...)
+
+					5. Grid queda vacío
+
+FA-4: Error al exportar archivo Excel
+En Operación 3, paso 7-10:
+	ACTOR				SISTEMA
+	--------------------------------------------------------------
+					1. ExportarAExcel.Exportar()
+					   lanza IOException (archivo
+					   en uso, sin permisos, etc.)
+
+					2. Captura excepción
+
+					3. Muestra MessageBox:
+					   "Error al exportar: {mensaje}"
+
+					4. Registra excepción en Bitácora
+
+					5. NO se genera archivo
+
+FA-5: Rango de fechas inválido (FechaDesde > FechaHasta)
+En Operación 2, paso 3:
+	ACTOR				SISTEMA
+	--------------------------------------------------------------
+					1. Valida fechas antes de
+					   ejecutar consulta
+
+					2. Si FechaDesde > FechaHasta:
+					   Muestra MessageBox
+					   "La fecha desde no puede ser
+					   mayor que la fecha hasta"
+
+					3. NO ejecuta consulta
+
+					4. Mantiene registros anteriores
+					   en grid
+
+================================================================================
+FILTROS DISPONIBLES
+================================================================================
+
+FECHA DESDE / FECHA HASTA:
+	- DateTimePicker con checkbox para habilitar/deshabilitar
+	- Por defecto: últimos 7 días
+	- Permite seleccionar cualquier rango histórico
+	- Si checkbox desmarcado: no aplica filtro de fecha
+
+MÓDULO:
+	- ComboBox con opción "Todos"
+	- Se llena dinámicamente con módulos distintos de registros cargados
+	- Ejemplos: "Login", "Usuarios", "Permisos", "Clientes", "Consultas"
+
+ACCIÓN:
+	- ComboBox con opción "Todos"
+	- Se llena dinámicamente con acciones distintas de registros cargados
+	- Ejemplos: "Login", "LoginFallido", "Alta", "Baja", "Modificacion"
+
+CRITICIDAD:
+	- ComboBox con opciones fijas:
+	  * Todos
+	  * Info (blanco)
+	  * Advertencia (amarillo)
+	  * Error (naranja)
+	  * Crítico (rojo)
+
+================================================================================
+COLORES POR CRITICIDAD
+================================================================================
+
+CRÍTICO:
+	- BackColor: LightCoral (rojo claro)
+	- ForeColor: DarkRed (rojo oscuro)
+	- Indica: Errores graves, violaciones de seguridad, fallas críticas
+
+ERROR:
+	- BackColor: LightSalmon (naranja claro)
+	- ForeColor: Por defecto
+	- Indica: Errores de operaciones, excepciones manejadas
+
+ADVERTENCIA:
+	- BackColor: LightYellow (amarillo claro)
+	- ForeColor: Por defecto
+	- Indica: Operaciones administrativas importantes, cambios de permisos
+
+INFO:
+	- BackColor: White (blanco)
+	- ForeColor: Por defecto
+	- Indica: Operaciones normales, logins exitosos
+
+================================================================================
+COLUMNAS DEL DATAGRIDVIEW
+================================================================================
+
+1. FECHA Y HORA (140px):
+   - Formato: dd/MM/yyyy HH:mm:ss
+   - Ordenable
+
+2. USUARIO (100px):
+   - Nombre del usuario que ejecutó la acción
+
+3. MÓDULO (100px):
+   - Módulo del sistema donde ocurrió el evento
+
+4. ACCIÓN (120px):
+   - Tipo de operación realizada
+
+5. DESCRIPCIÓN (Fill):
+   - Detalle completo del evento
+   - Se expande para llenar espacio disponible
+
+6. CRITICIDAD (90px):
+   - Nivel de importancia del evento
+   - Determina el color de la fila
+
+7. TABLA (80px):
+   - Tabla/Entidad afectada (opcional)
+
+8. IP (100px):
+   - Dirección IP del cliente (opcional)
+
+================================================================================
+LÍMITES Y RESTRICCIONES
+================================================================================
+
+PERFORMANCE:
+	- Máximo 1000 registros por consulta (límite TOP)
+	- Cursor cambia a "WaitCursor" durante carga
+	- Consultas con índices en FechaHora, Modulo, Criticidad
+
+PERMISOS:
+	- Solo usuarios con patente "FormBitacora" pueden acceder
+	- Normalmente asignado a ROL_Administrador
+	- Otros roles pueden tener acceso si se les asigna la patente
+
+EXPORTACIÓN:
+	- Solo formato Excel (.xlsx)
+	- Exporta TODOS los registros filtrados (no solo visibles)
+	- Nombre de archivo sugerido con timestamp
+
+AUDITORÍA:
+	- Consultar bitácora NO genera registro en bitácora (evita recursión)
+	- Exportar bitácora NO genera registro en bitácora
+	- Errores durante consulta SÍ se registran en bitácora
+
+================================================================================
+INFORMACIÓN TÉCNICA
+================================================================================
+
+ARCHIVOS PRINCIPALES:
+	- UI: UI/WinUi/Administración/FormBitacora.cs (346 líneas)
+	- BLL: ServicesSeguridad/BLL/BitacoraBLL.cs (207 líneas)
+	- DAL: ServicesSeguridad/DAL/Implementations/BitacoraRepository.cs
+	- Utilidad: (librería externa para exportar Excel)
+
+STORED PROCEDURES:
+	- Bitacora_SelectPorFiltros (consulta con filtros dinámicos)
+	- Bitacora_SelectAll (todos los registros con TOP)
+	- Bitacora_SelectPorUsuario (registros de un usuario específico)
+	- Bitacora_SelectPorRangoFechas (registros en rango de fechas)
+	- Bitacora_EliminarAnterioresA (limpieza de registros antiguos - NO usado en UI)
+
+MÉTODOS CLAVE:
+	- FormBitacora.CargarRegistros() - Carga con filtros
+	- FormBitacora.ActualizarOpcionesDinamicas() - Llena ComboBoxes
+	- FormBitacora.DgvBitacora_CellFormatting() - Aplica colores
+	- BitacoraBLL.ObtenerPorFiltros() - Consulta con filtros opcionales
+	- BitacoraBLL.ObtenerTodos() - Consulta sin filtros
+	- ExportarAExcel.Exportar() - Genera archivo Excel
+
+ENTIDAD BITÁCORA:
+	Propiedades:
+	- IdBitacora (Guid, PK)
+	- FechaHora (DateTime, indexado)
+	- IdUsuario (Guid?, nullable)
+	- NombreUsuario (string)
+	- Modulo (string, indexado)
+	- Accion (string)
+	- Descripcion (string)
+	- Criticidad (string, indexado)
+	- Tabla (string)
+	- IdRegistro (string)
+	- IP (string)
+
+CRITICIDAD (ENUM):
+	- CriticidadBitacora.Info = "Info"
+	- CriticidadBitacora.Advertencia = "Advertencia"
+	- CriticidadBitacora.Error = "Error"
+	- CriticidadBitacora.Critico = "Critico"
+
+PATRONES:
+	- Singleton: BitacoraBLL (estático), BitacoraRepository (.Current)
+	- Repository: Abstracción de acceso a datos
+	- Adapter: BitacoraAdapter (DataRow → Bitacora)
+
+================================================================================
+EJEMPLOS DE REGISTROS EN BITÁCORA
+================================================================================
+
+EJEMPLO 1 - Login exitoso (Info):
+	FechaHora: 2025-01-16 14:23:45
+	Usuario: admin
+	Módulo: Login
+	Acción: Login
+	Descripción: Usuario 'admin' inició sesión exitosamente
+	Criticidad: Info
+	Tabla: Usuario
+	IP: 192.168.1.100
+
+EJEMPLO 2 - Login fallido (Error):
+	FechaHora: 2025-01-16 14:20:12
+	Usuario: hacker123
+	Módulo: Login
+	Acción: LoginFallido
+	Descripción: Intento de login fallido para usuario 'hacker123': Usuario no encontrado
+	Criticidad: Error
+	Tabla: Usuario
+	IP: 203.0.113.45
+
+EJEMPLO 3 - Cambio de permisos (Advertencia):
+	FechaHora: 2025-01-16 15:10:30
+	Usuario: admin
+	Módulo: Permisos
+	Acción: ActualizarPatentes
+	Descripción: Patentes actualizadas para rol ROL_Veterinario: 12 patentes asignadas
+	Criticidad: Advertencia
+	Tabla: FamiliaPatente
+	IP: 192.168.1.100
+
+EJEMPLO 4 - Violación DVH (Crítico):
+	FechaHora: 2025-01-16 16:45:00
+	Usuario: Sistema
+	Módulo: Seguridad
+	Acción: ViolacionDVH
+	Descripción: DVH no coincide para usuario ID abc123. Posible manipulación de datos
+	Criticidad: Critico
+	Tabla: Usuario
+	IP: NULL
+
+================================================================================
+ESCENARIOS DE PRUEBA
+================================================================================
+
+ESCENARIO 1: Consultar últimos 7 días (por defecto)
+----------------------------------------------------
+1. Abrir formulario Bitácora
+2. Sistema carga últimos 7 días automáticamente
+3. Verificar que grid muestra registros con fechas de últimos 7 días
+4. Verificar contador total
+5. Verificar colores según criticidad
+
+Resultado: Registros de última semana mostrados con colores correctos
+
+ESCENARIO 2: Filtrar por módulo "Login" y criticidad "Error"
+-------------------------------------------------------------
+1. Abrir formulario
+2. Seleccionar Módulo: "Login"
+3. Seleccionar Criticidad: "Error"
+4. Clic en "Buscar"
+5. Verificar que SOLO aparecen registros de Login con criticidad Error
+6. Verificar que filas son color naranja (LightSalmon)
+
+Resultado: Solo logins fallidos mostrados en naranja
+
+ESCENARIO 3: Exportar registros filtrados a Excel
+--------------------------------------------------
+1. Aplicar filtro (ej: últimos 30 días, módulo "Usuarios")
+2. Clic en "Exportar"
+3. Seleccionar ubicación y nombre de archivo
+4. Confirmar
+5. Verificar que archivo Excel se crea
+6. Abrir Excel y verificar datos coinciden con grid
+
+Resultado: Archivo Excel generado con registros filtrados correctos
+
+ESCENARIO 4: Limpiar filtros después de búsqueda específica
+------------------------------------------------------------
+1. Aplicar múltiples filtros (fechas, módulo, acción, criticidad)
+2. Buscar
+3. Clic en "Limpiar Filtros"
+4. Verificar que filtros vuelven a valores por defecto (últimos 7 días)
+5. Verificar que grid se actualiza con registros por defecto
+
+Resultado: Filtros reiniciados a valores por defecto
+
+ESCENARIO 5: Buscar sin resultados
+-----------------------------------
+1. Seleccionar rango de fechas muy antiguo (ej: año 2000)
+2. Clic en "Buscar"
+3. Verificar que grid queda vacío
+4. Verificar que contador muestra "Total de registros: 0"
+5. Verificar que NO aparece mensaje de error
+
+Resultado: Grid vacío sin errores (resultado válido)
+
+================================================================================

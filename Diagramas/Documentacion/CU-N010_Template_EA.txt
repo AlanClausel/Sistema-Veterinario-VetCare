@@ -1,0 +1,1302 @@
+===============================================================================
+    CASO DE USO: CU-N010 - GESTIONAR MEDICAMENTOS
+===============================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+ID:             CU-N010
+Nombre:         Gestionar Medicamentos
+Actor(es):      Administrador, Recepcionista (con patente FormGestionMedicamentos)
+Descripción:    CRUD completo de medicamentos (catálogo de fármacos veterinarios)
+                con gestión independiente de stock. Incluye creación con stock
+                inicial, modificación de datos generales (NO modifica stock),
+                eliminación soft delete, búsqueda por nombre/presentación, listado
+                completo, y operaciones separadas para aumentar/reducir stock. Código
+                de colores automático: Stock=0 (rojo), Stock<10 (amarillo), Stock≥10
+                (blanco). Validación de stock insuficiente al reducir. Auditoría
+                completa: Alta, Modificación, Baja, AumentarStock (Info), ReducirStock
+                (Info/Advertencia si queda <10).
+
+Precondiciones:
+  - Usuario autenticado con patente "FormGestionMedicamentos"
+
+Postcondiciones:
+  - Medicamento registrado/modificado/eliminado en BD
+  - Stock actualizado según operación
+  - Operación registrada en Bitácora con criticidad según contexto
+
+Frecuencia de Uso: Alta
+Criticidad:        Media-Alta (inventario crítico para consultas médicas)
+
+
+===============================================================================
+    FLUJO PRINCIPAL
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       OPERACIÓN 1: CREAR MEDICAMENTO                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista)      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Accede a "Gestionar Medicamentos"    │
+desde menú Negocio                      │
+                                        │ 2. Valida patente
+                                        │    "FormGestionMedicamentos"
+                                        │ 3. Abre FormGestionMedicamentos
+                                        │ 4. Ejecuta FormGestionMedicamentos_Load()
+                                        │ 5. Llama MedicamentoBLL.Current
+                                        │    .ListarTodosLosMedicamentos()
+                                        │ 6. Carga grid con medicamentos activos
+                                        │    (Activo=1)
+                                        │ 7. Aplica colores automáticos:
+                                        │    - Stock=0: LightCoral (rojo)
+                                        │    - Stock<10: LightYellow (amarillo)
+                                        │    - Stock≥10: White (blanco)
+                                        │ 8. Establece modo Consulta (campos
+                                        │    deshabilitados)
+────────────────────────────────────────┼────────────────────────────────────────
+9. Clic en botón "Nuevo"                │
+                                        │ 10. Limpia campos
+                                        │ 11. Establece modo Edición (campos
+                                        │     habilitados)
+                                        │ 12. Habilita numStock (SOLO en creación)
+                                        │ 13. Deshabilita grpStock (gestión stock
+                                        │     separada)
+                                        │ 14. Focus en txtNombre
+────────────────────────────────────────┼────────────────────────────────────────
+15. Ingresa datos:                      │
+    - Nombre: "Amoxicilina"             │
+    - Presentación: "500mg cápsulas"    │
+    - Stock: 50                         │
+    - Precio: $1200                     │
+    - Observaciones: "Antibiótico..."   │
+────────────────────────────────────────┼────────────────────────────────────────
+16. Clic en botón "Guardar"             │
+                                        │ 17. Ejecuta ValidarCampos():
+                                        │     - Nombre NO vacío
+                                        │     - Nombre >= 3 caracteres
+                                        │     - Precio >= 0
+                                        │ 18. Crea entidad Medicamento:
+                                        │     {
+                                        │       IdMedicamento: NEWID(),
+                                        │       Nombre: "Amoxicilina",
+                                        │       Presentacion: "500mg cápsulas",
+                                        │       Stock: 50,
+                                        │       PrecioUnitario: 1200,
+                                        │       Observaciones: "...",
+                                        │       FechaRegistro: GETDATE(),
+                                        │       Activo: 1
+                                        │     }
+                                        │ 19. Llama MedicamentoBLL.Current
+                                        │     .RegistrarMedicamento(medicamento)
+                                        │ 20. BLL ejecuta ValidarMedicamento()
+                                        │ 21. BLL llama MedicamentoRepository
+                                        │     .Current.Crear(medicamento)
+                                        │ 22. Repository ejecuta SP:
+                                        │     EXEC Medicamento_Insert
+                                        │       @Nombre, @Presentacion,
+                                        │       @Stock, @PrecioUnitario,
+                                        │       @Observaciones
+                                        │ 23. SP inserta en tabla Medicamento
+                                        │ 24. BLL registra en Bitácora:
+                                        │     - Módulo: "Medicamentos"
+                                        │     - Acción: "Alta"
+                                        │     - Criticidad: Info
+                                        │     - Detalle: "Medicamento registrado:
+                                        │       Amoxicilina - 500mg cápsulas,
+                                        │       Stock inicial: 50"
+                                        │ 25. Muestra mensaje: "Medicamento
+                                        │     registrado exitosamente"
+                                        │ 26. Recarga grid con nuevo medicamento
+                                        │ 27. Limpia campos
+                                        │ 28. Establece modo Consulta
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     OPERACIÓN 2: MODIFICAR MEDICAMENTO                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista)      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona medicamento en grid       │
+(ej: "Amoxicilina 500mg cápsulas")      │
+                                        │ 2. Ejecuta dgvMedicamentos_SelectionChanged()
+                                        │ 3. Asigna _medicamentoSeleccionado
+                                        │ 4. Carga datos en campos de visualización:
+                                        │    - txtNombre: "Amoxicilina"
+                                        │    - txtPresentacion: "500mg cápsulas"
+                                        │    - numStock: 50 (deshabilitado)
+                                        │    - numPrecio: 1200
+                                        │    - txtObservaciones: "..."
+                                        │ 5. Actualiza lblStockActual:
+                                        │    "Stock: 50" (color verde)
+                                        │ 6. Habilita botones Modificar, Eliminar
+                                        │ 7. Habilita grpStock para gestión
+                                        │    independiente
+────────────────────────────────────────┼────────────────────────────────────────
+8. Clic en botón "Modificar"            │
+                                        │ 9. Establece modo Edición
+                                        │ 10. Habilita campos: Nombre, Presentacion,
+                                        │     Precio, Observaciones
+                                        │ 11. DESHABILITA numStock (stock NO se
+                                        │     modifica aquí)
+                                        │ 12. Deshabilita grpStock (operación
+                                        │     independiente)
+────────────────────────────────────────┼────────────────────────────────────────
+13. Modifica datos:                     │
+    - Precio: $1350 (incremento)        │
+    - Observaciones: "Antibiótico de... │
+      amplio espectro"                  │
+────────────────────────────────────────┼────────────────────────────────────────
+14. Clic en botón "Guardar"             │
+                                        │ 15. Ejecuta ValidarCampos()
+                                        │ 16. Actualiza propiedades de
+                                        │     _medicamentoSeleccionado:
+                                        │     {
+                                        │       PrecioUnitario: 1350,
+                                        │       Observaciones: "..."
+                                        │     }
+                                        │     NOTA: Stock NO se toca (50)
+                                        │ 17. Llama MedicamentoBLL.Current
+                                        │     .ActualizarMedicamento(medicamento)
+                                        │ 18. BLL valida existencia del medicamento
+                                        │ 19. BLL llama MedicamentoRepository
+                                        │     .Current.Actualizar(medicamento)
+                                        │ 20. Repository ejecuta SP:
+                                        │     EXEC Medicamento_Update
+                                        │       @IdMedicamento,
+                                        │       @Nombre, @Presentacion,
+                                        │       @Stock (sin cambios),
+                                        │       @PrecioUnitario,
+                                        │       @Observaciones
+                                        │ 21. SP actualiza registro en tabla
+                                        │     Medicamento
+                                        │ 22. BLL registra en Bitácora:
+                                        │     - Módulo: "Medicamentos"
+                                        │     - Acción: "Modificación"
+                                        │     - Criticidad: Info
+                                        │     - Detalle: "Medicamento modificado:
+                                        │       Amoxicilina - 500mg cápsulas"
+                                        │ 23. Muestra mensaje: "Medicamento
+                                        │     actualizado exitosamente"
+                                        │ 24. Recarga grid (refleja precio nuevo)
+                                        │ 25. Establece modo Consulta
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     OPERACIÓN 3: ELIMINAR MEDICAMENTO                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista)      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona medicamento en grid       │
+(ej: "Paracetamol suspensión")          │
+                                        │ 2. Carga datos en campos
+                                        │ 3. Habilita botones Modificar, Eliminar
+────────────────────────────────────────┼────────────────────────────────────────
+4. Clic en botón "Eliminar"             │
+                                        │ 5. Muestra MessageBox:
+                                        │    "¿Está seguro de eliminar el
+                                        │    medicamento 'Paracetamol
+                                        │    suspensión'?"
+                                        │    [Sí] [No]
+────────────────────────────────────────┼────────────────────────────────────────
+6. Confirma eliminación (Sí)            │
+                                        │ 7. Llama MedicamentoBLL.Current
+                                        │    .EliminarMedicamento(idMedicamento)
+                                        │ 8. BLL obtiene medicamento por ID
+                                        │ 9. BLL llama MedicamentoRepository
+                                        │    .Current.Eliminar(idMedicamento)
+                                        │ 10. Repository ejecuta SP:
+                                        │     EXEC Medicamento_Delete
+                                        │       @IdMedicamento
+                                        │ 11. SP ejecuta SOFT DELETE:
+                                        │     UPDATE Medicamento
+                                        │     SET Activo = 0
+                                        │     WHERE IdMedicamento = @IdMedicamento
+                                        │     NOTA: Registro NO se borra físicamente,
+                                        │     preserva historial de consultas médicas
+                                        │ 12. BLL registra en Bitácora:
+                                        │     - Módulo: "Medicamentos"
+                                        │     - Acción: "Baja"
+                                        │     - Criticidad: Info
+                                        │     - Detalle: "Medicamento eliminado:
+                                        │       Paracetamol suspensión"
+                                        │ 13. Muestra mensaje: "Medicamento
+                                        │     eliminado exitosamente"
+                                        │ 14. Recarga grid (ya no muestra el
+                                        │     medicamento)
+                                        │ 15. Limpia campos
+                                        │ 16. Establece modo Consulta
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   OPERACIÓN 4: BUSCAR MEDICAMENTOS                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista)      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Escribe texto en txtBuscar:          │
+   "amoxi"                              │
+                                        │ 2. Ejecuta txtBuscar_TextChanged()
+                                        │ 3. Obtiene criterio: "amoxi"
+                                        │ 4. Llama MedicamentoBLL.Current
+                                        │    .BuscarMedicamentos("amoxi")
+                                        │ 5. BLL llama MedicamentoRepository
+                                        │    .Current.Buscar("amoxi")
+                                        │ 6. Repository ejecuta SP:
+                                        │    EXEC Medicamento_SelectByCriterio
+                                        │      @Criterio = 'amoxi'
+                                        │ 7. SP ejecuta búsqueda parcial:
+                                        │    SELECT *
+                                        │    FROM Medicamento
+                                        │    WHERE Activo = 1
+                                        │      AND (Nombre LIKE '%amoxi%'
+                                        │           OR Presentacion LIKE '%amoxi%')
+                                        │ 8. Retorna DataTable con resultados
+                                        │ 9. Adapter convierte a List<Medicamento>
+                                        │ 10. Actualiza grid con medicamentos
+                                        │     filtrados:
+                                        │     - "Amoxicilina 500mg cápsulas"
+                                        │     - "Amoxicilina inyectable 1g"
+                                        │ 11. Aplica colores según stock
+────────────────────────────────────────┼────────────────────────────────────────
+12. Borra texto en txtBuscar (vacío)    │
+                                        │ 13. Detecta criterio vacío
+                                        │ 14. Llama CargarMedicamentos()
+                                        │ 15. Recarga TODOS los medicamentos activos
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                  OPERACIÓN 5: LISTAR TODOS LOS MEDICAMENTOS                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista)      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Abre formulario                      │
+                                        │ 2. Ejecuta FormGestionMedicamentos_Load()
+                                        │ 3. Llama MedicamentoBLL.Current
+                                        │    .ListarTodosLosMedicamentos()
+                                        │ 4. BLL llama MedicamentoRepository
+                                        │    .Current.ObtenerTodos()
+                                        │ 5. Repository ejecuta SP:
+                                        │    EXEC Medicamento_SelectAll
+                                        │ 6. SP retorna TODOS los medicamentos activos:
+                                        │    SELECT *
+                                        │    FROM Medicamento
+                                        │    WHERE Activo = 1
+                                        │    ORDER BY Nombre ASC
+                                        │ 7. Adapter convierte DataTable a
+                                        │    List<Medicamento>
+                                        │ 8. Carga grid con columnas:
+                                        │    - Medicamento (Nombre)
+                                        │    - Presentación
+                                        │    - Stock
+                                        │    - Precio Unitario (formato moneda $)
+                                        │    - Observaciones
+                                        │ 9. Ejecuta dgvMedicamentos_RowPrePaint()
+                                        │    para colorear filas:
+                                        │
+                                        │    IF Stock = 0:
+                                        │      BackColor = LightCoral (rojo)
+                                        │      ForeColor = White
+                                        │    ELSE IF Stock < 10:
+                                        │      BackColor = LightYellow (amarillo)
+                                        │    ELSE:
+                                        │      BackColor = White
+                                        │      ForeColor = Black
+                                        │ 10. Muestra medicamentos ordenados
+                                        │     alfabéticamente
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      OPERACIÓN 6: AUMENTAR STOCK                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista)      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona medicamento en grid       │
+(ej: "Ibuprofeno 400mg", Stock: 5)      │
+                                        │ 2. Carga datos en campos
+                                        │ 3. Actualiza lblStockActual: "Stock: 5"
+                                        │    (color naranja, stock bajo)
+                                        │ 4. Habilita grpStock (operaciones de stock)
+────────────────────────────────────────┼────────────────────────────────────────
+5. Ingresa cantidad en numCantidadStock: │
+   20                                   │
+────────────────────────────────────────┼────────────────────────────────────────
+6. Clic en botón "Aumentar Stock"       │
+                                        │ 7. Obtiene cantidad: 20
+                                        │ 8. Llama MedicamentoBLL.Current
+                                        │    .AumentarStock(idMedicamento, 20)
+                                        │ 9. BLL valida cantidad > 0
+                                        │ 10. BLL obtiene medicamento por ID
+                                        │     (Stock actual: 5)
+                                        │ 11. BLL llama MedicamentoRepository
+                                        │     .Current.ActualizarStock(id, 20)
+                                        │ 12. Repository ejecuta SP:
+                                        │     EXEC Medicamento_UpdateStock
+                                        │       @IdMedicamento,
+                                        │       @Cantidad = 20
+                                        │ 13. SP actualiza:
+                                        │     UPDATE Medicamento
+                                        │     SET Stock = Stock + 20
+                                        │     WHERE IdMedicamento = @IdMedicamento
+                                        │     Stock: 5 + 20 = 25
+                                        │ 14. SP retorna medicamento actualizado
+                                        │ 15. BLL registra en Bitácora:
+                                        │     - Módulo: "Medicamentos"
+                                        │     - Acción: "AumentarStock"
+                                        │     - Criticidad: Info
+                                        │     - Detalle: "Stock aumentado para
+                                        │       Ibuprofeno 400mg: +20 unidades
+                                        │       (Stock anterior: 5, Nuevo: 25)"
+                                        │ 16. Muestra mensaje: "Stock aumentado.
+                                        │     +20 unidades. Nuevo stock: 25"
+                                        │ 17. Recarga grid (fila ahora blanca,
+                                        │     stock normal)
+                                        │ 18. Actualiza lblStockActual: "Stock: 25"
+                                        │     (color verde)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       OPERACIÓN 7: REDUCIR STOCK                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista)      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona medicamento en grid       │
+(ej: "Amoxicilina 500mg", Stock: 50)    │
+                                        │ 2. Carga datos en campos
+                                        │ 3. Actualiza lblStockActual: "Stock: 50"
+                                        │    (color verde)
+                                        │ 4. Habilita grpStock
+────────────────────────────────────────┼────────────────────────────────────────
+5. Ingresa cantidad en numCantidadStock: │
+   45                                   │
+────────────────────────────────────────┼────────────────────────────────────────
+6. Clic en botón "Reducir Stock"        │
+                                        │ 7. Obtiene cantidad: 45
+                                        │ 8. Valida stock suficiente en UI:
+                                        │    IF _medicamentoSeleccionado.Stock < 45
+                                        │      (50 >= 45: OK)
+                                        │ 9. Llama MedicamentoBLL.Current
+                                        │    .ReducirStock(idMedicamento, 45)
+                                        │ 10. BLL valida cantidad > 0
+                                        │ 11. BLL obtiene medicamento por ID
+                                        │     (Stock actual: 50)
+                                        │ 12. BLL valida stock suficiente:
+                                        │     IF medicamento.Stock < cantidad
+                                        │       throw InvalidOperationException
+                                        │     (50 >= 45: OK)
+                                        │ 13. BLL llama MedicamentoRepository
+                                        │     .Current.ActualizarStock(id, -45)
+                                        │ 14. Repository ejecuta SP:
+                                        │     EXEC Medicamento_UpdateStock
+                                        │       @IdMedicamento,
+                                        │       @Cantidad = -45
+                                        │ 15. SP actualiza:
+                                        │     UPDATE Medicamento
+                                        │     SET Stock = Stock + (-45)
+                                        │     WHERE IdMedicamento = @IdMedicamento
+                                        │     Stock: 50 - 45 = 5
+                                        │ 16. SP retorna medicamento actualizado
+                                        │     (Stock: 5)
+                                        │ 17. BLL determina criticidad:
+                                        │     IF medicamentoActualizado.Stock < 10:
+                                        │       criticidad = Advertencia
+                                        │     ELSE:
+                                        │       criticidad = Info
+                                        │     (5 < 10 → Advertencia)
+                                        │ 18. BLL registra en Bitácora:
+                                        │     - Módulo: "Medicamentos"
+                                        │     - Acción: "ReducirStock"
+                                        │     - Criticidad: Advertencia (stock bajo)
+                                        │     - Detalle: "Stock reducido para
+                                        │       Amoxicilina 500mg: -45 unidades
+                                        │       (Stock anterior: 50, Nuevo: 5)"
+                                        │ 19. Muestra mensaje: "Stock reducido.
+                                        │     -45 unidades. Nuevo stock: 5"
+                                        │ 20. Recarga grid (fila ahora amarilla,
+                                        │     stock bajo)
+                                        │ 21. Actualiza lblStockActual: "Stock: 5"
+                                        │     (color naranja)
+
+
+===============================================================================
+    FLUJOS ALTERNATIVOS
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    FA-1: VALIDACIÓN NOMBRE VACÍO (Crear)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1 (Crear Medicamento), paso 16:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Ingresa datos:                       │
+   - Nombre: (vacío)                    │
+   - Presentación: "500mg"              │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Guardar"                    │
+                                        │ 3. Ejecuta ValidarCampos()
+                                        │ 4. Detecta Nombre vacío
+                                        │ 5. Muestra MessageBox:
+                                        │    "El nombre del medicamento es
+                                        │    obligatorio"
+                                        │    Tipo: Warning
+                                        │ 6. txtNombre.Focus()
+                                        │ 7. NO continúa con guardado
+────────────────────────────────────────┼────────────────────────────────────────
+8. Corrige nombre: "Ibuprofeno"         │
+────────────────────────────────────────┼────────────────────────────────────────
+9. Clic en "Guardar"                    │
+                                        │ 10. Validación OK
+                                        │ 11. Continúa con flujo principal
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-2: VALIDACIÓN NOMBRE MENOR A 3 CARACTERES                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1 (Crear Medicamento), paso 16:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Ingresa datos:                       │
+   - Nombre: "Ab"                       │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Guardar"                    │
+                                        │ 3. Ejecuta ValidarCampos()
+                                        │ 4. Valida Nombre.Length < 3
+                                        │ 5. Muestra MessageBox:
+                                        │    "El nombre debe tener al menos 3
+                                        │    caracteres"
+                                        │    Tipo: Warning
+                                        │ 6. txtNombre.Focus()
+                                        │ 7. NO continúa con guardado
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   FA-3: VALIDACIÓN PRECIO NEGATIVO                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1 (Crear) o 2 (Modificar), paso de validación:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Ingresa datos:                       │
+   - Precio: -500                       │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Guardar"                    │
+                                        │ 3. Ejecuta ValidarCampos()
+                                        │ 4. Valida numPrecio.Value < 0
+                                        │ 5. Muestra MessageBox:
+                                        │    "El precio no puede ser negativo"
+                                        │    Tipo: Warning
+                                        │ 6. numPrecio.Focus()
+                                        │ 7. NO continúa con guardado
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-4: STOCK INSUFICIENTE AL REDUCIR (Validación UI)            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 7 (Reducir Stock), paso 6:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona medicamento con Stock: 5  │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Ingresa cantidad: 10                 │
+────────────────────────────────────────┼────────────────────────────────────────
+3. Clic en "Reducir Stock"              │
+                                        │ 4. Valida en UI:
+                                        │    IF _medicamentoSeleccionado.Stock < 10
+                                        │      (5 < 10: TRUE)
+                                        │ 5. Muestra MessageBox:
+                                        │    "Stock insuficiente. Disponible: 5"
+                                        │    Tipo: Warning
+                                        │ 6. NO llama a BLL
+                                        │ 7. Permanece en formulario
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│             FA-5: CANCELAR OPERACIÓN EN MODO EDICIÓN                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1 (Crear) o 2 (Modificar), durante edición:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Está en modo Edición con datos       │
+   ingresados                           │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en botón "Cancelar"             │
+                                        │ 3. Ejecuta btnCancelar_Click()
+                                        │ 4. Establece modo Consulta (campos
+                                        │    deshabilitados)
+                                        │ 5. Limpia campos
+                                        │ 6. IF dgvMedicamentos tiene fila
+                                        │    seleccionada:
+                                        │      MostrarMedicamento(
+                                        │        _medicamentoSeleccionado)
+                                        │    (restaura datos originales)
+                                        │ 7. NO persiste cambios
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                  FA-6: ELIMINAR SIN MEDICAMENTO SELECCIONADO                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 3 (Eliminar), paso 4:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Grid vacío o ninguna fila            │
+   seleccionada                         │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en botón "Eliminar"             │
+                                        │ 3. Valida _medicamentoSeleccionado == null
+                                        │ 4. Muestra MessageBox:
+                                        │    "Debe seleccionar un medicamento para
+                                        │    eliminar"
+                                        │    Tipo: Warning
+                                        │ 5. NO continúa con eliminación
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                  FA-7: CANCELAR ELIMINACIÓN EN CONFIRMACIÓN                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 3 (Eliminar), paso 5:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Clic en "Eliminar"                   │
+                                        │ 2. Muestra MessageBox confirmación:
+                                        │    "¿Está seguro de eliminar el
+                                        │    medicamento 'Paracetamol'?"
+                                        │    [Sí] [No]
+────────────────────────────────────────┼────────────────────────────────────────
+3. Selecciona "No"                      │
+                                        │ 4. DialogResult == DialogResult.No
+                                        │ 5. NO ejecuta eliminación
+                                        │ 6. Permanece en formulario con
+                                        │    medicamento seleccionado
+
+
+===============================================================================
+    REGLAS DE NEGOCIO
+===============================================================================
+
+RN-N010-01: VALIDACIÓN DE NOMBRE
+  - El nombre del medicamento es OBLIGATORIO (no puede estar vacío)
+  - Longitud mínima: 3 caracteres
+  - Implementado en: gestionMedicamentos.cs (líneas 460-476)
+  - Validación adicional en entidad: Medicamento.cs (líneas 40-44)
+
+RN-N010-02: VALIDACIÓN DE STOCK
+  - Stock NO puede ser negativo (valor mínimo: 0)
+  - Stock inicial SOLO se define al CREAR medicamento (campo habilitado)
+  - Stock NO se modifica directamente al EDITAR (campo deshabilitado)
+  - Stock SOLO se modifica mediante operaciones Aumentar/Reducir
+  - Implementado en: gestionMedicamentos.cs (línea 235), Medicamento.cs (líneas 46-47)
+
+RN-N010-03: VALIDACIÓN DE PRECIO
+  - Precio unitario NO puede ser negativo (valor mínimo: 0)
+  - Implementado en: gestionMedicamentos.cs (líneas 478-485), Medicamento.cs (líneas 49-50)
+
+RN-N010-04: SOFT DELETE
+  - Eliminación lógica (Activo = 0), NO eliminación física
+  - Preserva historial para consultas médicas que usaron ese medicamento
+  - Medicamentos eliminados NO aparecen en listados ni búsquedas
+  - Implementado en: SP Medicamento_Delete (UPDATE ... SET Activo = 0)
+
+RN-N010-05: CÓDIGO DE COLORES SEGÚN STOCK
+  - Stock = 0: Fila LightCoral (rojo) con texto blanco → Sin stock
+  - Stock < 10: Fila LightYellow (amarillo) → Stock bajo (requiere reposición)
+  - Stock >= 10: Fila White (blanco) → Stock normal
+  - Aplicado automáticamente al cargar grid
+  - Implementado en: gestionMedicamentos.cs (líneas 88-113)
+
+RN-N010-06: BÚSQUEDA PARCIAL
+  - Búsqueda en campos: Nombre OR Presentación
+  - Búsqueda tipo LIKE (coincidencias parciales)
+  - Case-insensitive (SQL Server default)
+  - Búsqueda en tiempo real (evento TextChanged)
+  - Implementado en: gestionMedicamentos.cs (líneas 133-152), SP Medicamento_SelectByCriterio
+
+RN-N010-07: VALIDACIÓN REDUCIR STOCK
+  - Stock disponible debe ser >= cantidad a reducir
+  - Validación en UI ANTES de llamar a BLL (líneas 426-433)
+  - Validación adicional en BLL (líneas 212-213)
+  - Muestra stock disponible en mensaje de error
+  - Operación NO se ejecuta si stock insuficiente
+
+RN-N010-08: AUDITORÍA CON CRITICIDAD DINÁMICA
+  - Alta, Modificación, Baja: Criticidad = Info
+  - AumentarStock: Criticidad = Info
+  - ReducirStock: Criticidad = Advertencia SI stock resultante < 10, SINO Info
+  - Todas las operaciones registradas en Bitácora con detalle completo
+  - Implementado en: MedicamentoBLL.cs (líneas 51-58, 83-91, 114-122, 185-194, 226-235)
+
+RN-N010-09: STOCK ÚNICO AL CREAR
+  - Campo Stock SOLO habilitado al crear nuevo medicamento (modo Edición con esNuevo=true)
+  - Campo Stock DESHABILITADO al modificar medicamento existente (modo Edición con esNuevo=false)
+  - Garantiza trazabilidad: cambios de stock SOLO mediante Aumentar/Reducir (quedan en bitácora)
+  - Implementado en: gestionMedicamentos.cs (línea 235: numStock.Enabled = esNuevo)
+
+RN-N010-10: GRUPO STOCK DESHABILITADO EN EDICIÓN
+  - Durante modo Edición (Crear/Modificar), grupo Stock (Aumentar/Reducir) está DESHABILITADO
+  - Evita conflictos: no se puede modificar datos generales y stock simultáneamente
+  - Stock se gestiona SEPARADAMENTE en modo Consulta
+  - Implementado en: gestionMedicamentos.cs (líneas 225, 247)
+
+
+===============================================================================
+    EXCEPCIONES Y MANEJO DE ERRORES
+===============================================================================
+
+EX-N010-01: NOMBRE VACÍO
+  Condición:    txtNombre.Text vacío o solo espacios
+  Validación:   ValidarCampos() en UI
+  Mensaje:      "El nombre del medicamento es obligatorio"
+  Acción:       Focus en txtNombre, NO continúa con guardado
+  Código:       gestionMedicamentos.cs (líneas 460-467)
+
+EX-N010-02: NOMBRE MENOR A 3 CARACTERES
+  Condición:    txtNombre.Text.Trim().Length < 3
+  Validación:   ValidarCampos() en UI
+  Mensaje:      "El nombre debe tener al menos 3 caracteres"
+  Acción:       Focus en txtNombre, NO continúa con guardado
+  Código:       gestionMedicamentos.cs (líneas 469-476)
+
+EX-N010-03: PRECIO NEGATIVO
+  Condición:    numPrecio.Value < 0
+  Validación:   ValidarCampos() en UI
+  Mensaje:      "El precio no puede ser negativo"
+  Acción:       Focus en numPrecio, NO continúa con guardado
+  Código:       gestionMedicamentos.cs (líneas 478-485)
+
+EX-N010-04: STOCK INSUFICIENTE (UI)
+  Condición:    _medicamentoSeleccionado.Stock < numCantidadStock.Value al reducir
+  Validación:   btnReducirStock_Click() en UI
+  Mensaje:      "Stock insuficiente. Disponible: {medicamento.Stock}"
+  Acción:       NO llama a BLL, permanece en formulario
+  Código:       gestionMedicamentos.cs (líneas 426-433)
+
+EX-N010-05: STOCK INSUFICIENTE (BLL)
+  Condición:    medicamento.Stock < cantidad al reducir (validación adicional)
+  Validación:   MedicamentoBLL.ReducirStock()
+  Mensaje:      "Stock insuficiente. Disponible: {Stock}, Solicitado: {cantidad}"
+  Excepción:    InvalidOperationException
+  Código:       MedicamentoBLL.cs (líneas 212-213)
+
+EX-N010-06: CANTIDAD NEGATIVA O CERO (Stock)
+  Condición:    cantidad <= 0 al aumentar/reducir stock
+  Validación:   MedicamentoBLL.AumentarStock() / ReducirStock()
+  Mensaje:      "La cantidad debe ser mayor a cero"
+  Excepción:    ArgumentException
+  Código:       MedicamentoBLL.cs (líneas 172-173, 205-206)
+
+EX-N010-07: MEDICAMENTO NO EXISTE (Actualizar)
+  Condición:    No se encuentra medicamento con IdMedicamento al actualizar
+  Validación:   MedicamentoBLL.ActualizarMedicamento()
+  Mensaje:      "No existe un medicamento con ID {IdMedicamento}"
+  Excepción:    InvalidOperationException
+  Código:       MedicamentoBLL.cs (líneas 71-73)
+
+EX-N010-08: MEDICAMENTO NO EXISTE (Eliminar)
+  Condición:    No se encuentra medicamento con IdMedicamento al eliminar
+  Validación:   MedicamentoBLL.EliminarMedicamento()
+  Mensaje:      "No existe un medicamento con ID {IdMedicamento}"
+  Excepción:    InvalidOperationException
+  Código:       MedicamentoBLL.cs (líneas 102-104)
+
+EX-N010-09: ERROR AL CARGAR MEDICAMENTOS
+  Condición:    Excepción al ejecutar ListarTodosLosMedicamentos()
+  Manejo:       Catch en CargarMedicamentos()
+  Mensaje:      "Error al cargar medicamentos: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error, grid vacío
+  Código:       gestionMedicamentos.cs (líneas 126-130)
+
+EX-N010-10: ERROR AL GUARDAR
+  Condición:    Excepción al ejecutar Registrar/Actualizar en BLL
+  Manejo:       Catch en btnAgregar_Click()
+  Mensaje:      "Error al guardar: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error, NO cierra formulario
+  Código:       gestionMedicamentos.cs (líneas 306-310)
+
+EX-N010-11: ERROR AL ELIMINAR
+  Condición:    Excepción al ejecutar EliminarMedicamento() en BLL
+  Manejo:       Catch en btnEliminar_Click()
+  Mensaje:      "Error al eliminar: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error, NO cierra formulario
+  Código:       gestionMedicamentos.cs (líneas 357-361)
+
+EX-N010-12: ERROR AL AUMENTAR STOCK
+  Condición:    Excepción al ejecutar AumentarStock() en BLL
+  Manejo:       Catch en btnAumentarStock_Click()
+  Mensaje:      "Error al aumentar stock: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error, NO actualiza grid
+  Código:       gestionMedicamentos.cs (líneas 405-409)
+
+EX-N010-13: ERROR AL REDUCIR STOCK
+  Condición:    Excepción al ejecutar ReducirStock() en BLL
+  Manejo:       Catch en btnReducirStock_Click()
+  Mensaje:      "Error al reducir stock: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error, NO actualiza grid
+  Código:       gestionMedicamentos.cs (líneas 447-451)
+
+
+===============================================================================
+    VALIDACIONES
+===============================================================================
+
+VALIDACIONES DE ENTRADA (UI):
+------------------------------
+V-N010-01: Nombre obligatorio y mínimo 3 caracteres
+  - Campo: txtNombre
+  - Regla: !string.IsNullOrWhiteSpace(txtNombre.Text) && txtNombre.Text.Trim().Length >= 3
+  - Momento: Al hacer clic en Guardar (Crear/Modificar)
+  - Código: gestionMedicamentos.cs (líneas 460-476)
+
+V-N010-02: Precio no negativo
+  - Campo: numPrecio
+  - Regla: numPrecio.Value >= 0
+  - Momento: Al hacer clic en Guardar (Crear/Modificar)
+  - Código: gestionMedicamentos.cs (líneas 478-485)
+
+V-N010-03: Stock suficiente al reducir
+  - Campo: numCantidadStock
+  - Regla: _medicamentoSeleccionado.Stock >= numCantidadStock.Value
+  - Momento: Al hacer clic en Reducir Stock
+  - Código: gestionMedicamentos.cs (líneas 426-433)
+
+V-N010-04: Medicamento seleccionado para Modificar
+  - Regla: _medicamentoSeleccionado != null
+  - Momento: Al hacer clic en Modificar
+  - Código: gestionMedicamentos.cs (líneas 315-321)
+
+V-N010-05: Medicamento seleccionado para Eliminar
+  - Regla: _medicamentoSeleccionado != null
+  - Momento: Al hacer clic en Eliminar
+  - Código: gestionMedicamentos.cs (líneas 328-334)
+
+VALIDACIONES DE NEGOCIO (BLL):
+-------------------------------
+V-N010-06: Medicamento no nulo
+  - Método: MedicamentoBLL.RegistrarMedicamento() / ActualizarMedicamento()
+  - Regla: medicamento != null
+  - Excepción: ArgumentNullException
+  - Código: MedicamentoBLL.cs (línea 270)
+
+V-N010-07: Validación de entidad completa
+  - Método: MedicamentoBLL.ValidarMedicamento()
+  - Llama: medicamento.Validar() (entidad)
+  - Valida: Nombre requerido, Nombre >= 3 chars, Stock >= 0, Precio >= 0
+  - Excepción: ArgumentException con lista de errores
+  - Código: MedicamentoBLL.cs (líneas 268-276), Medicamento.cs (líneas 36-53)
+
+V-N010-08: Medicamento existe al actualizar
+  - Método: MedicamentoBLL.ActualizarMedicamento()
+  - Regla: _medicamentoRepository.ObtenerPorId(id) != null
+  - Excepción: InvalidOperationException
+  - Código: MedicamentoBLL.cs (líneas 71-73)
+
+V-N010-09: Medicamento existe al eliminar
+  - Método: MedicamentoBLL.EliminarMedicamento()
+  - Regla: _medicamentoRepository.ObtenerPorId(id) != null
+  - Excepción: InvalidOperationException
+  - Código: MedicamentoBLL.cs (líneas 102-104)
+
+V-N010-10: Cantidad positiva al aumentar stock
+  - Método: MedicamentoBLL.AumentarStock()
+  - Regla: cantidad > 0
+  - Excepción: ArgumentException
+  - Código: MedicamentoBLL.cs (líneas 172-173)
+
+V-N010-11: Cantidad positiva al reducir stock
+  - Método: MedicamentoBLL.ReducirStock()
+  - Regla: cantidad > 0
+  - Excepción: ArgumentException
+  - Código: MedicamentoBLL.cs (líneas 205-206)
+
+V-N010-12: Stock suficiente al reducir (BLL)
+  - Método: MedicamentoBLL.ReducirStock()
+  - Regla: medicamento.Stock >= cantidad
+  - Excepción: InvalidOperationException
+  - Código: MedicamentoBLL.cs (líneas 212-213)
+
+
+===============================================================================
+    REQUERIMIENTOS NO FUNCIONALES
+===============================================================================
+
+RNF-N010-01: USABILIDAD - CÓDIGO DE COLORES
+  - Stock = 0: Rojo (alerta crítica, sin disponibilidad)
+  - Stock < 10: Amarillo (advertencia, requiere reposición)
+  - Stock >= 10: Blanco (normal)
+  - Aplicado automáticamente al renderizar filas del grid
+  - Facilita identificación visual rápida de medicamentos críticos
+
+RNF-N010-02: USABILIDAD - BÚSQUEDA EN TIEMPO REAL
+  - Búsqueda se activa con evento TextChanged (sin botón "Buscar")
+  - Respuesta inmediata al escribir en txtBuscar
+  - Al borrar criterio, recarga todos los medicamentos automáticamente
+
+RNF-N010-03: USABILIDAD - MODOS DE OPERACIÓN
+  - Modo Consulta: Campos deshabilitados, botones CRUD habilitados, grpStock habilitado
+  - Modo Edición: Campos habilitados, CRUD deshabilitados excepto Guardar/Cancelar, grpStock deshabilitado
+  - Evita operaciones simultáneas conflictivas
+
+RNF-N010-04: USABILIDAD - INDICADOR VISUAL DE STOCK
+  - lblStockActual muestra stock con código de colores:
+    - Stock = 0: Rojo
+    - Stock < 10: Naranja
+    - Stock >= 10: Verde
+  - Actualizado automáticamente al seleccionar medicamento o cambiar stock
+
+RNF-N010-05: SEGURIDAD - SOFT DELETE
+  - Eliminación lógica preserva integridad referencial
+  - Historial de consultas médicas NO se rompe al eliminar medicamento
+  - Registro permanece en BD con Activo=0
+
+RNF-N010-06: AUDITABILIDAD - BITÁCORA COMPLETA
+  - TODAS las operaciones críticas registradas: Alta, Modificación, Baja, AumentarStock, ReducirStock
+  - Criticidad dinámica: Advertencia si stock queda < 10 al reducir
+  - Detalle completo: medicamento, stock anterior, stock nuevo, cantidad
+
+RNF-N010-07: RENDIMIENTO - BÚSQUEDA OPTIMIZADA
+  - SP usa LIKE con índices en columnas Nombre y Presentacion
+  - Retorna SOLO medicamentos activos (Activo=1)
+  - Ordenamiento alfabético en BD (ORDER BY Nombre)
+
+RNF-N010-08: MANTENIBILIDAD - SEPARACIÓN DE RESPONSABILIDADES
+  - UI: Validaciones básicas de entrada, gestión de modos
+  - BLL: Validaciones de negocio, orquestación, auditoría
+  - DAL: Acceso a datos, ejecución de SPs
+  - Patrón Singleton + Repository + Adapter
+
+RNF-N010-09: INTEGRIDAD - VALIDACIÓN DOBLE STOCK
+  - Validación UI ANTES de llamar BLL (prevención rápida)
+  - Validación BLL ANTES de llamar DAL (seguridad adicional)
+  - Previene condiciones de carrera o manipulación directa
+
+RNF-N010-10: USABILIDAD - FORMATO DE MONEDA
+  - Columna PrecioUnitario formateada con "C2" (moneda con 2 decimales)
+  - Ejemplo: $1,200.00
+  - Lectura clara para gestión financiera
+
+
+===============================================================================
+    ARCHIVOS INVOLUCRADOS
+===============================================================================
+
+CAPA UI (Presentación):
+-----------------------
+gestionMedicamentos.cs
+  Ruta: UI/WinUi/Negocio/gestionMedicamentos.cs
+  Líneas: 509
+  Responsabilidad:
+    - Interfaz gráfica de gestión de medicamentos
+    - Validaciones básicas de entrada
+    - Gestión de modos (Consulta/Edición)
+    - Código de colores según stock
+    - Búsqueda en tiempo real
+  Métodos clave:
+    - ConfigurarDataGridView() → Línea 38
+    - dgvMedicamentos_RowPrePaint() → Línea 88 (colores)
+    - CargarMedicamentos() → Línea 119
+    - txtBuscar_TextChanged() → Línea 133
+    - btnNuevo_Click() → Línea 257
+    - btnAgregar_Click() → Línea 264 (Crear/Modificar)
+    - btnModificar_Click() → Línea 313
+    - btnEliminar_Click() → Línea 326
+    - btnAumentarStock_Click() → Línea 380
+    - btnReducirStock_Click() → Línea 412
+    - ValidarCampos() → Línea 458
+    - EstablecerModoConsulta() → Línea 206
+    - EstablecerModoEdicion(bool esNuevo) → Línea 228
+
+gestionMedicamentos.Designer.cs
+  Ruta: UI/WinUi/Negocio/gestionMedicamentos.Designer.cs
+  Responsabilidad: Diseño visual del formulario (generado automáticamente)
+
+CAPA BLL (Lógica de Negocio):
+------------------------------
+MedicamentoBLL.cs
+  Ruta: VetCareNegocio/BLL/MedicamentoBLL.cs
+  Líneas: 281
+  Responsabilidad:
+    - Validaciones de negocio
+    - Orquestación de operaciones
+    - Registro en Bitácora con criticidad dinámica
+    - Gestión de stock con validaciones
+  Patrón: Singleton
+  Métodos públicos:
+    - RegistrarMedicamento(Medicamento) → Línea 41
+    - ActualizarMedicamento(Medicamento) → Línea 67
+    - EliminarMedicamento(Guid) → Línea 100
+    - ObtenerMedicamentoPorId(Guid) → Línea 131
+    - ListarTodosLosMedicamentos() → Línea 139
+    - BuscarMedicamentos(string) → Línea 147
+    - ListarMedicamentosDisponibles() → Línea 158
+    - AumentarStock(Guid, int) → Línea 170
+    - ReducirStock(Guid, int) → Línea 203
+    - ObtenerMedicamentosConStockBajo() → Línea 244
+    - ObtenerMedicamentosSinStock() → Línea 254
+  Métodos privados:
+    - ValidarMedicamento(Medicamento) → Línea 268
+
+CAPA DAL (Acceso a Datos):
+---------------------------
+IMedicamentoRepository.cs
+  Ruta: VetCareNegocio/DAL/Contracts/IMedicamentoRepository.cs
+  Responsabilidad: Contrato para acceso a datos de medicamentos
+  Métodos:
+    - Crear(Medicamento) : Medicamento
+    - Actualizar(Medicamento) : bool
+    - Eliminar(Guid) : bool
+    - ObtenerPorId(Guid) : Medicamento
+    - ObtenerTodos() : IEnumerable<Medicamento>
+    - Buscar(string) : IEnumerable<Medicamento>
+    - ObtenerDisponibles() : IEnumerable<Medicamento>
+    - ActualizarStock(Guid, int) : Medicamento
+
+MedicamentoRepository.cs
+  Ruta: VetCareNegocio/DAL/Implementations/MedicamentoRepository.cs
+  Responsabilidad:
+    - Implementación de IMedicamentoRepository
+    - Ejecución de Stored Procedures
+    - Uso de MedicamentoAdapter para conversión
+  Patrón: Singleton (.Current)
+  SPs invocados:
+    - Medicamento_Insert
+    - Medicamento_Update
+    - Medicamento_Delete (soft delete)
+    - Medicamento_SelectOne
+    - Medicamento_SelectAll
+    - Medicamento_SelectByCriterio
+    - Medicamento_SelectDisponibles
+    - Medicamento_UpdateStock
+
+MedicamentoAdapter.cs
+  Ruta: VetCareNegocio/DAL/Adapters/MedicamentoAdapter.cs
+  Responsabilidad: Conversión DataRow → Medicamento entity
+  Patrón: Adapter
+
+CAPA DOMINIO:
+-------------
+Medicamento.cs
+  Ruta: VetCareNegocio/DomainModel/Medicamento.cs
+  Líneas: 86
+  Responsabilidad:
+    - Entidad de dominio
+    - Propiedades calculadas (NombreCompleto, DisponibleEnStock)
+    - Validación de entidad
+    - Métodos de negocio (ReducirStock, AumentarStock)
+  Propiedades:
+    - IdMedicamento : Guid (PK)
+    - Nombre : string
+    - Presentacion : string
+    - Stock : int
+    - PrecioUnitario : decimal
+    - Observaciones : string
+    - FechaRegistro : DateTime
+    - Activo : bool
+  Propiedades calculadas:
+    - NombreCompleto : string → "{Nombre} {Presentacion}"
+    - DisponibleEnStock : bool → Stock > 0
+  Métodos:
+    - Validar() : string[] → Línea 36
+    - ReducirStock(int) → Línea 58
+    - AumentarStock(int) → Línea 72
+
+BASE DE DATOS:
+--------------
+Stored Procedures (VetCareDB):
+  - Medicamento_Insert
+  - Medicamento_Update
+  - Medicamento_Delete (UPDATE Activo=0)
+  - Medicamento_SelectOne (@IdMedicamento)
+  - Medicamento_SelectAll (WHERE Activo=1 ORDER BY Nombre)
+  - Medicamento_SelectByCriterio (@Criterio LIKE)
+  - Medicamento_SelectDisponibles (WHERE Activo=1 AND Stock > 0)
+  - Medicamento_UpdateStock (@IdMedicamento, @Cantidad)
+
+Tabla Medicamento:
+  - IdMedicamento (uniqueidentifier, PK)
+  - Nombre (nvarchar(200), NOT NULL)
+  - Presentacion (nvarchar(200), NULL)
+  - Stock (int, NOT NULL, DEFAULT 0)
+  - PrecioUnitario (decimal(18,2), NOT NULL, DEFAULT 0)
+  - Observaciones (nvarchar(MAX), NULL)
+  - FechaRegistro (datetime, NOT NULL, DEFAULT GETDATE())
+  - Activo (bit, NOT NULL, DEFAULT 1)
+
+Índices:
+  - PK_Medicamento (IdMedicamento)
+  - IX_Medicamento_Nombre (Nombre) para búsqueda rápida
+  - IX_Medicamento_Activo (Activo) para filtrado
+
+SERVICIOS DE SEGURIDAD:
+-----------------------
+LoginService.cs
+  Uso: Obtener usuario logueado para Bitácora
+  Método: LoginService.GetUsuarioLogueado()
+
+Bitacora.cs
+  Uso: Registro de auditoría
+  Métodos:
+    - RegistrarAlta() → Alta de medicamento
+    - RegistrarModificacion() → Modificación de medicamento
+    - RegistrarBaja() → Eliminación de medicamento
+    - Registrar() → AumentarStock, ReducirStock (con criticidad dinámica)
+
+LanguageManager.cs
+  Uso: Traducción de textos de interfaz
+  Método: LanguageManager.Translate(key)
+
+
+===============================================================================
+    PATRONES DE DISEÑO APLICADOS
+===============================================================================
+
+PATRÓN 1: SINGLETON
+-------------------
+Aplicado en:
+  - MedicamentoBLL.Current (líneas 22-32)
+  - MedicamentoRepository.Current
+
+Justificación:
+  - Servicios sin estado (stateless)
+  - Una única instancia en toda la aplicación
+  - Thread-safe mediante static readonly
+
+Implementación:
+  private static readonly MedicamentoBLL _instance = new MedicamentoBLL();
+  public static MedicamentoBLL Current { get { return _instance; } }
+  private MedicamentoBLL() { ... }
+
+
+PATRÓN 2: REPOSITORY
+--------------------
+Aplicado en:
+  - IMedicamentoRepository (contrato)
+  - MedicamentoRepository (implementación)
+
+Justificación:
+  - Abstracción de acceso a datos
+  - Desacoplamiento entre BLL y DAL
+  - Facilita testing con mocks
+  - Centraliza lógica de persistencia
+
+Métodos repository:
+  - Crear(), Actualizar(), Eliminar()
+  - ObtenerPorId(), ObtenerTodos(), Buscar()
+  - ObtenerDisponibles()
+  - ActualizarStock() (operación especializada)
+
+
+PATRÓN 3: ADAPTER
+-----------------
+Aplicado en:
+  - MedicamentoAdapter
+
+Justificación:
+  - Convierte DataRow (estructura SQL) a Medicamento (entidad de dominio)
+  - Desacopla estructura de BD de modelo de dominio
+  - Facilita cambios en esquema de BD sin afectar dominio
+
+Implementación:
+  public static Medicamento Adaptar(DataRow row)
+  {
+      return new Medicamento
+      {
+          IdMedicamento = (Guid)row["IdMedicamento"],
+          Nombre = row["Nombre"].ToString(),
+          ...
+      };
+  }
+
+
+PATRÓN 4: EXCEPTION MANAGER
+---------------------------
+Aplicado en:
+  - Manejo centralizado de excepciones en BLL
+  - Try-catch en UI con mensajes al usuario
+
+Justificación:
+  - Separación de lógica de negocio y presentación de errores
+  - Mensajes consistentes
+  - Registro en Bitácora de operaciones fallidas
+
+Implementación UI:
+  try {
+      _medicamentoBLL.RegistrarMedicamento(medicamento);
+  } catch (Exception ex) {
+      MessageBox.Show($"Error: {ex.Message}", "Error", ...);
+  }
+
+
+PATRÓN 5: STATE PATTERN (Modos UI)
+-----------------------------------
+Aplicado en:
+  - Modo Consulta vs Modo Edición
+
+Justificación:
+  - Comportamiento de UI cambia según estado
+  - Previene operaciones inválidas según contexto
+  - Mejora usabilidad
+
+Estados:
+  1. Modo Consulta:
+     - Campos deshabilitados
+     - Botones CRUD habilitados
+     - grpStock habilitado (operaciones stock)
+
+  2. Modo Edición:
+     - Campos habilitados
+     - Solo Guardar/Cancelar habilitados
+     - grpStock deshabilitado (operaciones stock separadas)
+
+Transiciones:
+  - Consulta → Edición: Clic en Nuevo/Modificar
+  - Edición → Consulta: Clic en Guardar/Cancelar
+
+
+PATRÓN 6: TEMPLATE METHOD (Validación)
+---------------------------------------
+Aplicado en:
+  - Validación en múltiples capas
+
+Justificación:
+  - Estructura de validación consistente
+  - Validaciones específicas por capa
+
+Flujo:
+  1. UI: ValidarCampos() → Validaciones básicas de entrada
+  2. BLL: ValidarMedicamento() → Validaciones de negocio
+  3. Entidad: Medicamento.Validar() → Validaciones de dominio
+
+
+===============================================================================
+    TRAZABILIDAD
+===============================================================================
+
+RELACIONADO CON:
+----------------
+CU-N006: Registrar Consulta Médica
+  - Usa medicamentos para recetas
+  - Reduce stock automáticamente al finalizar consulta
+  - Requiere medicamentos con stock disponible
+
+CU-N007: Consultar Historial Clínico
+  - Muestra medicamentos recetados en consultas pasadas
+  - Preserva historial incluso si medicamento fue eliminado (soft delete)
+
+CU-A004: Consultar Bitácora
+  - Audita todas las operaciones de gestión de medicamentos
+  - Registra aumentos/reducciones de stock con criticidad dinámica
+
+TABLAS RELACIONADAS:
+--------------------
+ConsultaMedicamento (join table):
+  - IdConsulta (FK → ConsultaMedica)
+  - IdMedicamento (FK → Medicamento)
+  - Cantidad
+  - Indicaciones
+
+ConsultaMedica:
+  - Referencia medicamentos recetados a través de ConsultaMedicamento
+
+PATENTES REQUERIDAS:
+--------------------
+FormGestionMedicamentos
+  - Descripción: Permite gestionar catálogo de medicamentos
+  - Operaciones: CRUD completo + Gestión de stock
+
+
+===============================================================================
+    NOTAS DE IMPLEMENTACIÓN
+===============================================================================
+
+NOTA 1: STOCK INICIAL VS GESTIÓN DE STOCK
+  - Stock se define SOLO al crear medicamento (numStock habilitado con esNuevo=true)
+  - Modificación de medicamento NO toca stock (numStock deshabilitado)
+  - Stock SOLO se cambia mediante botones Aumentar/Reducir en modo Consulta
+  - Garantiza trazabilidad: TODAS las variaciones de stock quedan en Bitácora
+
+NOTA 2: CRITICIDAD DINÁMICA EN BITÁCORA
+  - AumentarStock: Siempre criticidad Info
+  - ReducirStock: Criticidad Advertencia SI stock resultante < 10, SINO Info
+  - Permite filtrar en Bitácora medicamentos que requieren atención
+
+NOTA 3: CÓDIGO DE COLORES
+  - Aplicado en evento RowPrePaint (línea 88)
+  - Se ejecuta AUTOMÁTICAMENTE al renderizar cada fila
+  - NO requiere recarga manual, se actualiza con DataSource
+
+NOTA 4: BÚSQUEDA EN TIEMPO REAL
+  - Evento TextChanged activa búsqueda inmediata (línea 133)
+  - Si criterio vacío, recarga todos (evita grid vacío por error)
+  - No usa botón "Buscar", mejora UX
+
+NOTA 5: VALIDACIÓN DOBLE STOCK INSUFICIENTE
+  - UI valida ANTES de llamar BLL (líneas 426-433) → Rápido, evita round-trip
+  - BLL valida ANTES de llamar DAL (líneas 212-213) → Seguridad, previene bypass
+  - Defensa en profundidad
+
+NOTA 6: SOFT DELETE PRESERVA HISTORIAL
+  - SP Medicamento_Delete ejecuta UPDATE Activo=0
+  - Medicamentos eliminados NO aparecen en listados (WHERE Activo=1)
+  - ConsultaMedicamento con FK a Medicamento NO se rompe
+  - Historial clínico completo incluso con medicamentos descontinuados
+
+NOTA 7: PRESENTACIÓN OPCIONAL
+  - Campo Presentacion es opcional (puede ser NULL o vacío)
+  - NombreCompleto concatena ambos: "{Nombre} {Presentacion}"
+  - Si Presentacion vacía, muestra solo Nombre
+
+NOTA 8: PRECIO FORMATO MONEDA
+  - DefaultCellStyle.Format = "C2" (línea 73)
+  - Muestra con símbolo de moneda y 2 decimales
+  - Ejemplo: $1,350.00
+
+NOTA 9: OBSERVABLE FORM (Multi-idioma)
+  - Textos traducidos con LanguageManager.Translate(key)
+  - Si hereda de BaseObservableForm, actualiza textos automáticamente al cambiar idioma
+
+NOTA 10: MEDICAMENTOS CON STOCK BAJO
+  - MedicamentoBLL.ObtenerMedicamentosConStockBajo() (línea 244)
+  - Retorna medicamentos con Stock < 10 y Stock > 0
+  - Útil para reportes de reposición (CU-N011)
+
+
+===============================================================================
+    METADATOS
+===============================================================================
+
+Autor:              Sistema VetCare
+Versión:            1.0
+Fecha Creación:     2025-01-16
+Última Actualización: 2025-01-16
+Revisado por:       Claude Code
+Estado:             ✅ COMPLETO
+
+Archivos relacionados:
+  - CU-N001_Template_EA.txt (Gestionar Clientes)
+  - CU-N002_Template_EA.txt (Gestionar Mascotas)
+  - CU-N003_Template_EA.txt (Gestionar Citas)
+  - CU-N006_Template_EA.txt (Registrar Consulta Médica - pendiente)
+
+Casos de Uso dependientes:
+  - CU-N006: Registrar Consulta Médica (requiere medicamentos con stock)
+  - CU-N007: Consultar Historial Clínico (muestra medicamentos recetados)
+  - CU-N011: Generar Reportes (stock bajo, inventario)
+
+===============================================================================

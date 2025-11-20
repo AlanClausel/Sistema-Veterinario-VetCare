@@ -1,0 +1,281 @@
+@startuml CU-N002_DiagramaClases
+title CU-N002: Gestionar Mascotas - Diagrama de Clases (Resumido)
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA PRESENTACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "UI - Presentación" {
+    class FormGestionMascotas {
+        - _mascotaSeleccionada : Mascota
+        - _clienteSeleccionado : Cliente
+        - _modoEdicion : bool
+        + FormGestionMascotas()
+        + FormGestionMascotas_Load()
+        + CargarClientes()
+        + LimpiarCampos()
+        + btnNuevo_Click()
+        + btnGuardar_Click()
+        + btnModificar_Click()
+        + btnEliminar_Click()
+        + btnBuscarCliente_Click()
+        - ValidarCampos() : bool
+        - MostrarMascotaEnFormulario(mascota)
+        - CalcularEdad(fechaNacimiento) : string
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA LÓGICA DE NEGOCIO (BLL)
+' ═══════════════════════════════════════════════════════════════
+
+package "BLL - Lógica de Negocio" {
+    class MascotaBLL <<Singleton>> {
+        {static} + Current : MascotaBLL
+        {static} - _instance : MascotaBLL
+        + RegistrarMascota(mascota) : Mascota
+        + ModificarMascota(mascota) : void
+        + EliminarMascota(idMascota) : void
+        + ObtenerMascotaPorId(idMascota) : Mascota
+        - ValidarMascota(mascota) : void
+    }
+
+    class ClienteBLL <<Singleton>> {
+        {static} + Current : ClienteBLL
+        + ListarClientesActivos() : List<Cliente>
+        + ObtenerClientePorId(idCliente) : Cliente
+        + BuscarClientePorDNI(dni) : Cliente
+    }
+
+    class CitaBLL <<Singleton>> {
+        {static} + Current : CitaBLL
+        + ObtenerCitasPorMascota(idMascota) : List<Cita>
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA ACCESO A DATOS (REPOSITORY)
+' ═══════════════════════════════════════════════════════════════
+
+package "DAL - Acceso a Datos" {
+    interface IMascotaRepository {
+        + ObtenerPorId(idMascota) : Mascota
+        + Crear(mascota) : void
+        + Actualizar(mascota) : void
+        + Eliminar(idMascota) : void
+    }
+
+    class MascotaRepository <<Singleton>> {
+        {static} + Current : MascotaRepository
+        {static} - _instance : MascotaRepository
+        + ObtenerPorId(idMascota) : Mascota
+        + Crear(mascota) : void
+        + Actualizar(mascota) : void
+        + Eliminar(idMascota) : void
+        - ExecuteStoredProcedure()
+    }
+
+    class MascotaAdapter {
+        {static} + AdaptarDesdeDataRow(row) : Mascota
+    }
+
+    class SqlHelper {
+        {static} + ExecuteNonQuery(sp, params)
+        {static} + ExecuteScalar(sp, params)
+        {static} + ExecuteDataTable(sp, params)
+        {static} + ExecuteReader(sp, params)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA DOMINIO (ENTIDADES)
+' ═══════════════════════════════════════════════════════════════
+
+package "Domain - Entidades" {
+    class Mascota {
+        + IdMascota : Guid
+        + IdCliente : Guid
+        + Nombre : string
+        + Especie : string
+        + Raza : string
+        + FechaNacimiento : DateTime
+        + Peso : decimal
+        + Activo : bool
+        + ClienteNombre : string
+        + ClienteApellido : string
+        + EdadEnAnios : int <<get>>
+        + EdadDescripcion : string <<get>>
+        + Validar() : void
+    }
+
+    class Cliente {
+        + IdCliente : Guid
+        + Nombre : string
+        + Apellido : string
+        + DNI : string
+        + Telefono : string
+        + Email : string
+        + NombreCompleto : string <<get>>
+        + Activo : bool
+    }
+
+    class Cita {
+        + IdCita : Guid
+        + IdMascota : Guid
+        + IdVeterinario : Guid
+        + FechaCita : DateTime
+        + Estado : EstadoCita
+        + TipoConsulta : string
+    }
+
+    enum Especie {
+        Canino
+        Felino
+        Ave
+        Roedor
+        Reptil
+        Otro
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  STORED PROCEDURES (BASE DE DATOS)
+' ═══════════════════════════════════════════════════════════════
+
+package "Database - Stored Procedures" {
+    class "SP: Mascota_SelectOne" as SPSelectOne <<Stored Procedure>> {
+        + @IdMascota : Guid
+        + Retorna: mascota por ID con datos de cliente
+    }
+
+    class "SP: Mascota_Insert" as SPInsert <<Stored Procedure>> {
+        + @IdMascota : Guid
+        + @IdCliente, @Nombre, @Especie, @Raza
+        + @FechaNacimiento, @Peso
+        + INSERT INTO Mascota (...)
+        + Validación: Cliente debe existir
+    }
+
+    class "SP: Mascota_Update" as SPUpdate <<Stored Procedure>> {
+        + @IdMascota : Guid
+        + @Nombre, @Especie, @Raza, @FechaNacimiento, @Peso
+        + UPDATE Mascota SET ...
+        + NO permite cambiar IdCliente
+    }
+
+    class "SP: Mascota_Delete" as SPDelete <<Stored Procedure>> {
+        + @IdMascota : Guid
+        + Soft delete: UPDATE Mascota SET Activo = 0
+        + Valida: NO tiene citas pendientes
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  SERVICIOS
+' ═══════════════════════════════════════════════════════════════
+
+package "Services" {
+    class Bitacora <<Singleton>> {
+        {static} + Current : Bitacora
+        + RegistrarAlta(usuario, modulo, entidad, id, detalle)
+        + RegistrarModificacion(usuario, modulo, entidad, id, detalle)
+        + RegistrarBaja(usuario, modulo, entidad, id, detalle)
+    }
+
+    class LoginService {
+        {static} + GetUsuarioLogueado() : Usuario
+    }
+
+    class ExceptionManager {
+        {static} + GetInstance() : ExceptionManager
+        + HandleException(exception)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+' UI → BLL
+FormGestionMascotas ..> MascotaBLL : usa
+FormGestionMascotas ..> ClienteBLL : usa
+
+' BLL → Repository
+MascotaBLL ..> IMascotaRepository : usa
+MascotaBLL ..> MascotaRepository : Current
+MascotaBLL ..> ClienteBLL : verifica clientes
+
+' BLL → Servicios
+MascotaBLL ..> Bitacora : registra operaciones
+MascotaBLL ..> LoginService : obtiene usuario
+MascotaBLL ..> ExceptionManager : maneja errores
+
+' Repository → Adapter y SqlHelper
+MascotaRepository ..|> IMascotaRepository : implementa
+MascotaRepository ..> MascotaAdapter : usa
+MascotaRepository ..> SqlHelper : usa
+
+' Repository → Stored Procedures
+MascotaRepository ..> SPSelectOne : ejecuta
+MascotaRepository ..> SPInsert : ejecuta
+MascotaRepository ..> SPUpdate : ejecuta
+MascotaRepository ..> SPDelete : ejecuta
+
+' Adapter → Entidad
+MascotaAdapter ..> Mascota : crea instancias
+
+' BLL → Entidades
+MascotaBLL ..> Mascota : gestiona
+ClienteBLL ..> Cliente : gestiona
+
+' Dominio - Relaciones
+Mascota "N" --> "1" Cliente : pertenece a
+Mascota "1" o-- "0..*" Cita : tiene
+Mascota --> Especie : tiene
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS
+' ═══════════════════════════════════════════════════════════════
+
+note top of Mascota
+    **Validaciones:**
+    - Nombre: requerido, 2-50 caracteres
+    - Especie: requerido (Canino, Felino, etc.)
+    - Raza: requerido, 2-50 caracteres
+    - FechaNacimiento: no puede ser futura
+    - Peso: debe ser > 0
+    - IdCliente: cliente debe existir
+
+    **Propiedades calculadas:**
+    - EdadEnAnios = (hoy - FechaNacimiento).Years
+    - EdadDescripcion = "X años Y meses"
+end note
+
+note bottom of SPDelete
+    **Soft Delete:**
+    Marca Activo = 0.
+    Valida que NO tenga citas
+    pendientes (Agendada/Confirmada).
+    Si tiene citas pendientes,
+    rechaza eliminación.
+end note
+
+note right of MascotaBLL
+    **Patrón Singleton**
+    Instancia única en toda
+    la aplicación.
+    Thread-safe.
+end note
+
+note left of FormGestionMascotas
+    **Operaciones:**
+    - Registrar: Nuevo + Guardar (requiere cliente)
+    - Modificar: Modificar + Guardar
+    - Eliminar: Soft delete (valida citas)
+
+    **Cálculo de edad:**
+    Muestra años y meses
+    desde fecha de nacimiento
+end note
+
+@enduml

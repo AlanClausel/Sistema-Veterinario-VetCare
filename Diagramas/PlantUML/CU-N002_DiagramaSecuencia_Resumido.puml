@@ -1,0 +1,316 @@
+@startuml CU-N002_DiagramaSecuencia_Resumido
+title CU-N002: Gestionar Mascotas - Diagrama de Secuencia (Resumido)
+
+actor "Usuario\n(Admin/Recep)" as User
+participant "FormGestionMascotas" as Form
+participant "MascotaBLL" as BLL
+participant "ClienteBLL" as ClienteBLL
+participant "MascotaRepository" as Repo
+participant "Bitacora" as Bitacora
+participant "LoginService" as Login
+database "VetCareDB" as DB
+
+== Inicialización ==
+
+User -> Form: Accede a "Gestión de Mascotas"
+activate Form
+
+Form -> Form: FormGestionMascotas_Load()
+Form -> Form: CargarClientes()
+activate Form #LightGray
+
+Form -> ClienteBLL: ListarClientesActivos()
+activate ClienteBLL
+ClienteBLL -> DB: EXEC Cliente_SelectAll
+DB --> ClienteBLL: List<Cliente>
+ClienteBLL --> Form: List<Cliente>
+deactivate ClienteBLL
+
+Form -> Form: Carga ComboBox con clientes
+deactivate Form
+
+Form --> User: Formulario listo
+deactivate Form
+
+== 1. Registrar Nueva Mascota ==
+
+User -> Form: Clic en "Nuevo"
+activate Form
+
+Form -> Form: btnNuevo_Click()
+Form -> Form: LimpiarCampos()
+Form -> Form: _modoEdicion = false
+Form -> Form: Habilita campos de edición
+Form -> Form: dtpFechaNacimiento.Value = DateTime.Today.AddYears(-1)
+
+Form --> User: Campos habilitados para ingreso
+deactivate Form
+
+User -> Form: Selecciona cliente en ComboBox:\n"Pérez, Juan"
+User -> Form: Ingresa datos:\n- Nombre: "Rex"\n- Especie: "Canino"\n- Raza: "Labrador"\n- Fecha Nacimiento: 15/03/2020\n- Peso: 25.5 kg
+
+User -> Form: Clic en "Guardar"
+activate Form
+
+Form -> Form: btnGuardar_Click()
+
+Form -> Form: ValidarCampos()
+activate Form #LightGoldenRodYellow
+note right
+    Validaciones UI:
+    - Cliente seleccionado
+    - Nombre NO vacío
+    - Especie seleccionada
+    - Raza NO vacía
+    - Peso > 0
+    - Fecha nacimiento <= hoy
+end note
+Form --> Form: Validación OK
+deactivate Form
+
+alt Cliente NO seleccionado
+    Form -> Form: Muestra error:\n"Debe seleccionar un cliente"
+    Form --> User: Error: Cliente requerido
+else Cliente seleccionado
+
+    Form -> Form: Obtiene _clienteSeleccionado.IdCliente
+
+    Form -> Form: Crea entidad Mascota:\nIdMascota = Guid.NewGuid()\nIdCliente = idCliente\nNombre = "Rex"\nEspecie = "Canino"\nRaza = "Labrador"\nFechaNacimiento = 15/03/2020\nPeso = 25.5
+
+    Form -> BLL: RegistrarMascota(mascota)
+    activate BLL
+
+    BLL -> BLL: mascota.Validar()
+    note right
+        Validaciones entidad:
+        - Nombre 2-50 chars
+        - Especie requerida
+        - Raza 2-50 chars
+        - Peso > 0
+        - FechaNacimiento <= DateTime.Now
+    end note
+
+    BLL -> ClienteBLL: ObtenerClientePorId(mascota.IdCliente)
+    activate ClienteBLL
+    ClienteBLL -> DB: EXEC Cliente_SelectOne
+    DB --> ClienteBLL: Cliente
+    ClienteBLL --> BLL: cliente
+    deactivate ClienteBLL
+
+    alt Cliente NO existe
+        BLL --> Form: throw InvalidOperationException\n"El cliente no existe"
+        Form -> Form: Muestra MessageBox error
+        Form --> User: Error: Cliente inválido
+    else Cliente existe
+
+        BLL -> Repo: Crear(mascota)
+        activate Repo
+
+        Repo -> DB: EXEC Mascota_Insert\n@IdMascota, @IdCliente, @Nombre,\n@Especie, @Raza, @FechaNacimiento, @Peso
+        activate DB
+        note over DB
+            INSERT INTO Mascota (
+                IdMascota, IdCliente, Nombre,
+                Especie, Raza, FechaNacimiento,
+                Peso, Activo
+            ) VALUES (
+                @IdMascota, @IdCliente, @Nombre,
+                @Especie, @Raza, @FechaNacimiento,
+                @Peso, 1
+            )
+        end note
+        DB --> Repo: Filas insertadas: 1
+        deactivate DB
+
+        Repo --> BLL: void
+        deactivate Repo
+
+        BLL -> Login: GetUsuarioLogueado()
+        activate Login
+        Login --> BLL: usuarioLogueado
+        deactivate Login
+
+        BLL -> Bitacora: RegistrarAlta(\nusuarioLogueado.IdUsuario,\nusuarioLogueado.Nombre,\n"Mascotas",\n"Mascota",\nmascota.IdMascota.ToString(),\n"Mascota registrada: Rex (Canino) - Dueño: Juan Pérez")
+        activate Bitacora
+        note right
+            Auditoría en tabla Bitacora:
+            - Módulo: "Mascotas"
+            - Acción: "Alta"
+            - Criticidad: Info
+        end note
+        Bitacora --> BLL: void
+        deactivate Bitacora
+
+        BLL --> Form: mascota registrada
+        deactivate BLL
+
+        Form -> Form: Muestra MessageBox:\n"Mascota registrada exitosamente"
+
+        Form -> Form: LimpiarCampos()
+
+        Form --> User: ✓ Mascota registrada
+
+    end
+end
+
+deactivate Form
+
+== 2. Modificar Mascota ==
+
+User -> Form: Selecciona mascota "Rex"\n(a través de búsqueda o selección)
+activate Form
+
+Form -> BLL: ObtenerMascotaPorId(idMascota)
+activate BLL
+
+BLL -> Repo: ObtenerPorId(idMascota)
+activate Repo
+
+Repo -> DB: EXEC Mascota_SelectOne\n@IdMascota
+activate DB
+DB --> Repo: DataRow (mascota)
+deactivate DB
+
+Repo --> BLL: Mascota
+deactivate Repo
+
+BLL --> Form: mascota
+deactivate BLL
+
+Form -> Form: MostrarMascotaEnFormulario(mascota)
+note right
+    Carga en campos:
+    - Nombre, Especie, Raza
+    - Fecha nacimiento, Peso
+    - Cliente (solo lectura)
+end note
+
+Form --> User: Datos cargados en formulario
+deactivate Form
+
+User -> Form: Modifica Peso: 27.0 kg\nClic "Modificar"
+activate Form
+
+Form -> Form: btnModificar_Click()
+Form -> Form: ValidarCampos()
+
+Form -> BLL: ModificarMascota(mascota)
+activate BLL
+
+BLL -> BLL: mascota.Validar()
+
+BLL -> Repo: Actualizar(mascota)
+activate Repo
+
+Repo -> DB: EXEC Mascota_Update\n@IdMascota, @Nombre, @Especie,\n@Raza, @FechaNacimiento, @Peso
+activate DB
+note over DB
+    UPDATE Mascota SET
+      Nombre = @Nombre,
+      Especie = @Especie,
+      Raza = @Raza,
+      FechaNacimiento = @FechaNacimiento,
+      Peso = @Peso
+    WHERE IdMascota = @IdMascota
+
+    (IdCliente NO se puede modificar)
+end note
+DB --> Repo: Filas actualizadas: 1
+deactivate DB
+
+Repo --> BLL: void
+deactivate Repo
+
+BLL -> Bitacora: RegistrarModificacion(...)
+activate Bitacora
+Bitacora --> BLL: void
+deactivate Bitacora
+
+BLL --> Form: void
+deactivate BLL
+
+Form -> Form: Muestra mensaje: "Mascota modificada"
+
+Form --> User: ✓ Mascota actualizada
+
+deactivate Form
+
+== 3. Eliminar Mascota (Soft Delete con Validación de Citas) ==
+
+User -> Form: Selecciona mascota "Rex" y clic "Eliminar"
+activate Form
+
+Form -> Form: btnEliminar_Click()
+Form -> Form: Muestra confirmación:\n"¿Está seguro de eliminar la mascota Rex?"
+
+User -> Form: Confirma (Sí)
+
+Form -> BLL: EliminarMascota(idMascota)
+activate BLL
+
+BLL -> Repo: Eliminar(idMascota)
+activate Repo
+
+Repo -> DB: EXEC Mascota_Delete @IdMascota
+activate DB
+
+note over DB #LightYellow
+    **SOFT DELETE CON VALIDACIÓN**
+
+    -- Valida que NO tenga citas pendientes
+    IF EXISTS (
+        SELECT 1 FROM Cita
+        WHERE IdMascota = @IdMascota
+          AND Estado IN ('Agendada', 'Confirmada')
+          AND Activo = 1
+    )
+    BEGIN
+        RAISERROR('La mascota tiene citas pendientes', 16, 1)
+        RETURN
+    END
+
+    -- Marca mascota como inactiva
+    UPDATE Mascota
+    SET Activo = 0
+    WHERE IdMascota = @IdMascota
+end note
+
+alt Tiene citas pendientes
+    DB --> Repo: ERROR: Citas pendientes
+    deactivate DB
+    Repo --> BLL: throw SqlException
+    deactivate Repo
+    BLL --> Form: throw Exception
+    deactivate BLL
+
+    Form -> Form: Muestra MessageBox error:\n"No se puede eliminar. La mascota tiene\ncitas agendadas o confirmadas"
+
+    Form --> User: ✗ Error: Citas pendientes\n(no se eliminó)
+
+else Sin citas pendientes
+    DB --> Repo: Filas afectadas: 1
+    deactivate DB
+    Repo --> BLL: void
+    deactivate Repo
+
+    BLL -> Bitacora: RegistrarBaja(\nusuario, "Mascotas", "Mascota",\nidMascota, "Mascota eliminada: Rex (soft delete)")
+    activate Bitacora
+    Bitacora --> BLL: void
+    deactivate Bitacora
+
+    BLL --> Form: void
+    deactivate BLL
+
+    Form -> Form: Muestra mensaje: "Mascota eliminada"
+    note right
+        Soft delete: Activo = 0
+        en la base de datos
+    end note
+
+    Form --> User: ✓ Mascota eliminada\n(soft delete)
+
+end
+
+deactivate Form
+
+@enduml

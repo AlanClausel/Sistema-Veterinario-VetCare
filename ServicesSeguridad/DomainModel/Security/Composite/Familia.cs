@@ -15,40 +15,80 @@ using System.IO;
 namespace ServicesSecurity.DomainModel.Security.Composite
 {
     /// <summary>
-    /// This class (a) defines behaviour for components having children, (b) stores
-    /// child components, and (c) implements child-related operations in the Component
-    /// interface.
+    /// Representa un contenedor de permisos (nodo compuesto) en el patrón Composite del sistema de permisos.
+    /// Una Familia puede contener otras Familias (jerarquía anidada) y/o Patentes (permisos individuales).
+    /// Las Familias con nombres que comienzan con "ROL_" representan roles del sistema.
     /// </summary>
+    /// <remarks>
+    /// Esta clase:
+    /// - Define el comportamiento para componentes que tienen hijos
+    /// - Almacena componentes hijos (Familias y Patentes)
+    /// - Implementa operaciones relacionadas con hijos definidas en Component
+    /// - Permite crear jerarquías de permisos complejas y roles predefinidos
+    /// </remarks>
+    /// <example>
+    /// Ejemplos de Familias:
+    /// - ROL_Administrador: agrupa todos los permisos administrativos
+    /// - ROL_Veterinario: agrupa permisos relacionados con consultas médicas
+    /// - Gestión: agrupa familias/patentes de gestión (clientes, mascotas, etc.)
+    /// </example>
     public class Familia : Component
     {
-
+        /// <summary>
+        /// Colección privada que almacena los componentes hijos (Familias y Patentes)
+        /// </summary>
         private List<Component> childrens = new List<Component>();
 
+        /// <summary>
+        /// Constructor por defecto. Inicializa una familia vacía sin hijos.
+        /// </summary>
         public Familia()
         {
 
         }
+
+        /// <summary>
+        /// Constructor con parámetros. Inicializa una familia con un componente hijo inicial.
+        /// </summary>
+        /// <param name="component">Primer componente hijo a agregar (Familia o Patente)</param>
+        /// <param name="nombre">Nombre identificatorio de la familia</param>
         public Familia(Component component, string nombre)
         {
             childrens.Add(component);
             Nombre = nombre;
         }
 
+        /// <summary>
+        /// Nombre identificatorio de la familia.
+        /// Si comienza con "ROL_", representa un rol del sistema.
+        /// </summary>
         public string Nombre { get; set; }
 
         /// <summary>
-        /// Indica si esta Familia representa un Rol del sistema
-        /// Los roles tienen nombres que comienzan con "ROL_"
+        /// Indica si esta Familia representa un Rol del sistema.
+        /// Los roles son familias especiales cuyos nombres comienzan con "ROL_".
         /// </summary>
+        /// <returns>True si el nombre comienza con "ROL_", false en caso contrario</returns>
+        /// <example>
+        /// - "ROL_Administrador" -> true
+        /// - "ROL_Veterinario" -> true
+        /// - "Gestión" -> false
+        /// </example>
         public bool EsRol
         {
             get { return !string.IsNullOrWhiteSpace(Nombre) && Nombre.StartsWith("ROL_"); }
         }
 
         /// <summary>
-        /// Obtiene el nombre del rol sin el prefijo "ROL_"
-        /// Ejemplo: "ROL_Administrador" retorna "Administrador"
+        /// Obtiene el nombre del rol sin el prefijo "ROL_".
+        /// Si la familia no es un rol, retorna null.
         /// </summary>
+        /// <returns>Nombre del rol sin prefijo o null si no es un rol</returns>
+        /// <example>
+        /// - "ROL_Administrador" -> "Administrador"
+        /// - "ROL_Veterinario" -> "Veterinario"
+        /// - "Gestión" -> null
+        /// </example>
         public string ObtenerNombreRol()
         {
             if (!EsRol) return null;
@@ -56,9 +96,11 @@ namespace ServicesSecurity.DomainModel.Security.Composite
         }
 
         /// <summary>
-        /// Propiedad para mostrar el nombre del rol sin prefijo en controles de UI
-        /// Retorna el nombre completo si no es un rol
+        /// Propiedad para mostrar el nombre del rol sin prefijo en controles de UI.
+        /// Si es un rol, retorna el nombre sin "ROL_".
+        /// Si no es un rol, retorna el nombre completo sin cambios.
         /// </summary>
+        /// <returns>Nombre del rol sin prefijo, o nombre completo si no es un rol</returns>
         public string NombreRol
         {
             get
@@ -69,16 +111,21 @@ namespace ServicesSecurity.DomainModel.Security.Composite
             }
         }
 
-
+        /// <summary>
+        /// Obtiene la lista de componentes hijos (Familias y Patentes) de esta familia.
+        /// </summary>
+        /// <returns>Lista de componentes hijos</returns>
         public List<Component> GetChildrens()
         {
             return childrens;
         }
 
         /// <summary>
-        /// Obtiene todas las patentes (permisos) de esta familia recursivamente
-        /// Incluye patentes directas y patentes de familias hijas
+        /// Obtiene todas las patentes (permisos) de esta familia de forma recursiva.
+        /// Incluye patentes directas y patentes de todas las familias hijas anidadas.
+        /// Útil para obtener todos los permisos efectivos que otorga una familia o rol.
         /// </summary>
+        /// <returns>Lista de todas las patentes contenidas en esta familia y sus subfamilias</returns>
         public List<Patente> ObtenerPatentes()
         {
             List<Patente> patentes = new List<Patente>();
@@ -100,21 +147,38 @@ namespace ServicesSecurity.DomainModel.Security.Composite
             return patentes;
         }
 
-        ///
-        /// <param name="component"></param>
+        /// <summary>
+        /// Agrega un componente hijo (Familia o Patente) a esta familia.
+        /// Permite construir la jerarquía de permisos agregando componentes dinámicamente.
+        /// </summary>
+        /// <param name="component">Componente a agregar (puede ser otra Familia o una Patente)</param>
+        /// <remarks>
+        /// NOTA: Actualmente no valida referencias circulares.
+        /// Se debe tener cuidado de no crear ciclos en la jerarquía (Familia A contiene B, B contiene A).
+        /// </remarks>
         public override void Add(Component component)
         {
             //Validar que no tenga referencias circulares...
             childrens.Add(component);
         }
 
+        /// <summary>
+        /// Retorna la cantidad de componentes hijos directos de esta familia.
+        /// </summary>
+        /// <returns>Número de hijos (Familias + Patentes) contenidos en esta familia</returns>
         public override int ChildrenCount()
         {
             return childrens.Count;
         }
 
-        /// 
-        /// <param name="component"></param>
+        /// <summary>
+        /// Remueve un componente hijo (Familia o Patente) de esta familia.
+        /// Busca y elimina el componente que tenga el mismo IdComponent.
+        /// </summary>
+        /// <param name="component">Componente a remover (se compara por IdComponent)</param>
+        /// <remarks>
+        /// Si el componente no existe, la operación no genera error, simplemente no hace nada.
+        /// </remarks>
         public override void Remove(Component component)
         {
             childrens.RemoveAll(o => o.IdComponent == component.IdComponent);

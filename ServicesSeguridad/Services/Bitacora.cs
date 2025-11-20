@@ -5,20 +5,75 @@ using ServicesSecurity.DomainModel.Security;
 namespace ServicesSecurity.Services
 {
     /// <summary>
-    /// Servicio de bitácora para registro de eventos y excepciones
-    /// Registra eventos tanto en archivos de log como en base de datos
-    /// Singleton pattern
+    /// Servicio centralizado de bitácora para registro de eventos, auditoría y excepciones del sistema.
+    /// Implementa un sistema dual de registro: archivos de log (LoggerService) y base de datos (tabla Bitacora).
+    /// Utiliza el patrón Singleton para garantizar una única instancia global.
     /// </summary>
+    /// <remarks>
+    /// ARQUITECTURA DE DOS NIVELES:
+    /// 1. Archivos de log (LoggerService): Registro rápido de eventos y debugging
+    /// 2. Base de datos (tabla Bitacora): Auditoría persistente con capacidad de búsqueda/filtrado
+    ///
+    /// CATEGORÍAS DE EVENTOS:
+    /// - Login/Logout: Seguimiento de accesos al sistema
+    /// - CRUD Operations: Alta, Baja, Modificación de entidades
+    /// - Excepciones: Errores y problemas técnicos
+    /// - Seguridad: Violaciones DVH, accesos no autorizados
+    ///
+    /// NIVELES DE CRITICIDAD (según CriticidadBitacora):
+    /// - Info: Operaciones normales del sistema
+    /// - Advertencia: Situaciones que requieren atención
+    /// - Error: Errores técnicos que afectan funcionalidad
+    /// - Critico: Problemas de seguridad o integridad de datos
+    ///
+    /// MANEJO DE ERRORES:
+    /// Todos los métodos silencian sus propias excepciones para evitar loops infinitos
+    /// si el sistema de bitácora falla.
+    /// </remarks>
+    /// <example>
+    /// // Uso básico - Registrar una operación de negocio
+    /// var usuario = LoginService.GetUsuarioLogueado();
+    /// Bitacora.Current.RegistrarAlta(
+    ///     usuario.IdUsuario,
+    ///     usuario.Nombre,
+    ///     "Clientes",
+    ///     "Cliente",
+    ///     nuevoCliente.IdCliente.ToString(),
+    ///     $"Cliente creado: {nuevoCliente.NombreCompleto}"
+    /// );
+    ///
+    /// // Registrar una excepción con contexto
+    /// try
+    /// {
+    ///     // Operación riesgosa
+    /// }
+    /// catch (Exception ex)
+    /// {
+    ///     Bitacora.Current.RegistrarExcepcion(ex, usuario?.IdUsuario, usuario?.Nombre, "Clientes");
+    ///     throw;
+    /// }
+    /// </example>
     public sealed class Bitacora
     {
         #region Singleton
+
+        /// <summary>
+        /// Instancia única del servicio Bitacora (patrón Singleton thread-safe)
+        /// </summary>
         private static readonly Bitacora _instance = new Bitacora();
 
+        /// <summary>
+        /// Obtiene la instancia global del servicio Bitacora.
+        /// Acceso thread-safe garantizado por el compilador de C#.
+        /// </summary>
         public static Bitacora Current
         {
             get { return _instance; }
         }
 
+        /// <summary>
+        /// Constructor privado para prevenir instanciación externa (patrón Singleton)
+        /// </summary>
         private Bitacora()
         {
         }

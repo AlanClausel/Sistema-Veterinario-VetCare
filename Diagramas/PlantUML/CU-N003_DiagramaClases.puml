@@ -1,0 +1,410 @@
+@startuml CU-N003_DiagramaClases
+title CU-N003: Gestionar Citas - Diagrama de Clases (Resumido)
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA PRESENTACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "UI - Presentación" {
+    class FormGestionCitas {
+        - _citaSeleccionada : Cita
+        - _modoEdicion : bool
+        + FormGestionCitas()
+        + FormGestionCitas_Load()
+        + CargarCitas()
+        + CargarClientes()
+        + CargarMascotas(idCliente)
+        + CargarVeterinarios()
+        + LimpiarCampos()
+        + btnNuevo_Click()
+        + btnGuardar_Click()
+        + btnModificar_Click()
+        + btnEliminar_Click()
+        + btnCambiarEstado_Click()
+        + btnFiltrar_Click()
+        + cmbCliente_SelectedIndexChanged()
+        + dgvCitas_SelectionChanged()
+        - ValidarCampos() : bool
+        - ValidarHorario(fecha, hora, idVet) : bool
+        - MostrarCitaEnFormulario(cita)
+        - ColorearFilasSegunEstado()
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA LÓGICA DE NEGOCIO (BLL)
+' ═══════════════════════════════════════════════════════════════
+
+package "BLL - Lógica de Negocio" {
+    class CitaBLL <<Singleton>> {
+        {static} + Current : CitaBLL
+        {static} - _instance : CitaBLL
+        + ListarCitasActivas() : List<Cita>
+        + ObtenerCitasPorFecha(fecha) : List<Cita>
+        + ObtenerCitasPorRangoYVeterinario(desde, hasta, vet) : List<Cita>
+        + RegistrarCita(cita) : Cita
+        + ModificarCita(cita) : void
+        + EliminarCita(idCita) : void
+        + CambiarEstado(idCita, nuevoEstado) : void
+        + CompletarCita(idCita) : void
+        + CancelarCita(idCita) : void
+        + ExisteConflictoHorario(fecha, idVet, idCita) : bool
+        - ValidarCita(cita) : void
+        - ValidarTransicionEstado(estadoActual, nuevoEstado) : bool
+    }
+
+    class MascotaBLL <<Singleton>> {
+        {static} + Current : MascotaBLL
+        + ListarMascotasPorCliente(idCliente) : List<Mascota>
+        + ObtenerMascotaPorId(idMascota) : Mascota
+    }
+
+    class ClienteBLL <<Singleton>> {
+        {static} + Current : ClienteBLL
+        + ListarClientesActivos() : List<Cliente>
+        + ObtenerClientePorId(idCliente) : Cliente
+    }
+
+    class VeterinarioBLL <<Singleton>> {
+        {static} + Current : VeterinarioBLL
+        + ListarVeterinariosActivos() : List<Veterinario>
+        + ObtenerVeterinarioPorId(idVet) : Veterinario
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA ACCESO A DATOS (REPOSITORY)
+' ═══════════════════════════════════════════════════════════════
+
+package "DAL - Acceso a Datos" {
+    interface ICitaRepository {
+        + ObtenerTodos() : List<Cita>
+        + ObtenerPorId(idCita) : Cita
+        + ObtenerPorFecha(fecha) : List<Cita>
+        + ObtenerPorRangoYVeterinario(desde, hasta, vet) : List<Cita>
+        + Crear(cita) : void
+        + Actualizar(cita) : void
+        + Eliminar(idCita) : void
+        + ActualizarEstado(idCita, estado) : void
+        + ExisteConflictoHorario(fecha, idVet, idCita) : bool
+    }
+
+    class CitaRepository <<Singleton>> {
+        {static} + Current : CitaRepository
+        {static} - _instance : CitaRepository
+        + ObtenerTodos() : List<Cita>
+        + ObtenerPorId(idCita) : Cita
+        + ObtenerPorFecha(fecha) : List<Cita>
+        + ObtenerPorRangoYVeterinario(desde, hasta, vet) : List<Cita>
+        + Crear(cita) : void
+        + Actualizar(cita) : void
+        + Eliminar(idCita) : void
+        + ActualizarEstado(idCita, estado) : void
+        + ExisteConflictoHorario(fecha, idVet, idCita) : bool
+        - ExecuteStoredProcedure()
+    }
+
+    class CitaAdapter {
+        {static} + AdaptarDesdeDataRow(row) : Cita
+        {static} + AdaptarListaDesdeDataTable(dt) : List<Cita>
+    }
+
+    class SqlHelper {
+        {static} + ExecuteNonQuery(sp, params)
+        {static} + ExecuteScalar(sp, params)
+        {static} + ExecuteDataTable(sp, params)
+        {static} + ExecuteReader(sp, params)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA DOMINIO (ENTIDADES)
+' ═══════════════════════════════════════════════════════════════
+
+package "Domain - Entidades" {
+    class Cita {
+        + IdCita : Guid
+        + IdMascota : Guid
+        + IdVeterinario : Guid?
+        + FechaCita : DateTime
+        + TipoConsulta : string
+        + Motivo : string
+        + Estado : EstadoCita
+        + Activo : bool
+        + MascotaNombre : string
+        + ClienteNombre : string
+        + ClienteApellido : string
+        + ClienteDNI : string
+        + VeterinarioNombre : string
+        + HoraCita : string <<get>>
+        + EstadoDescripcion : string <<get>>
+        + PuedeSerCancelada() : bool
+        + PuedeSerCompletada() : bool
+        + Validar() : void
+    }
+
+    class Mascota {
+        + IdMascota : Guid
+        + IdCliente : Guid
+        + Nombre : string
+        + Especie : string
+        + Raza : string
+    }
+
+    class Cliente {
+        + IdCliente : Guid
+        + Nombre : string
+        + Apellido : string
+        + DNI : string
+        + Telefono : string
+        + NombreCompleto : string <<get>>
+    }
+
+    class Veterinario {
+        + IdVeterinario : Guid
+        + Nombre : string
+        + Matricula : string
+        + Especialidad : string
+        + Activo : bool
+    }
+
+    class ConsultaMedica {
+        + IdConsulta : Guid
+        + IdCita : Guid
+        + IdVeterinario : Guid
+        + Sintomas : string
+        + Diagnostico : string
+    }
+
+    enum EstadoCita {
+        Agendada
+        Confirmada
+        Completada
+        Cancelada
+        NoAsistio
+    }
+
+    enum TipoConsulta {
+        Consulta General
+        Vacunación
+        Control
+        Urgencia
+        Cirugía
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  STORED PROCEDURES (BASE DE DATOS)
+' ═══════════════════════════════════════════════════════════════
+
+package "Database - Stored Procedures" {
+    class "SP: Cita_SelectAll" as SPSelectAll <<Stored Procedure>> {
+        + Retorna: citas activas (Activo = 1)
+        + Incluye: JOIN a Mascota, Cliente, Veterinario
+        + Ordenado por: FechaCita DESC
+    }
+
+    class "SP: Cita_SelectByFecha" as SPSelectByFecha <<Stored Procedure>> {
+        + @Fecha : DateTime
+        + Retorna: citas de una fecha específica
+        + WHERE CAST(FechaCita AS DATE) = @Fecha
+    }
+
+    class "SP: Cita_SelectByRangoYVeterinario" as SPRango <<Stored Procedure>> {
+        + @FechaDesde : DateTime
+        + @FechaHasta : DateTime
+        + @Veterinario : string (nullable)
+        + Retorna: citas en rango de fechas
+        + Filtro opcional por veterinario
+    }
+
+    class "SP: Cita_Insert" as SPInsert <<Stored Procedure>> {
+        + @IdCita, @IdMascota, @IdVeterinario
+        + @FechaCita, @TipoConsulta, @Motivo, @Estado
+        + INSERT INTO Cita (...)
+        + Validación: mascota existe
+        + Validación: veterinario existe (si aplica)
+    }
+
+    class "SP: Cita_Update" as SPUpdate <<Stored Procedure>> {
+        + @IdCita, @FechaCita, @TipoConsulta, @Motivo
+        + UPDATE Cita SET ...
+        + NO permite cambiar IdMascota
+        + NO permite cambiar estado (usar UpdateEstado)
+    }
+
+    class "SP: Cita_UpdateEstado" as SPUpdateEstado <<Stored Procedure>> {
+        + @IdCita : Guid
+        + @Estado : string
+        + UPDATE Cita SET Estado = @Estado
+        + Usado para cambios de estado
+    }
+
+    class "SP: Cita_Delete" as SPDelete <<Stored Procedure>> {
+        + @IdCita : Guid
+        + Soft delete: UPDATE Cita SET Activo = 0
+        + Validación: NO puede eliminarse si está Completada
+        + Validación: NO tiene ConsultaMedica asociada
+    }
+
+    class "SP: Cita_ExisteConflictoHorario" as SPConflicto <<Stored Procedure>> {
+        + @FechaCita : DateTime
+        + @IdVeterinario : Guid
+        + @IdCitaExcluida : Guid (opcional)
+        + Retorna: 1 si existe conflicto, 0 si no
+        + Valida: mismo veterinario, misma fecha/hora
+        + Excluye cita actual (para modificaciones)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  SERVICIOS
+' ═══════════════════════════════════════════════════════════════
+
+package "Services" {
+    class Bitacora <<Singleton>> {
+        {static} + Current : Bitacora
+        + RegistrarAlta(usuario, modulo, entidad, id, detalle)
+        + RegistrarModificacion(usuario, modulo, entidad, id, detalle)
+        + RegistrarBaja(usuario, modulo, entidad, id, detalle)
+        + RegistrarAccion(usuario, modulo, accion, detalle)
+    }
+
+    class LoginService {
+        {static} + GetUsuarioLogueado() : Usuario
+    }
+
+    class ExceptionManager {
+        {static} + GetInstance() : ExceptionManager
+        + HandleException(exception)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+' UI → BLL
+FormGestionCitas ..> CitaBLL : usa
+FormGestionCitas ..> MascotaBLL : usa
+FormGestionCitas ..> ClienteBLL : usa
+FormGestionCitas ..> VeterinarioBLL : usa
+
+' BLL → Repository
+CitaBLL ..> ICitaRepository : usa
+CitaBLL ..> CitaRepository : Current
+CitaBLL ..> MascotaBLL : verifica mascotas
+CitaBLL ..> VeterinarioBLL : verifica veterinarios
+
+' BLL → Servicios
+CitaBLL ..> Bitacora : registra operaciones
+CitaBLL ..> LoginService : obtiene usuario
+CitaBLL ..> ExceptionManager : maneja errores
+
+' Repository → Adapter y SqlHelper
+CitaRepository ..|> ICitaRepository : implementa
+CitaRepository ..> CitaAdapter : usa
+CitaRepository ..> SqlHelper : usa
+
+' Repository → Stored Procedures
+CitaRepository ..> SPSelectAll : ejecuta
+CitaRepository ..> SPSelectByFecha : ejecuta
+CitaRepository ..> SPRango : ejecuta
+CitaRepository ..> SPInsert : ejecuta
+CitaRepository ..> SPUpdate : ejecuta
+CitaRepository ..> SPUpdateEstado : ejecuta
+CitaRepository ..> SPDelete : ejecuta
+CitaRepository ..> SPConflicto : ejecuta
+
+' Adapter → Entidad
+CitaAdapter ..> Cita : crea instancias
+
+' BLL → Entidades
+CitaBLL ..> Cita : gestiona
+
+' Dominio - Relaciones
+Cita "N" --> "1" Mascota : para
+Cita "N" --> "0..1" Veterinario : atendida por
+Cita "1" o-- "0..1" ConsultaMedica : tiene
+Mascota "N" --> "1" Cliente : pertenece a
+Cita --> EstadoCita : tiene
+Cita --> TipoConsulta : tiene
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS
+' ═══════════════════════════════════════════════════════════════
+
+note top of Cita
+    **Validaciones:**
+    - FechaCita: no puede ser en el pasado
+    - TipoConsulta: requerido
+    - Motivo: requerido, 5-500 caracteres
+    - IdMascota: mascota debe existir y estar activa
+    - IdVeterinario: opcional al crear, requerido al completar
+    - Sin conflicto de horario (mismo vet, misma hora)
+
+    **Propiedades calculadas:**
+    - HoraCita = FechaCita.ToString("HH:mm")
+    - EstadoDescripcion = Estado.ToString()
+
+    **Métodos de negocio:**
+    - PuedeSerCancelada(): Agendada o Confirmada
+    - PuedeSerCompletada(): Agendada o Confirmada
+end note
+
+note bottom of EstadoCita
+    **Transiciones de Estado:**
+    Agendada → Confirmada ✓
+    Agendada → Completada ✓
+    Agendada → Cancelada ✓
+    Agendada → NoAsistio ✓
+    Confirmada → Completada ✓
+    Confirmada → Cancelada ✓
+    Confirmada → NoAsistio ✓
+    Completada → (ninguna) ✗
+    Cancelada → (ninguna) ✗
+    NoAsistio → (ninguna) ✗
+end note
+
+note right of SPConflicto
+    **Validación de Conflicto:**
+    Mismo veterinario NO puede
+    tener 2 citas a la misma hora.
+
+    Compara:
+    - IdVeterinario
+    - FechaCita (fecha + hora exacta)
+    - Estado (solo Agendada/Confirmada)
+
+    Excluye cita actual al modificar.
+end note
+
+note left of FormGestionCitas
+    **Operaciones CRUD:**
+    - Crear: Nuevo + Guardar
+    - Leer: Cargar todas, filtrar por fecha/veterinario
+    - Actualizar: Modificar + Guardar
+    - Eliminar: Soft delete (valida estado)
+    - Cambiar Estado: botones contextuales
+
+    **Código de colores:**
+    - Agendada: Amarillo (LightYellow)
+    - Confirmada: Verde (LightGreen)
+    - Completada: Gris (LightGray)
+    - Cancelada: Rojo coral (LightCoral)
+    - NoAsistio: Salmón (LightSalmon)
+end note
+
+note bottom of SPDelete
+    **Soft Delete:**
+    Marca Activo = 0.
+
+    Validaciones:
+    - NO eliminar si Estado = Completada
+    - NO eliminar si tiene ConsultaMedica
+
+    Si tiene consulta médica,
+    no se puede eliminar (integridad).
+end note
+
+@enduml

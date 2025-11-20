@@ -1,0 +1,610 @@
+================================================================================
+ESPECIFICACIÓN RESUMIDA PARA ENTERPRISE ARCHITECT
+CU-A002: GESTIONAR USUARIOS
+================================================================================
+
+TAB: GENERAL
+============
+Name: CU-A002: Gestionar Usuarios
+Alias: CRUD Usuarios, Administración de Usuarios
+Author: Sistema VetCare
+Status: Approved
+Version: 1.0
+Complexity: Medium
+
+TAB: NOTES (Descripción General)
+=================================
+Permite al administrador realizar operaciones CRUD (Crear, Leer, Actualizar, Eliminar) sobre usuarios del sistema. Incluye validaciones de negocio, hash de contraseñas, cálculo de DVH, asignación de roles, y registro de todas las operaciones en bitácora.
+
+Operaciones principales:
+- Crear usuario (con hash de contraseña y asignación de rol)
+- Modificar usuario (actualizar datos y/o contraseña)
+- Eliminar usuario (soft delete, no puede eliminarse a sí mismo)
+- Buscar usuario (por nombre o ID)
+- Listar todos los usuarios
+- Cambiar rol de usuario (con Unit of Work)
+
+Componentes involucrados:
+- UI: gestionUsuarios.cs
+- BLL: UsuarioBLL (métodos CRUD y validaciones)
+- Services: CryptographyService (hash), Bitacora (auditoría)
+- DAL: UsuarioRepository, UsuarioFamiliaRepository
+- BD: SecurityVet (tabla Usuario, UsuarioFamilia, Familia)
+
+Patrones aplicados:
+- Repository (acceso a datos)
+- Singleton (repositorios y servicios)
+- Unit of Work (cambio de rol)
+
+TAB: PRECONDITIONS
+==================
+1. Administrador debe estar logueado con rol "ROL_Administrador"
+2. Usuario debe tener permiso "FormGestionUsuarios" (patente)
+3. Conexión a base de datos SecurityVet disponible
+4. Al menos un rol (Familia) debe existir en el sistema
+5. Para modificar/eliminar: usuario objetivo debe existir en BD
+
+TAB: POSTCONDITIONS (SUCCESS)
+==============================
+CREAR USUARIO:
+1. Usuario creado en tabla Usuario con GUID generado
+2. Contraseña almacenada como hash SHA256 (nunca en texto plano)
+3. DVH calculado y almacenado
+4. Rol (Familia) asignado en tabla UsuarioFamilia
+5. Evento registrado en Bitácora (Acción: Alta, Criticidad: Info)
+6. Usuario visible en DataGridView de gestión
+
+MODIFICAR USUARIO:
+1. Datos del usuario actualizados en tabla Usuario
+2. Si cambió contraseña: nuevo hash calculado y almacenado
+3. DVH recalculado automáticamente
+4. Si cambió rol: relación UsuarioFamilia actualizada (con Unit of Work)
+5. Evento registrado en Bitácora (Acción: Modificación, Criticidad: Info)
+6. DataGridView refrescado
+
+ELIMINAR USUARIO:
+1. Usuario marcado como Activo=0 (soft delete)
+2. Evento registrado en Bitácora (Acción: Baja, Criticidad: Critico)
+3. Usuario ya no aparece en DataGridView (filtrado por Activo=1)
+
+BUSCAR USUARIO:
+1. Usuario encontrado y datos mostrados en formulario
+2. Si no existe: excepción UsuarioNoEncontradoException
+
+LISTAR USUARIOS:
+1. Todos los usuarios activos mostrados en DataGridView
+2. Columnas: Nombre, Email, Rol
+
+TAB: POSTCONDITIONS (FAILURE)
+==============================
+1. Si error de validación: MessageBox con mensaje específico, usuario permanece en formulario
+2. Si usuario duplicado: ValidacionException, no se crea
+3. Si intento de auto-eliminación: MessageBox de advertencia, operación cancelada
+4. Si error de BD: ExceptionManager maneja y muestra error al usuario
+5. Ningún cambio aplicado en BD si falla la validación
+6. Evento de error registrado en LoggerService
+
+TAB: BASIC PATH (Flujo Principal)
+==================================
+
+OPERACIÓN 1: CREAR USUARIO
+===========================
+
+PASO 1: Iniciar creación
+Administrador hace clic en botón "Nuevo" en formulario gestionUsuarios.
+
+PASO 2: Habilitar campos
+Sistema limpia campos, desbloquea controles de entrada y habilita botón "Guardar".
+
+PASO 3: Ingresar datos
+Administrador ingresa:
+- Nombre de usuario (obligatorio)
+- Email (obligatorio, formato válido)
+- Contraseña (obligatorio, mínimo 6 caracteres)
+- Rol (obligatorio, selección de ComboBox)
+
+PASO 4: Validar email
+Sistema valida formato de email con expresión regular:
+^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+
+PASO 5: Guardar usuario
+Administrador hace clic en "Guardar".
+
+PASO 6: Validaciones de negocio
+Sistema ejecuta UsuarioBLL.CrearUsuario() que valida:
+- Nombre, email y password no vacíos
+- Password mínimo 6 caracteres
+- Rol seleccionado existe y es válido (familia.EsRol = true)
+- Usuario no existe previamente (SelectOneByName)
+
+PASO 7: Hashear contraseña
+Sistema invoca CryptographyService.HashPassword(password):
+- Algoritmo: SHA256
+- Encoding: Unicode (UTF-16)
+- Resultado: string hexadecimal 64 caracteres
+
+PASO 8: Crear usuario en BD
+Sistema crea objeto Usuario:
+- IdUsuario: Guid.NewGuid()
+- Nombre: nombre ingresado
+- Email: email ingresado
+- Password: password en texto plano (para registro histórico)
+- Clave: hash SHA256
+- Activo: true
+- IdiomaPreferido: "es-AR" (por defecto)
+
+Sistema ejecuta UsuarioRepository.Current.Insert(usuario):
+- SP: Usuario_Insert
+- Calcula DVH automáticamente en el SP
+
+PASO 9: Asignar rol
+Sistema invoca UsuarioBLL.AsignarFamilia(idUsuario, idFamiliaRol):
+- Crea relación UsuarioFamilia
+- Inserta en tabla UsuarioFamilia
+
+PASO 10: Registrar en bitácora
+Sistema invoca Bitacora.Current.RegistrarAlta():
+- IdUsuario: administrador logueado
+- Módulo: "Usuarios"
+- Entidad: "Usuario"
+- Descripción: "Usuario creado: [nombre], Rol: [nombreRol]"
+- Criticidad: "Info"
+
+PASO 11: Refrescar vista
+Sistema recarga DataGridView con todos los usuarios activos.
+Muestra MessageBox: "Usuario creado correctamente".
+
+FIN - Usuario creado exitosamente.
+
+
+OPERACIÓN 2: MODIFICAR USUARIO
+===============================
+
+PASO 1: Seleccionar usuario
+Administrador selecciona usuario en DataGridView.
+Sistema carga datos en campos del formulario (evento: SelectionChanged).
+
+PASO 2: Iniciar modificación
+Administrador hace clic en "Modificar".
+Sistema habilita campos para edición, guarda modo _modoEdicion = true.
+
+PASO 3: Modificar datos
+Administrador modifica campos deseados (nombre, email, contraseña, rol).
+
+PASO 4: Guardar cambios
+Administrador hace clic en "Guardar".
+
+PASO 5: Validar cambios
+Sistema ejecuta UsuarioBLL.ActualizarUsuario():
+- Valida nombre y email no vacíos
+- Si cambió nombre: verifica que no esté en uso por otro usuario
+- Si ingresó nueva contraseña: valida mínimo 6 caracteres
+
+PASO 6: Actualizar contraseña (si se modificó)
+Si password no está vacío:
+- Sistema genera nuevo hash: CryptographyService.HashPassword(password)
+- Actualiza campos Password y Clave
+
+PASO 7: Actualizar en BD
+Sistema ejecuta UsuarioRepository.Current.Update(usuario):
+- SP: Usuario_Update
+- Recalcula DVH automáticamente
+
+PASO 8: Cambiar rol (si se modificó)
+Si se seleccionó nuevo rol:
+Sistema invoca UsuarioBLL.CambiarRol(idUsuario, idNuevoRol) con Unit of Work:
+- Inicia transacción
+- Elimina roles anteriores (DeleteRelacion)
+- Inserta nuevo rol (Insert)
+- Commit o Rollback
+
+PASO 9: Registrar modificación
+Sistema invoca Bitacora.Current.RegistrarModificacion():
+- Descripción incluye si se cambió contraseña o rol
+- Criticidad: "Info"
+
+PASO 10: Refrescar vista
+Sistema recarga DataGridView.
+Muestra MessageBox: "Usuario actualizado correctamente".
+
+FIN - Usuario modificado exitosamente.
+
+
+OPERACIÓN 3: ELIMINAR USUARIO
+==============================
+
+PASO 1: Seleccionar usuario
+Administrador selecciona usuario en DataGridView.
+
+PASO 2: Solicitar eliminación
+Administrador hace clic en "Eliminar".
+
+PASO 3: Validar auto-eliminación
+Sistema verifica:
+if (_usuarioSeleccionado.IdUsuario == _usuarioLogueado.IdUsuario)
+
+Si es el mismo usuario:
+- Muestra MessageBox: "no_eliminar_propio_usuario"
+- FIN (operación cancelada)
+
+PASO 4: Confirmar eliminación
+Sistema muestra MessageBox de confirmación:
+"¿Está seguro de eliminar al usuario [nombre]?"
+Botones: Sí / No
+
+PASO 5: Ejecutar eliminación
+Si administrador confirma:
+Sistema invoca UsuarioBLL.EliminarUsuario(idUsuario):
+- Ejecuta UsuarioRepository.Current.Delete(idUsuario)
+- SP: Usuario_Delete (marca Activo=0, soft delete)
+
+PASO 6: Registrar baja
+Sistema invoca Bitacora.Current.Registrar():
+- Acción: "Baja"
+- Descripción: "Usuario ELIMINADO: [nombre]"
+- Criticidad: "Critico" (más severa que otras operaciones)
+
+PASO 7: Refrescar vista
+Sistema recarga DataGridView (usuario ya no aparece).
+Muestra MessageBox: "Usuario eliminado correctamente".
+
+FIN - Usuario eliminado exitosamente.
+
+
+OPERACIÓN 4: BUSCAR USUARIO
+============================
+
+PASO 1: Ingresar criterio
+Administrador ingresa nombre de usuario en campo de búsqueda.
+
+PASO 2: Ejecutar búsqueda
+Administrador hace clic en "Buscar".
+
+PASO 3: Validar criterio
+Sistema valida que campo de búsqueda no esté vacío.
+
+PASO 4: Buscar en BD
+Sistema invoca UsuarioBLL.ObtenerUsuarioPorNombre(nombre):
+- Ejecuta UsuarioRepository.Current.SelectOneByName(nombre)
+- SP: Usuario_SelectByUsername
+
+PASO 5: Mostrar resultado
+Si usuario encontrado:
+- Sistema carga datos en formulario
+- Muestra MessageBox: "Usuario encontrado: [nombre]"
+
+Si usuario no encontrado:
+- Lanza UsuarioNoEncontradoException
+- Muestra MessageBox informativo
+- Limpia campos
+
+FIN - Búsqueda completada.
+
+
+OPERACIÓN 5: LISTAR USUARIOS
+=============================
+
+PASO 1: Cargar al abrir formulario
+Sistema se ejecuta automáticamente al cargar formulario (evento: Load).
+
+PASO 2: Obtener usuarios
+Sistema invoca UsuarioBLL.ObtenerTodosLosUsuarios():
+- Ejecuta UsuarioRepository.Current.SelectAll()
+- SP: Usuario_SelectAll (WHERE Activo=1)
+
+PASO 3: Proyectar datos
+Sistema crea proyección anónima con LINQ:
+{
+  IdUsuario,
+  Nombre,
+  Email,
+  Rol = usuario.ObtenerNombreRol() ?? "sin_asignar"
+}
+
+PASO 4: Mostrar en grilla
+Sistema asigna lista a dgvUsuarios.DataSource.
+Oculta columna IdUsuario.
+
+FIN - Usuarios listados.
+
+================================================================================
+TAB: ALTERNATE PATHS
+====================
+
+FA-1: NOMBRE DE USUARIO DUPLICADO (Paso 6 - Crear, Paso 5 - Modificar)
+-----------------------------------------------------------------------
+CONDICIÓN: Usuario con mismo nombre ya existe en BD
+
+FA-1.1: UsuarioBLL detecta usuario existente con SelectOneByName()
+FA-1.2: Lanza ValidacionException: "Ya existe un usuario con el nombre '[nombre]'"
+FA-1.3: gestionUsuarios captura excepción
+FA-1.4: Muestra MessageBox con mensaje de error
+FA-1.5: Usuario permanece en formulario con campos habilitados
+FA-1.6: FIN (operación cancelada)
+
+
+FA-2: FORMATO DE EMAIL INVÁLIDO (Paso 4 - Crear/Modificar)
+-----------------------------------------------------------
+CONDICIÓN: Email no cumple con expresión regular
+
+FA-2.1: Sistema valida email con Regex.IsMatch(email, patron)
+FA-2.2: Retorna false
+FA-2.3: Muestra MessageBox: "formato_email_invalido"
+FA-2.4: Mueve foco a campo txtEmail
+FA-2.5: return (cancela guardado)
+FA-2.6: FIN (operación cancelada)
+
+
+FA-3: CONTRASEÑA MUY CORTA (Paso 6 - Crear, Paso 5 - Modificar)
+----------------------------------------------------------------
+CONDICIÓN: Contraseña tiene menos de 6 caracteres
+
+FA-3.1: UsuarioBLL.ValidarLongitudMinima() detecta longitud insuficiente
+FA-3.2: Lanza ValidacionException: "El campo 'Contraseña' debe tener al menos 6 caracteres"
+FA-3.3: gestionUsuarios captura excepción
+FA-3.4: Muestra MessageBox de validación
+FA-3.5: Usuario permanece en formulario
+FA-3.6: FIN (operación cancelada)
+
+
+FA-4: ROL NO SELECCIONADO (Paso 6 - Crear)
+-------------------------------------------
+CONDICIÓN: ComboBox de rol no tiene selección
+
+FA-4.1: Sistema verifica: if (rolSeleccionado == null)
+FA-4.2: Muestra MessageBox: "debe_seleccionar_rol"
+FA-4.3: return (cancela guardado)
+FA-4.4: FIN (operación cancelada)
+
+
+FA-5: INTENTO DE AUTO-ELIMINACIÓN (Paso 3 - Eliminar)
+------------------------------------------------------
+CONDICIÓN: Administrador intenta eliminar su propio usuario
+
+FA-5.1: Sistema compara: if (_usuarioSeleccionado.IdUsuario == _usuarioLogueado.IdUsuario)
+FA-5.2: Muestra MessageBox: "no_eliminar_propio_usuario"
+FA-5.3: return (cancela eliminación)
+FA-5.4: FIN (operación cancelada)
+
+REGLA DE NEGOCIO: Un usuario no puede eliminarse a sí mismo (protección del sistema)
+
+
+FA-6: USUARIO NO ENCONTRADO EN BÚSQUEDA (Paso 4 - Buscar)
+----------------------------------------------------------
+CONDICIÓN: SelectOneByName retorna null
+
+FA-6.1: UsuarioBLL.ObtenerUsuarioPorNombre() recibe null del repository
+FA-6.2: Lanza UsuarioNoEncontradoException(nombre)
+FA-6.3: gestionUsuarios captura UsuarioNoEncontradoException
+FA-6.4: Muestra MessageBox informativo
+FA-6.5: Limpia campos del formulario
+FA-6.6: FIN (usuario no existe)
+
+
+FA-7: ERROR AL CAMBIAR ROL (Paso 8 - Modificar)
+------------------------------------------------
+CONDICIÓN: Falla transacción de Unit of Work
+
+FA-7.1: Durante CambiarRol(), ocurre excepción en Delete o Insert
+FA-7.2: Unit of Work detecta excepción en bloque catch
+FA-7.3: Ejecuta unitOfWork.Rollback() (revierte cambios)
+FA-7.4: Lanza Exception: "Error al cambiar el rol del usuario"
+FA-7.5: gestionUsuarios captura excepción
+FA-7.6: Muestra MessageBox de error
+FA-7.7: NINGÚN cambio aplicado (atomicidad garantizada)
+FA-7.8: FIN (operación fallida)
+
+
+FA-8: USUARIO SIN ROL (No es error, es estado válido)
+------------------------------------------------------
+CONDICIÓN: Usuario existe pero no tiene Familias asignadas
+
+NOTA: El sistema permite usuarios sin rol, pero no pueden iniciar sesión.
+En el DataGridView, la columna Rol mostrará "sin_asignar".
+El administrador puede asignarle un rol después mediante Modificar.
+
+
+FA-9: ERROR GENERAL DE BD (Cualquier paso)
+-------------------------------------------
+CONDICIÓN: SqlException, conexión perdida, timeout, etc.
+
+FA-9.1: Excepción se propaga desde Repository → BLL → UI
+FA-9.2: ExceptionManager.Current.Handle(ex) registra en logs
+FA-9.3: gestionUsuarios captura Exception genérica
+FA-9.4: Muestra MessageBox: "error_guardar/error_eliminar: [mensaje]"
+FA-9.5: Usuario permanece en formulario (si estaba editando)
+FA-9.6: FIN (operación fallida)
+
+================================================================================
+TAB: CONSTRAINTS
+================================================================================
+
+SEGURIDAD:
+- Contraseñas SIEMPRE hasheadas SHA256 + Unicode
+- DVH calculado automáticamente en cada INSERT/UPDATE
+- Usuarios bloqueados (Activo=0) no pueden iniciar sesión
+- Auto-eliminación prohibida (protección del sistema)
+
+VALIDACIONES:
+- Nombre de usuario único (clave de negocio)
+- Email formato válido (regex)
+- Contraseña mínimo 6 caracteres
+- Rol debe existir y ser válido (familia.EsRol = true)
+
+AUDITABILIDAD:
+- Todas las operaciones registradas en Bitacora
+- Eliminación = criticidad "Critico" (más severa)
+- Cambio de rol = criticidad "Advertencia"
+- Creación/Modificación = criticidad "Info"
+
+INTEGRIDAD:
+- Soft delete (Activo=0, no DELETE físico)
+- Unit of Work para cambio de rol (atomicidad)
+- Cascada: al eliminar usuario, se eliminan sus relaciones UsuarioFamilia
+
+USABILIDAD:
+- Multi-idioma (textos traducidos con LanguageManager)
+- Validaciones con mensajes descriptivos
+- Confirmación para eliminar
+- Campos bloqueados/desbloqueados según modo (nuevo/edición/consulta)
+
+================================================================================
+TAB: EXTENSION POINTS
+=====================
+Ninguno. Este es un caso de uso de gestión CRUD directo sin extensiones.
+
+================================================================================
+TAB: SCENARIOS (Casos de Prueba)
+=================================
+
+SC-1: CREAR USUARIO EXITOSO
+Tipo: Success Path
+Datos:
+  - Nombre: usuario_test
+  - Email: usuario@test.com
+  - Contraseña: Password123
+  - Rol: ROL_Veterinario
+Resultado: Usuario creado, visible en grilla, registro en bitácora
+
+
+SC-2: CREAR USUARIO CON EMAIL INVÁLIDO
+Tipo: Alternate Path (FA-2)
+Datos:
+  - Email: emailsinformato
+Resultado: MessageBox "formato_email_invalido", operación cancelada
+
+
+SC-3: CREAR USUARIO DUPLICADO
+Tipo: Alternate Path (FA-1)
+Datos:
+  - Nombre: admin (ya existe)
+Resultado: ValidacionException "Ya existe un usuario...", operación cancelada
+
+
+SC-4: MODIFICAR CONTRASEÑA DE USUARIO
+Tipo: Success Path
+Datos:
+  - Usuario existente
+  - Nueva contraseña: NewPass456
+Resultado: Hash actualizado, registro en bitácora con "(contraseña actualizada)"
+
+
+SC-5: CAMBIAR ROL DE USUARIO
+Tipo: Success Path
+Datos:
+  - Usuario con ROL_Veterinario
+  - Nuevo rol: ROL_Recepcionista
+Resultado: Rol cambiado (Unit of Work), registro en bitácora "Rol cambiado"
+
+
+SC-6: ELIMINAR USUARIO EXITOSO
+Tipo: Success Path
+Datos:
+  - Usuario diferente al logueado
+  - Confirmación: Sí
+Resultado: Activo=0, no aparece en grilla, bitácora criticidad "Critico"
+
+
+SC-7: INTENTO DE AUTO-ELIMINACIÓN
+Tipo: Alternate Path (FA-5)
+Datos:
+  - Usuario seleccionado = usuario logueado
+Resultado: MessageBox "no_eliminar_propio_usuario", operación cancelada
+
+
+SC-8: BUSCAR USUARIO EXISTENTE
+Tipo: Success Path
+Datos:
+  - Nombre búsqueda: admin
+Resultado: Datos cargados en formulario, MessageBox "Usuario encontrado"
+
+
+SC-9: BUSCAR USUARIO INEXISTENTE
+Tipo: Alternate Path (FA-6)
+Datos:
+  - Nombre búsqueda: noexiste
+Resultado: UsuarioNoEncontradoException, MessageBox informativo, campos limpios
+
+
+SC-10: LISTAR TODOS LOS USUARIOS
+Tipo: Success Path
+Datos: N/A
+Resultado: DataGridView con todos usuarios Activo=1, columnas: Nombre, Email, Rol
+
+================================================================================
+TAB: REQUIREMENTS
+=================
+REQ-SEC-005: Gestión de Usuarios (Crítico) ✓ Implementado
+REQ-SEC-006: Validación de Contraseñas Seguras (Alto) ✓ Implementado
+REQ-SEC-007: Asignación de Roles (Crítico) ✓ Implementado
+REQ-SEC-008: Protección contra Auto-eliminación (Alto) ✓ Implementado
+REQ-NFR-003: Auditoría de Operaciones CRUD (Alto) ✓ Implementado
+REQ-NFR-004: Validación de Datos de Entrada (Medio) ✓ Implementado
+REQ-INT-002: Soft Delete de Usuarios (Medio) ✓ Implementado
+REQ-INT-003: Atomicidad en Cambio de Rol - Unit of Work (Alto) ✓ Implementado
+
+================================================================================
+STORED PROCEDURES UTILIZADOS
+=============================
+Usuario_Insert (idUsuario, nombre, email, password, clave, activo, idiomaPreferido)
+Usuario_Update (idUsuario, nombre, email, password, clave, activo)
+Usuario_Delete (idUsuario) → marca Activo=0
+Usuario_SelectOne (idUsuario)
+Usuario_SelectAll → WHERE Activo=1
+Usuario_SelectByUsername (nombreUsuario)
+
+UsuarioFamilia_Insert (idUsuario, idFamilia)
+UsuarioFamilia_DeleteByUsuario (idUsuario) → elimina todas las relaciones
+UsuarioFamilia_DeleteRelacion (idUsuario, idFamilia) → elimina una relación específica
+
+Familia_SelectOne (idFamilia)
+Familia_SelectAll
+
+Bitacora_Insert (parámetros de evento)
+
+================================================================================
+CLASES PRINCIPALES
+==================
+UI:
+- gestionUsuarios.cs (formulario WinForms)
+
+BLL:
+- UsuarioBLL (métodos estáticos CRUD)
+  * CrearUsuario
+  * ActualizarUsuario
+  * EliminarUsuario
+  * ObtenerUsuarioPorId
+  * ObtenerUsuarioPorNombre
+  * ObtenerTodosLosUsuarios
+  * CambiarRol (con Unit of Work)
+  * AsignarFamilia
+  * ValidarCampoRequerido
+  * ValidarLongitudMinima
+
+Services:
+- CryptographyService (hash SHA256)
+- Bitacora (auditoría)
+- LoginService (usuario logueado)
+- ExceptionManager (manejo de errores)
+
+DAL:
+- UsuarioRepository
+- UsuarioFamiliaRepository
+- FamiliaRepository
+- SecurityUnitOfWork (Unit of Work para transacciones)
+
+Domain:
+- Usuario
+- Familia
+- UsuarioFamilia
+- Excepciones: ValidacionException, UsuarioNoEncontradoException
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
+
+Versión: 1.0 - Resumida para Enterprise Architect
+Fecha: 2025
+Base de Datos: SecurityVet
+Complejidad: Media
+Estado: Aprobado - Implementado

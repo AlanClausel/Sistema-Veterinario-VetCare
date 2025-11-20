@@ -290,40 +290,45 @@ namespace UI.WinUi.Negocio
 
                 if (saveDialog.ShowDialog() == DialogResult.OK)
                 {
-                    ExportarACSV(saveDialog.FileName);
+                    // Usar el servicio de exportación
+                    ServicesSecurity.Services.ExportarAExcel.Current.ExportarDataGridViewACSV(
+                        dgvCitasSemana,
+                        saveDialog.FileName
+                    );
+
                     MessageBox.Show(LanguageManager.Translate("reporte_exportado_exitosamente"),
                         LanguageManager.Translate("exito"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    // Registrar en bitácora
+                    if (_usuarioLogueado != null)
+                    {
+                        ServicesSecurity.Services.Bitacora.Current.RegistrarEvento(
+                            _usuarioLogueado.IdUsuario,
+                            _usuarioLogueado.Nombre,
+                            "Reportes",
+                            "Exportacion",
+                            $"Reporte de citas exportado: {System.IO.Path.GetFileName(saveDialog.FileName)}",
+                            ServicesSecurity.DomainModel.Security.CriticidadBitacora.Info,
+                            "Cita",
+                            null
+                        );
+                    }
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"{LanguageManager.Translate("error_exportar")}: {ex.Message}",
                     LanguageManager.Translate("error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
 
-        private void ExportarACSV(string rutaArchivo)
-        {
-            using (var writer = new System.IO.StreamWriter(rutaArchivo, false, System.Text.Encoding.UTF8))
-            {
-                // Escribir encabezados
-                writer.WriteLine(LanguageManager.Translate("csv_headers"));
-
-                // Escribir filas
-                foreach (DataGridViewRow row in dgvCitasSemana.Rows)
+                // Registrar error en bitácora
+                if (_usuarioLogueado != null)
                 {
-                    if (row.DataBoundItem is Cita cita)
-                    {
-                        string fecha = cita.FechaCita.ToString("dd/MM/yyyy");
-                        string hora = cita.HoraCita;
-                        string cliente = $"{cita.ClienteNombre} {cita.ClienteApellido}";
-                        string mascota = cita.MascotaNombre;
-                        string veterinario = cita.Veterinario;
-                        string tipoConsulta = cita.TipoConsulta;
-                        string estado = cita.EstadoDescripcion;
-
-                        writer.WriteLine($"{fecha},{hora},{cliente},{mascota},{veterinario},{tipoConsulta},{estado}");
-                    }
+                    ServicesSecurity.Services.Bitacora.Current.RegistrarExcepcion(
+                        ex,
+                        _usuarioLogueado.IdUsuario,
+                        _usuarioLogueado.Nombre,
+                        "Reportes"
+                    );
                 }
             }
         }

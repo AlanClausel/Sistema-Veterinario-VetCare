@@ -1,0 +1,340 @@
+@startuml CU-N011_DiagramaSecuencia_Resumido
+title CU-N011: Generar Reportes - Diagrama de Secuencia (Resumido)
+
+actor "Usuario\n(Admin/Recep/Vet)" as User
+participant "FormReportes" as Form
+participant "VeterinarioBLL" as VetBLL
+participant "CitaBLL" as CitaBLL
+participant "CitaRepository" as Repo
+participant "SaveFileDialog" as SaveDlg
+participant "ExportarAExcel" as Export
+participant "Bitacora" as Bitacora
+database "VetCareDB" as DB
+
+== 1. Cargar Reporte Inicial (Semana Actual) ==
+
+User -> Form: Accede a "Reportes"
+activate Form
+
+Form -> Form: FormReportes_Load()
+
+Form -> Form: CargarVeterinarios()
+activate Form #LightGray
+
+Form -> VetBLL: ListarVeterinariosActivos()
+activate VetBLL
+VetBLL -> DB: EXEC Veterinario_SelectAll
+DB --> VetBLL: List<Veterinario>
+VetBLL --> Form: List<Veterinario>
+deactivate VetBLL
+
+Form -> Form: cmbVeterinario.Items.Clear()
+Form -> Form: cmbVeterinario.Items.Add("Todos")
+
+loop Para cada veterinario
+    Form -> Form: cmbVeterinario.Items.Add(veterinario.Nombre)
+end
+
+Form -> Form: cmbVeterinario.SelectedIndex = 0 (Todos)
+
+deactivate Form
+
+Form -> Form: CalcularFechasSemana()
+activate Form #LightCyan
+note right
+    hoy = DateTime.Today
+    inicioSemana = hoy.AddDays(-(int)hoy.DayOfWeek)
+    finSemana = inicioSemana.AddDays(6)
+
+    Ejemplo: si hoy = Miércoles 17/01/2025
+    inicioSemana = Domingo 14/01/2025
+    finSemana = Sábado 20/01/2025
+end note
+Form --> Form: (inicioSemana, finSemana)
+deactivate Form
+
+Form -> Form: dtpDesde.Value = inicioSemana
+Form -> Form: dtpHasta.Value = finSemana
+
+Form -> Form: CargarReporteSemana()
+activate Form #LightYellow
+
+Form -> Form: btnCargar.Enabled = false
+Form -> Form: Cursor = Cursors.WaitCursor
+
+Form -> Form: fechaDesde = dtpDesde.Value.Date
+Form -> Form: fechaHasta = dtpHasta.Value.Date
+
+Form -> Form: Valida fechaDesde <= fechaHasta
+
+Form -> Form: veterinarioSeleccionado =\n  (cmbVeterinario.SelectedIndex == 0)\n    ? null : nombreSeleccionado
+
+Form -> CitaBLL: ObtenerCitasPorRangoYVeterinario(\nfechaDesde, fechaHasta, null)
+activate CitaBLL
+
+CitaBLL -> Repo: ObtenerPorRangoYVeterinario(\nfechaDesde, fechaHasta, null)
+activate Repo
+
+Repo -> DB: EXEC Cita_SelectByRangoYVeterinario\n@FechaDesde, @FechaHasta, @Veterinario=NULL
+activate DB
+note over DB
+    SELECT c.*, m.Nombre AS MascotaNombre,
+           cl.Nombre AS ClienteNombre,
+           cl.Apellido AS ClienteApellido,
+           v.Nombre AS VeterinarioNombre
+    FROM Cita c
+    INNER JOIN Mascota m ON c.IdMascota = m.IdMascota
+    INNER JOIN Cliente cl ON m.IdCliente = cl.IdCliente
+    LEFT JOIN Veterinario v
+      ON c.IdVeterinario = v.IdVeterinario
+    WHERE c.FechaCita >= @FechaDesde
+      AND c.FechaCita <= @FechaHasta
+      AND (@Veterinario IS NULL OR v.Nombre = @Veterinario)
+      AND c.Activo = 1
+    ORDER BY c.FechaCita ASC
+end note
+DB --> Repo: DataTable (citas del rango)
+deactivate DB
+
+Repo --> CitaBLL: List<Cita>
+deactivate Repo
+
+CitaBLL --> Form: List<Cita> (ordenadas por fecha)
+deactivate CitaBLL
+
+Form -> Form: _citasCargadas = citas
+Form -> Form: dgvCitasSemana.DataSource = citas
+
+Form -> Form: ColorearFilasSegunEstado()
+activate Form #LightGoldenRodYellow
+note right
+    Agendada: LightYellow
+    Confirmada: LightGreen
+    Completada: LightGray
+    Cancelada: LightCoral
+    NoAsistio: LightSalmon
+end note
+deactivate Form
+
+Form -> Form: ActualizarEstadisticas(citas)
+activate Form #LightCyan
+
+Form -> Form: agendadas = citas.Count(c => c.Estado == Agendada)
+Form -> Form: confirmadas = citas.Count(c => c.Estado == Confirmada)
+Form -> Form: completadas = citas.Count(c => c.Estado == Completada)
+Form -> Form: canceladas = citas.Count(c => c.Estado == Cancelada)
+Form -> Form: noAsistio = citas.Count(c => c.Estado == NoAsistio)
+
+Form -> Form: lblAgendadas.Text = "Agendadas: {agendadas}"
+Form -> Form: lblConfirmadas.Text = "Confirmadas: {confirmadas}"
+Form -> Form: lblCompletadas.Text = "Completadas: {completadas}"
+Form -> Form: lblCanceladas.Text = "Canceladas: {canceladas} | No asistió: {noAsistio}"
+Form -> Form: lblTotal.Text = "Total de citas: {citas.Count}"
+
+deactivate Form
+
+Form -> Form: btnCargar.Enabled = true
+Form -> Form: Cursor = Cursors.Default
+
+deactivate Form
+
+Form --> User: Reporte semana actual cargado\ncon estadísticas
+
+deactivate Form
+
+== 2. Filtrar por Rango de Fechas Personalizado ==
+
+User -> Form: Cambia dtpDesde: 01/01/2025
+User -> Form: Cambia dtpHasta: 31/01/2025
+User -> Form: Clic en "Cargar"
+activate Form
+
+Form -> Form: btnCargar_Click()
+Form -> Form: CargarReporteSemana()
+note right
+    Mismo flujo que carga inicial
+    pero con fechas personalizadas
+end note
+
+Form -> CitaBLL: ObtenerCitasPorRangoYVeterinario(\n01/01/2025, 31/01/2025, null)
+activate CitaBLL
+CitaBLL --> Form: List<Cita> (mes completo)
+deactivate CitaBLL
+
+Form -> Form: Actualiza grid, colores y estadísticas
+
+Form --> User: ✓ Reporte mes enero cargado
+
+deactivate Form
+
+== 3. Filtrar por Veterinario Específico ==
+
+User -> Form: Selecciona cmbVeterinario: "Dr. Martínez"
+User -> Form: Clic en "Cargar"
+activate Form
+
+Form -> Form: btnCargar_Click()
+Form -> Form: CargarReporteSemana()
+
+Form -> Form: veterinarioSeleccionado =\n  cmbVeterinario.SelectedItem.ToString()\n  = "Dr. Martínez"
+
+Form -> CitaBLL: ObtenerCitasPorRangoYVeterinario(\nfechaDesde, fechaHasta, "Dr. Martínez")
+activate CitaBLL
+
+CitaBLL -> Repo: ObtenerPorRangoYVeterinario(...)
+activate Repo
+
+Repo -> DB: EXEC Cita_SelectByRangoYVeterinario\n...\nWHERE v.Nombre = 'Dr. Martínez'
+activate DB
+DB --> Repo: DataTable (SOLO citas de Dr. Martínez)
+deactivate DB
+
+Repo --> CitaBLL: List<Cita> (filtradas)
+deactivate Repo
+
+CitaBLL --> Form: List<Cita> (solo ese veterinario)
+deactivate CitaBLL
+
+Form -> Form: Actualiza grid y estadísticas\n(solo citas de Dr. Martínez)
+
+Form --> User: ✓ Reporte filtrado por veterinario
+
+deactivate Form
+
+== 4. Atajo "Mes Actual" ==
+
+User -> Form: Clic en "Mes Actual"
+activate Form
+
+Form -> Form: btnMesActual_Click()
+
+Form -> Form: CalcularFechasMes()
+activate Form #LightCyan
+note right
+    hoy = DateTime.Today
+    inicioMes = new DateTime(hoy.Year, hoy.Month, 1)
+    finMes = inicioMes.AddMonths(1).AddDays(-1)
+
+    Ejemplo: si hoy = 17/01/2025
+    inicioMes = 01/01/2025
+    finMes = 31/01/2025
+end note
+Form --> Form: (inicioMes, finMes)
+deactivate Form
+
+Form -> Form: dtpDesde.Value = inicioMes
+Form -> Form: dtpHasta.Value = finMes
+
+Form -> Form: CargarReporteSemana()
+note right: Automáticamente recarga
+
+Form --> User: ✓ Fechas actualizadas\nReporte mes completo cargado
+
+deactivate Form
+
+== 5. Exportar Reporte a CSV ==
+
+User -> Form: Clic en "Exportar"
+activate Form
+
+Form -> Form: btnExportar_Click()
+
+Form -> Form: Valida dgvCitasSemana.Rows.Count > 0
+
+alt Grid vacío
+    Form -> Form: Muestra MessageBox:\n"No hay datos para exportar"
+    Form --> User: Advertencia
+else Grid con datos
+
+    Form -> SaveDlg: new SaveFileDialog()
+    activate SaveDlg
+
+    Form -> SaveDlg: Filter = "Archivos CSV (*.csv)|*.csv"
+    Form -> SaveDlg: FileName = "Reporte_Citas_20250117_143022.csv"
+    note right
+        Formato: yyyyMMdd_HHmmss
+        Timestamp automático
+    end note
+
+    Form -> SaveDlg: ShowDialog()
+
+    SaveDlg --> User: Selector de archivo
+
+    User -> SaveDlg: Selecciona:\nC:\Reportes\Citas_Enero.csv\nClic "Guardar"
+
+    SaveDlg --> Form: DialogResult.OK\nrutaArchivo
+    deactivate SaveDlg
+
+    Form -> Export: ExportarDataGridViewACSV(\ndgvCitasSemana, rutaArchivo)
+    activate Export #LightGray
+    note right
+        ExportarAExcel.Current maneja internamente:
+        - StreamWriter con UTF-8
+        - Escape de caracteres (RFC 4180)
+        - Encabezados automáticos
+        - Iteración de filas
+        - Manejo de errores
+    end note
+
+    Export -> Export: Valida dgv y rutaArchivo
+    Export -> Export: Obtiene columnas visibles ordenadas
+    Export -> Export: Crea StreamWriter(ruta, false, UTF8)
+
+    Export -> Export: Escribe encabezados:\n"Fecha,Hora,Cliente,Mascota,..."
+
+    loop Para cada fila visible
+        Export -> Export: Obtiene valores de cada celda
+        Export -> Export: Aplica EscaparCSV() a cada valor
+        Export -> Export: WriteLine con valores escapados
+    end
+
+    Export -> Export: Close() / Dispose() StreamWriter
+    Export --> Form: void (éxito)
+    deactivate Export
+
+    Form -> Bitacora: RegistrarEvento(\nidUsuario, nombre, "Reportes",\n"Exportacion", "Reporte exportado: {archivo}",\nCriticidadBitacora.Info, "Cita", null)
+    activate Bitacora
+    note right
+        Auditoría de exportación:
+        - Quién: Usuario logueado
+        - Qué: Nombre del archivo
+        - Cuándo: Timestamp automático
+        - Módulo: Reportes
+    end note
+    Bitacora -> DB: INSERT INTO Bitacora (...)
+    DB --> Bitacora: OK
+    Bitacora --> Form: void
+    deactivate Bitacora
+
+    Form -> Form: Muestra MessageBox:\n"Reporte exportado exitosamente"
+
+    Form --> User: ✓ Archivo CSV generado\n✓ Auditoría registrada
+    note right
+        **Beneficios del refactor:**
+
+        ✓ Separación de responsabilidades
+        ✓ Lógica reutilizable (ExportarAExcel.Current)
+        ✓ Auditoría completa (Bitacora)
+        ✓ Manejo centralizado de errores
+        ✓ Escape automático de caracteres
+        ✓ Encoding UTF-8 garantizado
+        ✓ Mantiene retrocompatibilidad con código legacy
+
+        **Ejemplo de contenido CSV:**
+        ═════════════════════════════════════════
+        Fecha,Hora,Cliente,Mascota,Veterinario,...
+        15/01/2025,10:00,Juan Pérez,Rex,Dr. Martínez,...
+        15/01/2025,11:30,María González,Michi,Dr. López,...
+        16/01/2025,09:00,Pedro López,Toby,Dr. Martínez,...
+        ═════════════════════════════════════════
+
+        Compatible con Excel
+        Separador: coma (,)
+        RFC 4180 compliant
+    end note
+
+end
+
+deactivate Form
+
+@enduml

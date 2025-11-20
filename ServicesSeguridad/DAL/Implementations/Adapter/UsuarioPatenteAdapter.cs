@@ -11,11 +11,18 @@ using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.DAL.Implementations.Adapter
 {
+    /// <summary>
+    /// Adaptador para transformar filas de base de datos en objetos UsuarioPatente (relación Usuario-Patente).
+    /// Implementa el patrón Adapter y Singleton.
+    /// </summary>
     public sealed class UsuarioPatenteAdapter : IEntityAdapter<UsuarioPatente>
     {
         #region singleton
         private readonly static UsuarioPatenteAdapter _instance = new UsuarioPatenteAdapter();
 
+        /// <summary>
+        /// Obtiene la instancia única del adaptador (patrón Singleton).
+        /// </summary>
         public static UsuarioPatenteAdapter Current
         {
             get
@@ -24,16 +31,24 @@ namespace ServicesSecurity.DAL.Implementations.Adapter
             }
         }
 
+        /// <summary>
+        /// Constructor privado para patrón Singleton.
+        /// </summary>
         private UsuarioPatenteAdapter()
         {
             //Implent here the initialization of your singleton
         }
-        #endregion 
+        #endregion
+
+        /// <summary>
+        /// Adapta un array de valores de base de datos a un objeto UsuarioPatente.
+        /// Orden esperado: idUsuario, idPatente
+        /// </summary>
         public UsuarioPatente Adapt(object[] values)
         {
             try
             {
-                return new UsuarioPatente() ///HIDRATA OBJETO UsuarioPatente con lo que le tiró la DAL interna 
+                return new UsuarioPatente() // Hidrata objeto UsuarioPatente con lo que le tiró la DAL interna
                 {
                     //idUsuarioPatente = Guid.Parse(values[0].ToString()),
                     idUsuario = Guid.Parse(values[0].ToString()),

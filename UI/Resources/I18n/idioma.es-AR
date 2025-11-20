@@ -535,3 +535,6 @@ backup_confirmar_restore=¿Confirma que desea restaurar la base de datos {0}?\n\
 backup_restore_exito=Restore completado exitosamente.\n\nSe recomienda reiniciar la aplicación.
 error_restore=Error al realizar el restore
 advertencia=Advertencia
+backup_realizar_completo=Realizar Backup Completo
+abrir_carpeta=Abrir Carpeta de Backups
+backup_info=El backup completo incluye ambas bases de datos (SecurityVet y VetCareDB).\nLa restauración detecta automáticamente qué base de datos restaurar.

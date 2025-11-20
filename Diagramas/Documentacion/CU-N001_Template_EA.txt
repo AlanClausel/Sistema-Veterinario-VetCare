@@ -1,0 +1,382 @@
+================================================================================
+CASO DE USO: CU-N001 - GESTIONAR CLIENTES
+================================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+Código:             CU-N001
+Nombre:             Gestionar Clientes
+Tipo:               NEGOCIO - CRUD Completo
+Actor Principal:    Veterinario, Recepcionista, Administrador
+Módulo:             Clientes
+Formulario:         gestionClientes.cs (543 líneas)
+Patente Requerida:  FormGestionClientes
+Complejidad:        Media
+Estado:             ✅ IMPLEMENTADO
+
+DESCRIPCIÓN
+-----------
+CRUD completo de clientes (dueños de mascotas). Incluye creación con validaciones
+de DNI único y email formato válido, modificación, eliminación soft delete con
+cascada a mascotas, búsqueda flexible por nombre/apellido/DNI/email, y
+visualización de mascotas asociadas en grid maestro-detalle.
+
+VALIDACIONES: DNI único, email formato válido, nombre/apellido mínimo 2 chars,
+DNI mínimo 6 chars, teléfono mínimo 7 chars (opcional).
+
+RELACIÓN: 1 Cliente → N Mascotas (eliminación cascada).
+
+AUDITORÍA: TODAS las operaciones (Alta, Modificación, Baja) en Bitácora.
+
+================================================================================
+OPERACIONES DEL CASO DE USO
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 1: CREAR NUEVO CLIENTE                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, formulario abierto
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Clic en "Nuevo"                 │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Limpiar campos                       │
+│                                    │ 3. Habilitar campos edición             │
+│                                    │ 4. Habilitar botón "Guardar"            │
+│                                    │ 5. Foco en Nombre                       │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 6. Ingresar datos:                 │                                         │
+│    - Nombre, Apellido, DNI         │                                         │
+│    - Teléfono, Email, Dirección    │                                         │
+│    - Checkbox Activo               │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 7. Clic en "Guardar"               │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 8. Validar campos obligatorios:         │
+│                                    │    - Nombre >= 2 chars                  │
+│                                    │    - Apellido >= 2 chars                │
+│                                    │    - DNI >= 6 chars                     │
+│                                    │ 9. Validar email formato (MailAddress)  │
+│                                    │ 10. Validar teléfono >= 7 chars         │
+│                                    │ 11. Verificar DNI único:                │
+│                                    │     ExistePorDNI(dni)                   │
+│                                    │ 12. Generar IdCliente GUID              │
+│                                    │ 13. FechaRegistro = DateTime.Now        │
+│                                    │ 14. Ejecutar SP: Cliente_Insert         │
+│                                    │ 15. Registrar en Bitácora (Alta)        │
+│                                    │ 16. Mensaje: "Cliente registrado"       │
+│                                    │ 17. Recargar grid clientes              │
+│                                    │ 18. Limpiar y bloquear campos           │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Cliente creado en BD, visible en grid, registro en Bitácora
+
+FLUJOS ALTERNATIVOS:
+[FA-1] DNI duplicado → Error: "Ya existe un cliente con DNI [DNI]"
+[FA-2] Email inválido → Error: "El formato del email no es válido"
+[FA-3] Campo vacío → Error: "El [campo] es obligatorio"
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 2: MODIFICAR CLIENTE EXISTENTE                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, al menos un cliente en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar cliente en grid     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Cargar _clienteSeleccionado          │
+│                                    │ 3. Mostrar datos en campos (bloqueados) │
+│                                    │ 4. Cargar mascotas en grid inferior     │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 5. Clic en "Modificar"             │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 6. Verificar cliente seleccionado       │
+│                                    │ 7. _modoEdicion = true                  │
+│                                    │ 8. Habilitar campos                     │
+│                                    │ 9. Habilitar botón "Guardar"            │
+│                                    │ 10. Foco en Nombre                      │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 11. Modificar datos deseados       │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 12. Clic en "Guardar"              │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 13. Validar campos (igual crear)        │
+│                                    │ 14. Verificar cliente existe            │
+│                                    │ 15. Verificar DNI único excluyendo      │
+│                                    │     actual: ExistePorDNI(dni, idActual) │
+│                                    │ 16. Preservar FechaRegistro original    │
+│                                    │ 17. Ejecutar SP: Cliente_Update         │
+│                                    │ 18. Registrar en Bitácora (Modificación)│
+│                                    │ 19. Mensaje: "Cliente actualizado"      │
+│                                    │ 20. Recargar grid                       │
+│                                    │ 21. Limpiar y bloquear campos           │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Cliente actualizado en BD, cambios en grid, registro Bitácora
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin cliente seleccionado → "Debe seleccionar un cliente"
+[FA-2] DNI duplicado en otro cliente → "Ya existe otro cliente con DNI [DNI]"
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 3: ELIMINAR CLIENTE (SOFT DELETE + CASCADA MASCOTAS)               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, al menos un cliente en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar cliente en grid     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Cargar cliente y mascotas            │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 3. Clic en "Eliminar"              │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 4. Verificar cliente seleccionado       │
+│                                    │ 5. Mensaje confirmación: "¿Eliminar     │
+│                                    │    cliente [Nombre]? También elimina    │
+│                                    │    todas sus mascotas" (Sí/No)          │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 6. Confirmar "Sí"                  │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 7. Verificar cliente existe             │
+│                                    │ 8. Guardar datos para bitácora          │
+│                                    │ 9. Contar mascotas asociadas            │
+│                                    │ 10. Ejecutar SP: Cliente_Delete         │
+│                                    │     (SET Activo=0, cascada a mascotas)  │
+│                                    │ 11. Registrar en Bitácora (Baja)        │
+│                                    │ 12. Mensaje: "Cliente eliminado"        │
+│                                    │ 13. Recargar grid (sin eliminado)       │
+│                                    │ 14. Limpiar campos y selección          │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Cliente Activo=0, mascotas Activo=0, NO visible en grid,
+                 registro en Bitácora. DATOS PRESERVADOS (no delete físico).
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin cliente seleccionado → "Debe seleccionar un cliente"
+[FA-2] Usuario cancela → No ejecuta eliminación
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 4: BUSCAR CLIENTES POR CRITERIO                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, formulario abierto
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Ingresar texto en "Buscar       │                                         │
+│    Cliente" (nombre/apellido/      │                                         │
+│    DNI/email)                      │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 2. Clic en "Buscar"                │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 3. Capturar texto búsqueda (Trim)       │
+│                                    │ 4. SI vacío: cargar todos los clientes  │
+│                                    │    SI con texto: buscar por criterio    │
+│                                    │ 5. Ejecutar SP: Cliente_SelectByCriterio│
+│                                    │    WHERE Nombre LIKE '%criterio%' OR    │
+│                                    │          Apellido LIKE '%criterio%' OR  │
+│                                    │          DNI LIKE '%criterio%' OR       │
+│                                    │          Email LIKE '%criterio%'        │
+│                                    │    AND Activo = 1                       │
+│                                    │ 6. Cargar resultados en grid            │
+│                                    │ 7. Ordenar por Apellido                 │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Grid muestra solo clientes que coinciden. Si sin resultados,
+                 grid vacío (NO es error).
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Campo vacío → Cargar todos los clientes activos
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 5: LISTAR TODOS LOS CLIENTES                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado con patente correcta
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Abrir formulario Gestión        │                                         │
+│    Clientes                        │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Evento GestionClientes_Load          │
+│                                    │ 3. Aplicar traducciones multi-idioma    │
+│                                    │ 4. Configurar DataGridView clientes     │
+│                                    │ 5. Configurar DataGridView mascotas     │
+│                                    │ 6. Ejecutar ClienteBLL.ListarTodos      │
+│                                    │ 7. Ejecutar SP: Cliente_SelectAll       │
+│                                    │    WHERE Activo = 1                     │
+│                                    │ 8. Adaptar DataRows a List<Cliente>     │
+│                                    │ 9. Cargar en grid principal             │
+│                                    │ 10. Ordenar por Apellido ASC            │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Grid con todos los clientes activos, campos bloqueados vacíos,
+                 botón Guardar deshabilitado.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 6: VISUALIZAR MASCOTAS DEL CLIENTE                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, al menos un cliente en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar cliente en grid     │                                         │
+│    principal                       │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Evento dgvClientes_SelectionChanged  │
+│                                    │ 3. Capturar cliente de fila             │
+│                                    │ 4. Asignar a _clienteSeleccionado       │
+│                                    │ 5. Cargar datos en campos               │
+│                                    │ 6. Llamar ClienteBLL.                   │
+│                                    │    ObtenerClienteConMascotas(id)        │
+│                                    │ 7. Ejecutar SP: Mascota_SelectByCliente │
+│                                    │ 8. Adaptar DataRows a List<Mascota>     │
+│                                    │ 9. Filtrar solo Activo = 1              │
+│                                    │ 10. Cargar en dgvMascotas (inferior)    │
+│                                    │ 11. Mostrar: Nombre, Especie, Raza,     │
+│                                    │     Edad, Sexo                          │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Datos cliente visibles, mascotas en grid inferior. Si sin
+                 mascotas, grid vacío (no error).
+
+================================================================================
+ARQUITECTURA Y PATRONES
+================================================================================
+
+CAPAS (N-Tier):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ UI          → gestionClientes.cs (WinForm)                                  │
+│ BLL         → ClienteBLL.cs (validaciones, reglas de negocio)              │
+│ DAL         → ClienteRepository.cs + ClienteAdapter.cs                      │
+│ Database    → VetCareDB (tabla Cliente, 9 SPs)                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PATRONES APLICADOS:
+1. SINGLETON: ClienteBLL.Current, ClienteRepository.Current
+2. REPOSITORY: IClienteRepository (contrato) + implementación
+3. ADAPTER: ClienteAdapter.Adaptar(DataRow) → Cliente
+4. EXCEPTION MANAGER: Bitacora.Current.RegistrarExcepcion()
+
+VALIDACIONES (ClienteBLL.ValidarCliente):
+┌────────────┬──────────────────────────────────────────────────────────────┐
+│ Campo      │ Validación                                                   │
+├────────────┼──────────────────────────────────────────────────────────────┤
+│ Nombre     │ Obligatorio, mínimo 2 caracteres                             │
+│ Apellido   │ Obligatorio, mínimo 2 caracteres                             │
+│ DNI        │ Obligatorio, mínimo 6 chars, ÚNICO en sistema                │
+│ Email      │ OPCIONAL, si se proporciona: formato válido (MailAddress)    │
+│ Teléfono   │ OPCIONAL, si se proporciona: mínimo 7 caracteres             │
+│ Dirección  │ OPCIONAL, sin validaciones                                   │
+└────────────┴──────────────────────────────────────────────────────────────┘
+
+AUDITORÍA (Bitácora):
+┌──────────────────┬────────────┬──────────┬──────────────┬─────────────────┐
+│ Operación        │ Criticidad │ Módulo   │ Acción       │ Descripción     │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Crear Cliente    │ Info       │ Clientes │ Alta         │ Cliente         │
+│                  │            │          │              │ registrado:     │
+│                  │            │          │              │ [Nombre], DNI   │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Modificar Cliente│ Info       │ Clientes │ Modificacion │ Cliente         │
+│                  │            │          │              │ modificado      │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Eliminar Cliente │ Advertencia│ Clientes │ Baja         │ Cliente         │
+│                  │            │          │              │ eliminado       │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Excepción        │ Error      │ Clientes │ Excepcion    │ Mensaje error   │
+└──────────────────┴────────────┴──────────┴──────────────┴─────────────────┘
+
+================================================================================
+STORED PROCEDURES
+================================================================================
+
+Base de datos: VetCareDB | Tabla: Cliente
+
+┌──────────────────────────┬────────────────────────────────────────────────┐
+│ SP Name                  │ Propósito                                      │
+├──────────────────────────┼────────────────────────────────────────────────┤
+│ Cliente_Insert           │ Crear nuevo cliente                            │
+│ Cliente_Update           │ Modificar cliente existente                    │
+│ Cliente_Delete           │ Soft delete (Activo=0), cascada a mascotas     │
+│ Cliente_SelectOne        │ Obtener cliente por ID                         │
+│ Cliente_SelectAll        │ Listar todos WHERE Activo=1                    │
+│ Cliente_SelectByDNI      │ Buscar por DNI                                 │
+│ Cliente_SelectByCriterio │ Buscar por nombre/apellido/DNI/email (LIKE)    │
+│ Cliente_ExistsByDNI      │ Verificar DNI único (excluye IdCliente actual) │
+│ Mascota_SelectByCliente  │ Obtener mascotas de un cliente                 │
+└──────────────────────────┴────────────────────────────────────────────────┘
+
+================================================================================
+MODELO DE DOMINIO
+================================================================================
+
+ENTIDAD: Cliente (DomainModel/Cliente.cs - 48 líneas)
+
+Propiedades:
+┌────────────────┬──────────┬────────────────────────────────────────────────┐
+│ Propiedad      │ Tipo     │ Descripción                                    │
+├────────────────┼──────────┼────────────────────────────────────────────────┤
+│ IdCliente      │ Guid     │ PK, generado con NEWID() o Guid.NewGuid()      │
+│ Nombre         │ string   │ Nombre del cliente                             │
+│ Apellido       │ string   │ Apellido del cliente                           │
+│ DNI            │ string   │ DNI único (índice único en BD)                 │
+│ Telefono       │ string   │ Teléfono de contacto                           │
+│ Email          │ string   │ Email de contacto                              │
+│ Direccion      │ string   │ Dirección física                               │
+│ FechaRegistro  │ DateTime │ Fecha de alta en sistema                       │
+│ Activo         │ bool     │ Soft delete flag (true=activo)                 │
+│ Mascotas       │ List     │ Relación 1:N con mascotas                      │
+└────────────────┴──────────┴────────────────────────────────────────────────┘
+
+Propiedad Calculada:
+- NombreCompleto → "{Apellido}, {Nombre}"
+
+RELACIONES:
+Cliente (1) ──────► (N) Mascota
+  IdCliente (PK)       IdCliente (FK)
+
+Cascada: Eliminar Cliente → todas sus Mascotas Activo=0 (soft delete)
+
+================================================================================
+ARCHIVOS RELACIONADOS
+================================================================================
+
+CÓDIGO:
+- UI/WinUi/Negocio/gestionClientes.cs (543 líneas)
+- VetCareNegocio/BLL/ClienteBLL.cs (480 líneas)
+- VetCareNegocio/DAL/Contracts/IClienteRepository.cs
+- VetCareNegocio/DAL/Implementations/ClienteRepository.cs
+- VetCareNegocio/DAL/Implementations/Adapter/ClienteAdapter.cs
+- VetCareNegocio/DomainModel/Cliente.cs (48 líneas)
+- VetCareNegocio/DAL/Tools/SqlHelper.cs
+
+STORED PROCEDURES:
+- Database/XX_CreateSP_Cliente.sql (9 SPs)
+- Database/XX_CreateTable_Cliente.sql
+
+RECURSOS:
+- UI/Resources/I18n/idioma.es-AR
+- UI/Resources/I18n/idioma.en-GB
+
+DIAGRAMAS (a crear):
+- CU-N001_GestionarClientes.puml
+- CU-N001_CrearCliente_Secuencia.puml
+
+================================================================================
+ÚLTIMA ACTUALIZACIÓN: 2025-01-16 | VERSIÓN: 1.0 | ESTADO: ✅ COMPLETO
+================================================================================

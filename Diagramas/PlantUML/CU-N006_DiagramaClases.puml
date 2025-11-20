@@ -1,0 +1,267 @@
+@startuml CU-N006_DiagramaClases
+title CU-N006: Registrar Consulta Médica - Diagrama de Clases (Resumido)
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA PRESENTACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "UI - Presentación" {
+    class FormConsultaMedica {
+        - _idCita : Guid
+        - _idVeterinario : Guid
+        - _consultaActual : ConsultaMedica
+        - _medicamentosSeleccionados : List<MedicamentoSeleccionado>
+        - _medicamentosDisponibles : List<Medicamento>
+        + FormConsultaMedica(idCita, idVeterinario)
+        + FormConsultaMedica_Load()
+        + CargarDatosCita()
+        + CargarConsultaExistente()
+        + btnAñadir_Click()
+        + btnQuitar_Click()
+        + btnFinalizarConsulta_Click()
+    }
+
+    class FormCantidadMedicamento {
+        + Medicamento : Medicamento
+        + Cantidad : int
+        + Indicaciones : string
+        + FormCantidadMedicamento(medicamento)
+        + btnAceptar_Click()
+    }
+
+    class MedicamentoSeleccionado {
+        + IdMedicamento : Guid
+        + Nombre : string
+        + Cantidad : int
+        + Indicaciones : string
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA LÓGICA DE NEGOCIO (BLL)
+' ═══════════════════════════════════════════════════════════════
+
+package "BLL - Lógica de Negocio" {
+    class ConsultaMedicaBLL <<Singleton>> {
+        {static} + Current : ConsultaMedicaBLL
+        + IniciarConsulta(idCita, idVeterinario) : ConsultaMedica
+        + ObtenerConsultaPorCita(idCita) : ConsultaMedica
+        + GuardarConsulta(consulta) : void
+        + FinalizarConsulta(idConsulta) : bool
+        + AgregarMedicamento(idConsulta, idMed, cant, ind) : void
+        + EliminarMedicamento(idConsulta, idMed) : void
+        + ObtenerMedicamentosDeConsulta(idConsulta) : List<MedicamentoRecetado>
+    }
+
+    class CitaBLL <<Singleton>> {
+        {static} + Current : CitaBLL
+        + ObtenerCita(idCita) : Cita
+        + ActualizarEstado(idCita, estado) : void
+    }
+
+    class MedicamentoBLL <<Singleton>> {
+        {static} + Current : MedicamentoBLL
+        + ListarMedicamentosDisponibles() : List<Medicamento>
+        + ObtenerMedicamento(idMedicamento) : Medicamento
+        + ValidarStock(idMedicamento, cantidad) : bool
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA ACCESO A DATOS (REPOSITORY)
+' ═══════════════════════════════════════════════════════════════
+
+package "DAL - Acceso a Datos" {
+    class ConsultaMedicaRepository <<Singleton>> {
+        {static} + Current : ConsultaMedicaRepository
+        + Crear(consulta) : void
+        + Actualizar(consulta) : void
+        + ObtenerPorCita(idCita) : ConsultaMedica
+        + FinalizarConsulta(idConsulta, idCita) : bool
+        + AgregarMedicamento(idConsulta, idMed, cant, ind) : void
+        + EliminarMedicamento(idConsulta, idMed) : void
+    }
+
+    class CitaRepository <<Singleton>> {
+        {static} + Current : CitaRepository
+        + ObtenerPorId(idCita) : Cita
+        + ActualizarEstado(idCita, estado) : void
+    }
+
+    class MedicamentoRepository <<Singleton>> {
+        {static} + Current : MedicamentoRepository
+        + ObtenerDisponibles() : List<Medicamento>
+        + ObtenerPorId(idMedicamento) : Medicamento
+        + ActualizarStock(idMedicamento, cantidad) : void
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA DOMINIO (ENTIDADES)
+' ═══════════════════════════════════════════════════════════════
+
+package "Domain - Entidades" {
+    class ConsultaMedica {
+        + IdConsulta : Guid
+        + IdCita : Guid
+        + IdVeterinario : Guid
+        + Sintomas : string
+        + Diagnostico : string
+        + Tratamiento : string
+        + Observaciones : string
+        + FechaConsulta : DateTime
+        + Activo : bool
+        + Medicamentos : List<MedicamentoRecetado>
+        + Validar() : void
+    }
+
+    class Cita {
+        + IdCita : Guid
+        + IdMascota : Guid
+        + IdVeterinario : Guid
+        + FechaCita : DateTime
+        + TipoConsulta : string
+        + Estado : EstadoCita
+        + Motivo : string
+        + MascotaNombre : string
+        + ClienteNombre : string
+    }
+
+    class Mascota {
+        + IdMascota : Guid
+        + IdCliente : Guid
+        + Nombre : string
+        + Especie : string
+        + Raza : string
+        + FechaNacimiento : DateTime
+        + Peso : decimal
+    }
+
+    class Cliente {
+        + IdCliente : Guid
+        + Nombre : string
+        + Apellido : string
+        + DNI : string
+        + Telefono : string
+        + Email : string
+    }
+
+    class Veterinario {
+        + IdVeterinario : Guid
+        + Nombre : string
+        + Matricula : string
+        + Especialidad : string
+        + Activo : bool
+    }
+
+    class Medicamento {
+        + IdMedicamento : Guid
+        + Nombre : string
+        + Presentacion : string
+        + Stock : int
+        + PrecioUnitario : decimal
+        + Activo : bool
+    }
+
+    class MedicamentoRecetado {
+        + IdConsulta : Guid
+        + IdMedicamento : Guid
+        + Cantidad : int
+        + Indicaciones : string
+        + NombreMedicamento : string
+        + Presentacion : string
+    }
+
+    enum EstadoCita {
+        Agendada
+        Confirmada
+        Completada
+        Cancelada
+        NoAsistio
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  STORED PROCEDURE (BASE DE DATOS)
+' ═══════════════════════════════════════════════════════════════
+
+package "Database" {
+    class "SP: ConsultaMedica_Finalizar" as SPFinalizar <<Stored Procedure>> {
+        + @IdConsulta : Guid
+        + @IdCita : Guid
+        --
+        + BEGIN TRANSACTION
+        + Validar stock de TODOS los medicamentos
+        + IF stock insuficiente: ROLLBACK
+        + ELSE:
+        +   - UPDATE Cita SET Estado = 'Completada'
+        +   - UPDATE Medicamento SET Stock = Stock - Cantidad
+        +   - COMMIT TRANSACTION
+        + END
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+' UI → BLL
+FormConsultaMedica ..> ConsultaMedicaBLL : usa
+FormConsultaMedica ..> CitaBLL : usa
+FormConsultaMedica ..> MedicamentoBLL : usa
+FormConsultaMedica ..> FormCantidadMedicamento : abre modal
+FormConsultaMedica o-- MedicamentoSeleccionado : contiene
+
+' BLL → Repository
+ConsultaMedicaBLL ..> ConsultaMedicaRepository : usa
+CitaBLL ..> CitaRepository : usa
+MedicamentoBLL ..> MedicamentoRepository : usa
+
+' Repository → Stored Procedure
+ConsultaMedicaRepository ..> SPFinalizar : ejecuta
+
+' Entidades → Relaciones de dominio
+ConsultaMedica "1" o-- "0..*" MedicamentoRecetado : contiene
+ConsultaMedica "1" --> "1" Cita : asociada a
+Cita "N" --> "1" Mascota : pertenece a
+Cita "N" --> "1" Veterinario : atendida por
+Mascota "N" --> "1" Cliente : pertenece a
+MedicamentoRecetado "N" --> "1" Medicamento : referencia
+Cita --> EstadoCita : tiene
+
+' BLL → Entidades
+ConsultaMedicaBLL ..> ConsultaMedica : gestiona
+CitaBLL ..> Cita : gestiona
+MedicamentoBLL ..> Medicamento : gestiona
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS
+' ═══════════════════════════════════════════════════════════════
+
+note bottom of SPFinalizar
+    **TRANSACCIÓN CRÍTICA**
+    Garantiza ACID:
+    - Atomicidad: Todo o nada
+    - Consistencia: Stock válido
+    - Aislamiento: Transaccional
+    - Durabilidad: COMMIT final
+end note
+
+note right of ConsultaMedica
+    **Validaciones:**
+    - Sintomas >= 3 caracteres
+    - Diagnostico >= 3 caracteres
+    - FechaConsulta <= DateTime.Now
+end note
+
+note left of FormConsultaMedica
+    **Modos:**
+    - Creación: consulta nueva
+    - Edición: consulta existente
+
+    **Modal auxiliar:**
+    - FormCantidadMedicamento
+      para cantidad e indicaciones
+end note
+
+@enduml

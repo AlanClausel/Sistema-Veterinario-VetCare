@@ -1,0 +1,145 @@
+@startuml DER_Parcial_CU-N002_GestionarMascotas
+title DER Parcial - CU-N002: Gestionar Mascotas
+
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) <i>x</i>
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES PRINCIPALES
+' ═══════════════════════════════════════════════════════════════
+
+entity "Mascota" as Mascota {
+  primary_key(IdMascota) : Guid <<PK>>
+  --
+  foreign_key(IdCliente) : Guid <<FK>>
+  Nombre : string <<NOT NULL>>
+  Especie : string <<NOT NULL>>
+  Raza : string
+  FechaNacimiento : DateTime
+  Sexo : string
+  Peso : decimal
+  Color : string
+  Observaciones : string
+  FechaRegistro : DateTime
+  Activo : bool
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES RELACIONADAS
+' ═══════════════════════════════════════════════════════════════
+
+entity "Cliente" as Cliente {
+  primary_key(IdCliente) : Guid <<PK>>
+  --
+  Nombre : string <<NOT NULL>>
+  Apellido : string <<NOT NULL>>
+  DNI : string <<UNIQUE, NOT NULL>>
+  Telefono : string
+  Email : string
+  Direccion : string
+  Activo : bool
+}
+
+entity "Cita" as Cita {
+  primary_key(IdCita) : Guid <<PK>>
+  --
+  foreign_key(IdMascota) : Guid <<FK>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  FechaHora : DateTime <<NOT NULL>>
+  TipoConsulta : string
+  Estado : string
+  Observaciones : string
+  Activo : bool
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+Cliente ||--o{ Mascota : "tiene\n(1..N)"
+Mascota ||--o{ Cita : "agenda"
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of Mascota
+  **Operaciones del CU-N002:**
+
+  **CREATE (Registrar):**
+  - SP: Mascota_Insert
+  - Requiere IdCliente válido (FK)
+  - Validar que Cliente esté Activo
+  - Generar IdMascota (Guid)
+
+  **READ (Buscar/Listar):**
+  - SP: Mascota_SelectAll
+  - SP: Mascota_SelectOne
+  - SP: Mascota_SelectByCliente
+  - Filtros: Por cliente, especie, nombre
+
+  **UPDATE (Modificar):**
+  - SP: Mascota_Update
+  - No se puede cambiar IdCliente
+  - Actualizar peso, observaciones
+
+  **DELETE (Dar de Baja):**
+  - SP: Mascota_Delete
+  - Soft delete (Activo = 0)
+  - Mantiene historial clínico
+  - Cancela citas futuras
+
+  **Validaciones:**
+  ✓ IdCliente debe existir y estar activo
+  ✓ Nombre obligatorio
+  ✓ Especie obligatoria
+  ✓ Peso > 0 (si se ingresa)
+  ✓ FechaNacimiento <= Hoy
+  ✓ Sexo: 'M' o 'F'
+end note
+
+note top of Cliente
+  **Dependencia de Cliente:**
+
+  - Una Mascota DEBE tener un Cliente (dueño)
+  - IdCliente es FK obligatoria
+  - Si Cliente se inactiva, sus Mascotas también
+
+  **Búsqueda:**
+  Puede buscar mascota por:
+  - DNI del dueño
+  - Nombre del dueño
+  - Nombre de la mascota
+end note
+
+note bottom of Cita
+  **Relación con Citas:**
+
+  Una Mascota puede tener:
+  - 0 o N citas
+
+  Al dar de baja Mascota:
+  - Citas futuras se cancelan
+  - Citas pasadas se mantienen
+  - Permite consultar historial
+
+  Navegación:
+  - Ver todas las citas de la mascota
+  - Agendar nueva cita
+  - Ver última consulta
+end note
+
+note left of Mascota
+  **Datos Importantes:**
+
+  - FechaRegistro: Auto-generada
+  - Peso: Puede actualizarse en cada consulta
+  - Observaciones: Alergias, condiciones
+
+  **Índices:**
+  - PK: IdMascota
+  - INDEX: IdCliente (búsquedas frecuentes)
+  - INDEX: Nombre, Especie
+end note
+
+@enduml

@@ -1,0 +1,185 @@
+@startuml CU-N005_VerMisCitas
+title CU-N005: Ver Mis Citas - Listar Citas del Día e Iniciar Consulta
+
+actor "Veterinario" as Vet
+participant "MisCitas\n(Form)" as Form
+participant "LoginService" as LoginSvc
+participant "VeterinarioBLL" as VetBLL
+participant "CitaBLL" as CitaBLL
+participant "ConsultaMedicaBLL" as ConsBLL
+participant "CitaRepository" as CitaRepo
+participant "VeterinarioRepository" as VetRepo
+database "VetCareDB" as DB
+
+== Operación 1: Carga Inicial - Listar Mis Citas del Día ==
+
+Vet -> Form: Accede a "Mis Citas"
+activate Form
+
+Form -> LoginSvc: GetUsuarioLogueado()
+activate LoginSvc
+LoginSvc --> Form: usuarioLogueado
+deactivate LoginSvc
+
+alt Usuario no logueado
+    Form -> Form: Muestra error "No hay usuario logueado"
+    Form -> Form: this.Close()
+else Usuario logueado
+
+    Form -> VetBLL: EsVeterinario(IdUsuario)
+    activate VetBLL
+    VetBLL -> VetRepo: ObtenerPorId(IdUsuario)
+    activate VetRepo
+    VetRepo -> DB: EXEC Veterinario_SelectOne @IdVeterinario
+    activate DB
+    DB --> VetRepo: DataRow (Veterinario)
+    deactivate DB
+    VetRepo --> VetBLL: Veterinario entity
+    deactivate VetRepo
+    VetBLL --> Form: true/false
+    deactivate VetBLL
+
+    alt Usuario NO es veterinario
+        Form -> Form: Muestra error "El usuario no es veterinario"
+        Form -> Form: this.Close()
+    else Usuario ES veterinario
+
+        Form -> Form: _idVeterinarioActual = usuarioLogueado.IdUsuario
+        Form -> Form: dtpFecha.Value = DateTime.Today
+        Form -> Form: ConfigurarDataGridView()
+
+        Form -> Form: CargarCitas()
+        activate Form #LightGray
+
+        Form -> CitaBLL: ObtenerCitasPorFecha(DateTime.Today)
+        activate CitaBLL
+        CitaBLL -> CitaRepo: ObtenerCitasPorFecha(fecha)
+        activate CitaRepo
+        CitaRepo -> DB: EXEC Cita_SelectByFecha @Fecha
+        activate DB
+        DB --> CitaRepo: DataTable (TODAS las citas de la fecha)
+        deactivate DB
+        CitaRepo --> CitaBLL: List<Cita> (todas las citas)
+        deactivate CitaRepo
+        CitaBLL --> Form: List<Cita> (todas las citas)
+        deactivate CitaBLL
+
+        Form -> Form: Filtro LINQ:\nWHERE IdVeterinario == _idVeterinarioActual
+        Form -> Form: dgvCitas.DataSource = citasVeterinario
+        Form -> Form: ColorearFilasSegunEstado()
+        note right
+            Agendada: LightYellow
+            Confirmada: LightGreen
+            Completada: LightGray
+            Cancelada: LightCoral
+            NoAsistio: LightSalmon
+        end note
+        Form -> Form: ActualizarEstadoBotones()
+        note right
+            Todos deshabilitados
+            (ninguna selección)
+        end note
+
+        deactivate Form
+
+        Form --> Vet: Muestra citas del día\ncon código de colores
+
+    end
+end
+
+== Operación 3: Iniciar Consulta Médica ==
+
+Vet -> Form: Selecciona cita en grid
+activate Form
+Form -> Form: dgvCitas_SelectionChanged()
+Form -> Form: ActualizarEstadoBotones()
+note right
+    btnIniciarConsulta.Enabled =
+      (estado == Agendada ||
+       estado == Confirmada)
+end note
+deactivate Form
+
+Vet -> Form: Clic en "Iniciar Consulta"
+activate Form
+
+Form -> Form: Valida cita seleccionada != null
+
+Form -> ConsBLL: ObtenerConsultaPorCita(idCita)
+activate ConsBLL
+ConsBLL -> DB: EXEC ConsultaMedica_SelectByCita @IdCita
+activate DB
+DB --> ConsBLL: DataRow (consulta o NULL)
+deactivate DB
+ConsBLL --> Form: ConsultaMedica o NULL
+deactivate ConsBLL
+
+alt ConsultaMedica ya existe
+    Form -> Form: new FormConsultaMedica(idCita, idVeterinario)\n[Modo: Edición]
+    note right
+        Carga consulta existente
+        (ver CU-N006)
+    end note
+else ConsultaMedica NO existe
+    Form -> Form: new FormConsultaMedica(idCita, idVeterinario)\n[Modo: Creación]
+    note right
+        Crea nueva consulta
+        (ver CU-N006)
+    end note
+end
+
+Form -> Form: formConsulta.ShowDialog()
+note right
+    Abre formulario modal
+    (bloquea hasta cerrar)
+end note
+
+Form -> Form: CargarCitas()
+note right
+    Recarga grid después
+    de cerrar consulta
+end note
+
+Form --> Vet: Consulta médica\niniciada/editada
+
+deactivate Form
+
+== Operación 4: Marcar Como Completada ==
+
+Vet -> Form: Selecciona cita (Agendada/Confirmada)
+Vet -> Form: Clic en "Completada"
+activate Form
+
+Form -> Form: Muestra confirmación:\n"¿Está seguro de marcar como completada?"
+
+Vet -> Form: Confirma (Sí)
+
+Form -> CitaBLL: CompletarCita(idCita)
+activate CitaBLL
+CitaBLL -> CitaBLL: Valida transición de estado
+CitaBLL -> CitaRepo: ActualizarEstado(idCita, Completada)
+activate CitaRepo
+CitaRepo -> DB: EXEC Cita_UpdateEstado\n@IdCita, @Estado='Completada'
+activate DB
+DB --> CitaRepo: Filas afectadas: 1
+deactivate DB
+CitaRepo --> CitaBLL: void
+deactivate CitaRepo
+
+CitaBLL -> CitaBLL: Registra en Bitácora:\nMódulo="Citas", Acción="CompletarCita"
+
+CitaBLL --> Form: void
+deactivate CitaBLL
+
+Form -> Form: Muestra mensaje:\n"Cita marcada como completada"
+Form -> Form: CargarCitas()
+note right
+    Actualiza grid
+    Fila ahora gris (Completada)
+end note
+
+Form --> Vet: Cita completada\nGrid actualizado
+
+deactivate Form
+
+@enduml

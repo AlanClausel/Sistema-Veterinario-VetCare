@@ -1,0 +1,322 @@
+@startuml CU-A002_CrearUsuario_Secuencia
+
+' ============================================================================
+' DIAGRAMA DE SECUENCIA: CU-A002 - CREAR USUARIO
+' Operación: Crear Usuario (parte del caso de uso Gestionar Usuarios)
+' Sistema: VetCare - Veterinaria
+' Módulo: Seguridad y Administración
+' ============================================================================
+
+title Diagrama de Secuencia - CU-A002: Crear Usuario
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+
+' ============================================================================
+' PARTICIPANTES (LIFELINES)
+' ============================================================================
+
+actor "Administrador" as Admin #LightBlue
+participant "gestionUsuarios.cs\n(WinForm)" as UI #LightYellow
+participant "ValidationBLL" as Validation #LightGreen
+participant "UsuarioBLL" as BLL #LightGreen
+participant "CryptographyService" as Crypto #Orchid
+participant "UsuarioRepository" as Repo #LightCoral
+database "BD SecurityVet" as DB #LightGray
+participant "ExceptionManager" as ExcMgr #Pink
+participant "Bitacora" as Bitacora #LightSalmon
+participant "FamiliaRepository" as FamiliaRepo #LightCoral
+
+' ============================================================================
+' FLUJO PRINCIPAL: CREAR USUARIO
+' ============================================================================
+
+== 1. INGRESO DE DATOS ==
+
+Admin -> UI: Clic en "Agregar"
+activate UI
+
+UI -> UI: LimpiarCampos()
+UI -> UI: MostrarPanelAgregar()
+Admin -> UI: Ingresa datos:\n- Nombre usuario\n- Email\n- Contraseña\n- Selecciona Rol (Familia)
+Admin -> UI: Clic en "Guardar"
+
+== 2. VALIDACIÓN DE CAMPOS ==
+
+UI -> UI: ObtenerDatosFormulario()
+activate UI #DarkSalmon
+
+UI -> Validation: ValidarCamposObligatorios(\nnombre, email, password)
+activate Validation
+
+alt Campos vacíos o nulos
+    Validation --> UI: throw CampoRequeridoException
+    UI -> UI: MessageBox.Show(\n"Complete todos los campos")
+    deactivate UI
+    [<-- UI: Retorna al formulario
+else Campos completos
+    Validation --> UI: OK
+    deactivate Validation
+end
+
+== 3. VALIDACIÓN DE EMAIL ==
+
+UI -> Validation: ValidarFormatoEmail(email)
+activate Validation
+
+Validation -> Validation: Regex.IsMatch(\nemail, patron)
+
+alt Email inválido
+    Validation --> UI: throw EmailInvalidoException
+    UI -> UI: MessageBox.Show(\n"Formato de email inválido")
+    deactivate UI
+    [<-- UI: Retorna al formulario
+else Email válido
+    Validation --> UI: OK
+    deactivate Validation
+end
+
+== 4. VALIDACIÓN DE CONTRASEÑA ==
+
+UI -> Validation: ValidarLongitudPassword(password)
+activate Validation
+
+alt Contraseña < 6 caracteres
+    Validation --> UI: throw PasswordDemasiadoCortoException
+    UI -> UI: MessageBox.Show(\n"Contraseña mínimo 6 caracteres")
+    deactivate UI
+    [<-- UI: Retorna al formulario
+else Contraseña válida
+    Validation --> UI: OK
+    deactivate Validation
+end
+
+== 5. VERIFICACIÓN DE UNICIDAD ==
+
+UI -> BLL: CrearUsuario(\nnombre, email, password, \nidFamiliaRol, idioma)
+activate BLL
+
+BLL -> Repo: VerificarExistenciaNombre(nombre)
+activate Repo
+
+Repo -> DB: EXEC Usuario_VerificarExistenciaNombre\n@NombreUsuario
+activate DB
+DB --> Repo: COUNT(*) > 0
+deactivate DB
+
+alt Usuario ya existe
+    Repo --> BLL: return true
+    deactivate Repo
+    BLL -> ExcMgr: HandleException(\nUsuarioDuplicadoException)
+    activate ExcMgr
+    ExcMgr -> Bitacora: LogWarning(\n"Intento crear usuario duplicado")
+    activate Bitacora
+    Bitacora --> ExcMgr: OK
+    deactivate Bitacora
+    ExcMgr --> BLL: throw UsuarioDuplicadoException
+    deactivate ExcMgr
+    BLL --> UI: Exception
+    deactivate BLL
+    UI -> UI: MessageBox.Show(\n"Nombre de usuario ya existe")
+    deactivate UI
+    [<-- UI: Retorna al formulario
+else Usuario no existe
+    Repo --> BLL: return false
+    deactivate Repo
+end
+
+== 6. HASHEO DE CONTRASEÑA ==
+
+BLL -> Crypto: HashPassword(password)
+activate Crypto
+
+Crypto -> Crypto: SHA256.ComputeHash(\nEncoding.Unicode.GetBytes(password))
+note right
+  **Algoritmo:** SHA256
+  **Encoding:** Unicode (UTF-16)
+  **Resultado:** String hexadecimal
+end note
+
+Crypto --> BLL: passwordHash (SHA256)
+deactivate Crypto
+
+== 7. CREACIÓN DE USUARIO ==
+
+BLL -> BLL: usuario = new Usuario() {\n  IdUsuario = Guid.NewGuid(),\n  Nombre = nombre,\n  Email = email,\n  Clave = passwordHash,\n  IdiomaPreferido = idioma,\n  Activo = true\n}
+
+== 8. CÁLCULO DE DVH ==
+
+BLL -> BLL: CalcularDVH(usuario)
+activate BLL #DarkSalmon
+note right
+  **DVH = Dígito Verificador Horizontal**
+  Hash de todos los campos concatenados
+  para garantizar integridad de datos
+end note
+BLL -> BLL: usuario.DVH = hash
+deactivate BLL
+
+== 9. INSERCIÓN EN BASE DE DATOS ==
+
+BLL -> Repo: Insert(usuario)
+activate Repo
+
+Repo -> DB: EXEC Usuario_Insert\n@IdUsuario,\n@Nombre,\n@Email,\n@Clave (hash),\n@IdiomaPreferido,\n@DVH,\n@Activo
+activate DB
+
+alt Error de base de datos
+    DB --> Repo: SQLException
+    Repo --> BLL: throw RepositoryException
+    BLL -> ExcMgr: HandleException(ex)
+    activate ExcMgr
+    ExcMgr -> Bitacora: LogError(\n"Error al crear usuario")
+    activate Bitacora
+    Bitacora --> ExcMgr: OK
+    deactivate Bitacora
+    ExcMgr --> BLL: throw
+    deactivate ExcMgr
+    BLL --> UI: Exception
+    deactivate BLL
+    deactivate Repo
+    UI -> UI: MessageBox.Show(\n"Error al crear usuario")
+    deactivate UI
+    [<-- UI: Retorna al formulario
+else Inserción exitosa
+    DB --> Repo: OK
+    deactivate DB
+    Repo --> BLL: usuario creado
+    deactivate Repo
+end
+
+== 10. ASIGNACIÓN DE ROL ==
+
+alt idFamiliaRol != null
+    BLL -> FamiliaRepo: AsignarUsuarioAFamilia(\nusuario.IdUsuario, idFamiliaRol)
+    activate FamiliaRepo
+
+    FamiliaRepo -> DB: EXEC UsuarioFamilia_Insert\n@IdUsuario,\n@IdFamilia
+    activate DB
+    DB --> FamiliaRepo: OK
+    deactivate DB
+
+    FamiliaRepo --> BLL: Rol asignado
+    deactivate FamiliaRepo
+end
+
+== 11. REGISTRO EN BITÁCORA ==
+
+BLL -> Bitacora: RegistrarAlta(\nidUsuario: admin.IdUsuario,\nnombreUsuario: admin.Nombre,\nmodulo: "Usuarios",\ntipoEntidad: "Usuario",\nidEntidad: usuario.IdUsuario,\ndetalle: "Usuario creado: {nombre}")
+activate Bitacora
+
+Bitacora -> DB: EXEC Bitacora_Insert\n@IdUsuario,\n@NombreUsuario,\n@Modulo,\n@TipoOperacion: "Alta",\n@TipoEntidad,\n@IdEntidad,\n@Detalle,\n@Fecha: GETDATE()
+activate DB
+DB --> Bitacora: OK
+deactivate DB
+
+Bitacora --> BLL: Registro exitoso
+deactivate Bitacora
+
+== 12. RETORNO AL UI ==
+
+BLL --> UI: Usuario creado exitosamente
+deactivate BLL
+
+UI -> UI: MessageBox.Show(\n"Usuario creado correctamente",\nMessageBoxIcon.Information)
+
+== 13. ACTUALIZACIÓN DE GRID ==
+
+UI -> BLL: ObtenerTodosLosUsuarios()
+activate BLL
+
+BLL -> Repo: SelectAll()
+activate Repo
+
+Repo -> DB: EXEC Usuario_SelectAll
+activate DB
+DB --> Repo: DataTable con usuarios activos
+deactivate DB
+
+Repo -> Repo: UsuarioAdapter.AdaptarLista(dt)
+note right
+  **Patrón Adapter**
+  Convierte DataTable
+  a List<Usuario>
+end note
+
+Repo --> BLL: List<Usuario>
+deactivate Repo
+
+BLL --> UI: List<Usuario>
+deactivate BLL
+
+UI -> UI: dgvUsuarios.DataSource = usuarios
+UI -> UI: LimpiarCampos()
+UI -> UI: OcultarPanelAgregar()
+
+deactivate UI
+
+[<-- Admin: Usuario visible en grid
+
+' ============================================================================
+' NOTAS TÉCNICAS
+' ============================================================================
+
+note over Admin, DB
+  **PATRONES APLICADOS:**
+  - Singleton: UsuarioBLL.Current, UsuarioRepository.Current
+  - Adapter: UsuarioAdapter (DataRow → Usuario)
+  - Repository: Abstracción de acceso a datos
+
+  **VALIDACIONES IMPLEMENTADAS:**
+  1. Campos obligatorios no vacíos
+  2. Email formato válido (regex)
+  3. Contraseña mínimo 6 caracteres
+  4. Nombre de usuario único
+
+  **SEGURIDAD:**
+  - Contraseña hasheada SHA256 + Unicode
+  - DVH calculado para integridad
+  - Auditoría completa en Bitacora
+  - Sin almacenamiento de texto plano
+
+  **BASE DE DATOS:**
+  - SecurityVet (usuarios, permisos, auditoría)
+  - Stored Procedures exclusivamente (no SQL inline)
+  - Soft delete (Activo = 0, no DELETE físico)
+end note
+
+' ============================================================================
+' METADATOS
+' ============================================================================
+
+legend bottom
+  **ARCHIVOS INVOLUCRADOS:**
+  - UI: UI/WinUi/Administración/gestionUsuarios.cs
+  - BLL: ServicesSeguridad/BLL/UsuarioBLL.cs
+  - DAL: ServicesSeguridad/DAL/Implementations/UsuarioRepository.cs
+  - Services: ServicesSeguridad/Services/CryptographyService.cs
+  - Services: ServicesSeguridad/Services/Bitacora.cs
+  - Validation: ServicesSeguridad/BLL/ValidationBLL.cs
+
+  **STORED PROCEDURES:**
+  - Usuario_VerificarExistenciaNombre
+  - Usuario_Insert
+  - UsuarioFamilia_Insert
+  - Bitacora_Insert
+  - Usuario_SelectAll
+
+  **EXCEPCIONES MANEJADAS:**
+  - CampoRequeridoException
+  - EmailInvalidoException
+  - PasswordDemasiadoCortoException
+  - UsuarioDuplicadoException
+  - RepositoryException
+  - SQLException
+
+  **ÚLTIMA ACTUALIZACIÓN:** 2025-01-16
+  **VERSIÓN:** 1.0
+  **RELACIONADO CON:** CU-A002_GESTIONAR_USUARIOS.txt
+endlegend
+
+@enduml

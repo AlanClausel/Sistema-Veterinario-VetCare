@@ -1,0 +1,345 @@
+@startuml CU-N010_DiagramaClases
+title CU-N010: Gestionar Medicamentos - Diagrama de Clases (Resumido)
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA PRESENTACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "UI - Presentación" {
+    class FormGestionMedicamentos {
+        - _medicamentoSeleccionado : Medicamento
+        - _modoEdicion : bool
+        + FormGestionMedicamentos()
+        + FormGestionMedicamentos_Load()
+        + CargarMedicamentos()
+        + LimpiarCampos()
+        + btnNuevo_Click()
+        + btnGuardar_Click()
+        + btnModificar_Click()
+        + btnEliminar_Click()
+        + btnBuscar_Click()
+        + dgvMedicamentos_SelectionChanged()
+        - ValidarCampos() : bool
+        - MostrarMedicamentoEnFormulario(medicamento)
+        - ColorearFilasStockBajo()
+        - VerificarStockBajo(stock, stockMin) : bool
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA LÓGICA DE NEGOCIO (BLL)
+' ═══════════════════════════════════════════════════════════════
+
+package "BLL - Lógica de Negocio" {
+    class MedicamentoBLL <<Singleton>> {
+        {static} + Current : MedicamentoBLL
+        {static} - _instance : MedicamentoBLL
+        + ListarMedicamentosActivos() : List<Medicamento>
+        + ListarMedicamentosDisponibles() : List<Medicamento>
+        + RegistrarMedicamento(medicamento) : Medicamento
+        + ModificarMedicamento(medicamento) : void
+        + EliminarMedicamento(idMedicamento) : void
+        + ObtenerMedicamentoPorId(idMedicamento) : Medicamento
+        + BuscarMedicamentoPorNombre(nombre) : List<Medicamento>
+        + ActualizarStock(idMedicamento, cantidad) : void
+        + ValidarStock(idMedicamento, cantidad) : bool
+        + ExisteEnConsultas(idMedicamento) : bool
+        - ValidarMedicamento(medicamento) : void
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA ACCESO A DATOS (REPOSITORY)
+' ═══════════════════════════════════════════════════════════════
+
+package "DAL - Acceso a Datos" {
+    interface IMedicamentoRepository {
+        + ObtenerTodos() : List<Medicamento>
+        + ObtenerDisponibles() : List<Medicamento>
+        + ObtenerPorId(idMedicamento) : Medicamento
+        + BuscarPorNombre(nombre) : List<Medicamento>
+        + Crear(medicamento) : void
+        + Actualizar(medicamento) : void
+        + Eliminar(idMedicamento) : void
+        + ActualizarStock(idMedicamento, cantidad) : void
+        + ExisteEnConsultas(idMedicamento) : bool
+    }
+
+    class MedicamentoRepository <<Singleton>> {
+        {static} + Current : MedicamentoRepository
+        {static} - _instance : MedicamentoRepository
+        + ObtenerTodos() : List<Medicamento>
+        + ObtenerDisponibles() : List<Medicamento>
+        + ObtenerPorId(idMedicamento) : Medicamento
+        + BuscarPorNombre(nombre) : List<Medicamento>
+        + Crear(medicamento) : void
+        + Actualizar(medicamento) : void
+        + Eliminar(idMedicamento) : void
+        + ActualizarStock(idMedicamento, cantidad) : void
+        + ExisteEnConsultas(idMedicamento) : bool
+        - ExecuteStoredProcedure()
+    }
+
+    class MedicamentoAdapter {
+        {static} + AdaptarDesdeDataRow(row) : Medicamento
+        {static} + AdaptarListaDesdeDataTable(dt) : List<Medicamento>
+    }
+
+    class SqlHelper {
+        {static} + ExecuteNonQuery(sp, params)
+        {static} + ExecuteScalar(sp, params)
+        {static} + ExecuteDataTable(sp, params)
+        {static} + ExecuteReader(sp, params)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA DOMINIO (ENTIDADES)
+' ═══════════════════════════════════════════════════════════════
+
+package "Domain - Entidades" {
+    class Medicamento {
+        + IdMedicamento : Guid
+        + Nombre : string
+        + Presentacion : string
+        + Stock : int
+        + StockMinimo : int
+        + PrecioUnitario : decimal
+        + FechaVencimiento : DateTime?
+        + Activo : bool
+        + NombreCompleto : string <<get>>
+        + TieneBajoStock : bool <<get>>
+        + EstaVencido : bool <<get>>
+        + Validar() : void
+    }
+
+    class MedicamentoRecetado {
+        + IdConsulta : Guid
+        + IdMedicamento : Guid
+        + Cantidad : int
+        + Indicaciones : string
+    }
+
+    class ConsultaMedica {
+        + IdConsulta : Guid
+        + IdCita : Guid
+        + Medicamentos : List<MedicamentoRecetado>
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  STORED PROCEDURES (BASE DE DATOS)
+' ═══════════════════════════════════════════════════════════════
+
+package "Database - Stored Procedures" {
+    class "SP: Medicamento_SelectAll" as SPSelectAll <<Stored Procedure>> {
+        + Retorna: medicamentos activos (Activo = 1)
+        + Ordenado por: Nombre
+    }
+
+    class "SP: Medicamento_SelectDisponibles" as SPDisponibles <<Stored Procedure>> {
+        + Retorna: medicamentos con Stock > 0
+        + WHERE Activo = 1 AND Stock > 0
+        + Ordenado por: Nombre
+    }
+
+    class "SP: Medicamento_SelectOne" as SPSelectOne <<Stored Procedure>> {
+        + @IdMedicamento : Guid
+        + Retorna: medicamento por ID
+    }
+
+    class "SP: Medicamento_SelectByNombre" as SPSelectByNombre <<Stored Procedure>> {
+        + @Nombre : string
+        + Retorna: medicamentos que contienen el nombre
+        + WHERE Nombre LIKE '%' + @Nombre + '%'
+    }
+
+    class "SP: Medicamento_Insert" as SPInsert <<Stored Procedure>> {
+        + @IdMedicamento, @Nombre, @Presentacion
+        + @Stock, @StockMinimo, @PrecioUnitario
+        + @FechaVencimiento (nullable)
+        + INSERT INTO Medicamento (...)
+        + Validación: Nombre único
+    }
+
+    class "SP: Medicamento_Update" as SPUpdate <<Stored Procedure>> {
+        + @IdMedicamento, @Nombre, @Presentacion
+        + @Stock, @StockMinimo, @PrecioUnitario
+        + @FechaVencimiento
+        + UPDATE Medicamento SET ...
+        + Validación: Nombre único (excluye actual)
+    }
+
+    class "SP: Medicamento_UpdateStock" as SPUpdateStock <<Stored Procedure>> {
+        + @IdMedicamento : Guid
+        + @Cantidad : int
+        + UPDATE Medicamento
+        + SET Stock = Stock + @Cantidad
+        + WHERE IdMedicamento = @IdMedicamento
+        + NOTA: Cantidad puede ser negativa (reducción)
+    }
+
+    class "SP: Medicamento_Delete" as SPDelete <<Stored Procedure>> {
+        + @IdMedicamento : Guid
+        + Soft delete: UPDATE Medicamento SET Activo = 0
+        + Validación: NO usado en ConsultaMedicamento
+    }
+
+    class "SP: Medicamento_ExisteEnConsultas" as SPExisteConsultas <<Stored Procedure>> {
+        + @IdMedicamento : Guid
+        + Retorna: 1 si existe, 0 si no existe
+        + Verifica si está en ConsultaMedicamento
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  SERVICIOS
+' ═══════════════════════════════════════════════════════════════
+
+package "Services" {
+    class Bitacora <<Singleton>> {
+        {static} + Current : Bitacora
+        + RegistrarAlta(usuario, modulo, entidad, id, detalle)
+        + RegistrarModificacion(usuario, modulo, entidad, id, detalle)
+        + RegistrarBaja(usuario, modulo, entidad, id, detalle)
+    }
+
+    class LoginService {
+        {static} + GetUsuarioLogueado() : Usuario
+    }
+
+    class ExceptionManager {
+        {static} + GetInstance() : ExceptionManager
+        + HandleException(exception)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+' UI → BLL
+FormGestionMedicamentos ..> MedicamentoBLL : usa
+
+' BLL → Repository
+MedicamentoBLL ..> IMedicamentoRepository : usa
+MedicamentoBLL ..> MedicamentoRepository : Current
+
+' BLL → Servicios
+MedicamentoBLL ..> Bitacora : registra operaciones
+MedicamentoBLL ..> LoginService : obtiene usuario
+MedicamentoBLL ..> ExceptionManager : maneja errores
+
+' Repository → Adapter y SqlHelper
+MedicamentoRepository ..|> IMedicamentoRepository : implementa
+MedicamentoRepository ..> MedicamentoAdapter : usa
+MedicamentoRepository ..> SqlHelper : usa
+
+' Repository → Stored Procedures
+MedicamentoRepository ..> SPSelectAll : ejecuta
+MedicamentoRepository ..> SPDisponibles : ejecuta
+MedicamentoRepository ..> SPSelectOne : ejecuta
+MedicamentoRepository ..> SPSelectByNombre : ejecuta
+MedicamentoRepository ..> SPInsert : ejecuta
+MedicamentoRepository ..> SPUpdate : ejecuta
+MedicamentoRepository ..> SPUpdateStock : ejecuta
+MedicamentoRepository ..> SPDelete : ejecuta
+MedicamentoRepository ..> SPExisteConsultas : ejecuta
+
+' Adapter → Entidad
+MedicamentoAdapter ..> Medicamento : crea instancias
+
+' BLL → Entidades
+MedicamentoBLL ..> Medicamento : gestiona
+
+' Dominio - Relaciones
+Medicamento "1" o-- "0..*" MedicamentoRecetado : referenciado en
+MedicamentoRecetado "N" --> "1" ConsultaMedica : pertenece a
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS
+' ═══════════════════════════════════════════════════════════════
+
+note top of Medicamento
+    **Validaciones:**
+    - Nombre: requerido, 3-100 caracteres, único
+    - Presentacion: requerido (ej: "500mg cápsulas")
+    - Stock: >= 0
+    - StockMinimo: >= 0, defecto 10
+    - PrecioUnitario: > 0
+    - FechaVencimiento: opcional, si existe debe ser > hoy
+
+    **Propiedades calculadas:**
+    - NombreCompleto = "{Nombre} {Presentacion}"
+    - TieneBajoStock = Stock <= StockMinimo
+    - EstaVencido = FechaVencimiento < DateTime.Now
+end note
+
+note bottom of SPDelete
+    **Soft Delete con Validación:**
+    NO elimina si el medicamento está
+    siendo usado en ConsultaMedicamento.
+
+    Validación:
+    IF EXISTS (
+      SELECT 1 FROM ConsultaMedicamento
+      WHERE IdMedicamento = @IdMedicamento
+    )
+    BEGIN
+      RAISERROR('Medicamento usado en consultas', 16, 1)
+      RETURN
+    END
+
+    UPDATE Medicamento SET Activo = 0
+    WHERE IdMedicamento = @IdMedicamento
+end note
+
+note right of MedicamentoBLL
+    **Patrón Singleton**
+    Instancia única en toda
+    la aplicación.
+    Thread-safe.
+
+    **Métodos especiales:**
+    - ListarMedicamentosDisponibles():
+      Solo con Stock > 0 (para recetas)
+    - ValidarStock(id, cantidad):
+      Verifica si hay stock suficiente
+    - ActualizarStock(id, cantidad):
+      Incrementa/decrementa stock
+end note
+
+note left of FormGestionMedicamentos
+    **Operaciones CRUD:**
+    - Crear: Nuevo + Guardar
+    - Leer: Cargar todos, buscar por nombre
+    - Actualizar: Modificar + Guardar (incluye stock)
+    - Eliminar: Soft delete (valida uso)
+
+    **Alertas visuales:**
+    - Stock bajo: Fila amarilla/naranja
+      (Stock <= StockMinimo)
+    - Vencido: Fila roja
+      (FechaVencimiento < hoy)
+
+    **Búsqueda:**
+    - Por nombre (LIKE '%nombre%')
+    - Tiempo real mientras escribe
+end note
+
+note bottom of SPUpdateStock
+    **Actualización de Stock:**
+    Usado por:
+    1. FormGestionMedicamentos (ajuste manual)
+    2. ConsultaMedica_Finalizar (reducción automática)
+
+    Cantidad puede ser:
+    - Positiva: incrementa stock (ingreso)
+    - Negativa: reduce stock (salida)
+
+    Ejemplo:
+    ActualizarStock(idMed, -10) → reduce 10 unidades
+    ActualizarStock(idMed, +50) → suma 50 unidades
+end note
+
+@enduml

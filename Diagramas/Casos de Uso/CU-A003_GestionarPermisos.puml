@@ -1,0 +1,372 @@
+@startuml CU-A003_GestionarPermisos
+
+' ============================================================================
+' CASO DE USO: CU-A003 - GESTIONAR PERMISOS (ROLES Y PERMISOS)
+' Sistema: VetCare - Veterinaria
+' Módulo: Seguridad y Administración
+' Tipo: Arquitectura/Seguridad
+' ============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+
+' ============================================================================
+' ACTORES
+' ============================================================================
+
+actor "Administrador" as Admin #LightBlue
+actor "Sistema de\nSeguridad" as SistemaSeg #LightGray
+
+' ============================================================================
+' CASOS DE USO PRINCIPALES
+' ============================================================================
+
+rectangle "CU-A003: Gestionar Permisos" {
+
+  usecase "Gestionar Permisos\n(Roles y Permisos)" as UC_GestionarPermisos #Technology
+
+  ' ========== TAB 1: GESTIÓN DE ROLES ==========
+  package "Gestión de Roles (Familias)" #LightYellow {
+    usecase "Crear Rol" as UC_CrearRol
+    usecase "Eliminar Rol" as UC_EliminarRol
+    usecase "Actualizar Permisos\nde Rol" as UC_ActualizarPermisosRol
+    usecase "Consultar Permisos\nde Rol (Recursivo)" as UC_ConsultarPermisosRol
+  }
+
+  ' ========== TAB 2: GESTIÓN DE PERMISOS DE USUARIOS ==========
+  package "Gestión de Permisos de Usuarios" #LightCyan {
+    usecase "Asignar Rol\na Usuario" as UC_AsignarRolUsuario
+    usecase "Asignar Permisos\nIndividuales a Usuario" as UC_AsignarPermisosIndividuales
+    usecase "Quitar Permisos\nde Usuario" as UC_QuitarPermisosUsuario
+  }
+
+  ' ========== OPERACIONES DE SOPORTE Y VALIDACIÓN ==========
+  usecase "Validar Nombre de Rol\n(3-50 chars, único)" as UC_ValidarNombreRol
+  usecase "Agregar Prefijo ROL_" as UC_AgregarPrefijoROL
+  usecase "Verificar Roles\nProtegidos" as UC_VerificarRolesProtegidos
+  usecase "Contar Usuarios\ncon Rol" as UC_ContarUsuariosConRol
+  usecase "Cargar Patentes\nRecursivo\n(Patrón Composite)" as UC_CargarPatentesRecursivo
+  usecase "Ejecutar Unit of Work\n(Atomicidad)" as UC_UnitOfWork
+  usecase "Registrar en Bitácora\n(Auditoría)" as UC_RegistrarBitacora
+
+  ' ========== FLUJOS ALTERNATIVOS (EXTEND) ==========
+  usecase "Nombre de Rol\nInválido" as UC_NombreInvalido
+  usecase "Rol Duplicado" as UC_RolDuplicado
+  usecase "Rol Protegido\n(No Eliminable)" as UC_RolProtegido
+  usecase "Rol con Usuarios\nAsignados" as UC_RolConUsuarios
+  usecase "Error de BD\n(Rollback Automático)" as UC_ErrorBD
+  usecase "Cancelar Confirmación\nde Eliminación" as UC_CancelarConfirmacion
+
+}
+
+' ============================================================================
+' RELACIONES DEL ACTOR PRINCIPAL
+' ============================================================================
+
+Admin --> UC_GestionarPermisos : "Administra permisos\n y roles"
+
+' ============================================================================
+' RELACIONES INCLUDE (SIEMPRE EJECUTADAS)
+' ============================================================================
+
+' Tab 1: Gestión de Roles
+UC_GestionarPermisos .down.> UC_CrearRol : <<include>>
+UC_GestionarPermisos .down.> UC_EliminarRol : <<include>>
+UC_GestionarPermisos .down.> UC_ActualizarPermisosRol : <<include>>
+UC_GestionarPermisos .down.> UC_ConsultarPermisosRol : <<include>>
+
+' Tab 2: Gestión de Permisos de Usuarios
+UC_GestionarPermisos .down.> UC_AsignarRolUsuario : <<include>>
+UC_GestionarPermisos .down.> UC_AsignarPermisosIndividuales : <<include>>
+UC_GestionarPermisos .down.> UC_QuitarPermisosUsuario : <<include>>
+
+' Validaciones en Crear Rol
+UC_CrearRol .down.> UC_ValidarNombreRol : <<include>>
+UC_CrearRol .down.> UC_AgregarPrefijoROL : <<include>>
+UC_CrearRol .down.> UC_RegistrarBitacora : <<include>>
+
+' Validaciones en Eliminar Rol
+UC_EliminarRol .down.> UC_VerificarRolesProtegidos : <<include>>
+UC_EliminarRol .down.> UC_ContarUsuariosConRol : <<include>>
+UC_EliminarRol .down.> UC_UnitOfWork : <<include>>
+UC_EliminarRol .down.> UC_RegistrarBitacora : <<include>>
+
+' Actualizar Permisos de Rol usa Unit of Work
+UC_ActualizarPermisosRol .down.> UC_UnitOfWork : <<include>>
+UC_ActualizarPermisosRol .down.> UC_RegistrarBitacora : <<include>>
+
+' Consultar Permisos usa recursión (Composite pattern)
+UC_ConsultarPermisosRol .down.> UC_CargarPatentesRecursivo : <<include>>
+
+' Asignar Rol usa Unit of Work
+UC_AsignarRolUsuario .down.> UC_UnitOfWork : <<include>>
+UC_AsignarRolUsuario .down.> UC_RegistrarBitacora : <<include>>
+
+' Permisos Individuales registran auditoría
+UC_AsignarPermisosIndividuales .down.> UC_RegistrarBitacora : <<include>>
+UC_QuitarPermisosUsuario .down.> UC_RegistrarBitacora : <<include>>
+
+' ============================================================================
+' RELACIONES EXTEND (CONDICIONALES/OPCIONALES)
+' ============================================================================
+
+UC_NombreInvalido .up.> UC_CrearRol : <<extend>>\n[nombre vacío, < 3 o > 50 chars]
+UC_RolDuplicado .up.> UC_CrearRol : <<extend>>\n[nombre ya existe]
+
+UC_RolProtegido .up.> UC_EliminarRol : <<extend>>\n[ROL_Administrador u otros protegidos]
+UC_RolConUsuarios .up.> UC_EliminarRol : <<extend>>\n[rol tiene usuarios asignados]
+UC_CancelarConfirmacion .up.> UC_EliminarRol : <<extend>>\n[usuario cancela confirmación]
+
+UC_ErrorBD .up.> UC_ActualizarPermisosRol : <<extend>>\n[error durante transacción]
+UC_ErrorBD .up.> UC_EliminarRol : <<extend>>\n[error durante transacción]
+UC_ErrorBD .up.> UC_AsignarRolUsuario : <<extend>>\n[error durante transacción]
+
+' ============================================================================
+' RELACIONES CON SISTEMA DE SEGURIDAD
+' ============================================================================
+
+UC_UnitOfWork --> SistemaSeg
+UC_RegistrarBitacora --> SistemaSeg
+UC_CargarPatentesRecursivo --> SistemaSeg
+UC_VerificarRolesProtegidos --> SistemaSeg
+
+' ============================================================================
+' NOTAS TÉCNICAS
+' ============================================================================
+
+note right of UC_GestionarPermisos
+  **CU-A003: Gestionar Permisos**
+  ================================
+  **Propósito:** Administración completa del sistema
+  de autorización con patrón Composite.
+
+  **Dos Áreas Funcionales:**
+  1. Gestión de Roles (Familias)
+     - CRUD de roles con prefijo ROL_
+     - Asignación masiva de permisos
+     - Protección de roles del sistema
+
+  2. Gestión de Permisos de Usuarios
+     - Cambio de rol (atómico con Unit of Work)
+     - Permisos individuales adicionales al rol
+
+  **Formulario:** gestionPermisos.cs
+  **TabControl:** 2 pestañas separadas
+  **Módulo:** Seguridad / Administración
+  **Base de Datos:** SecurityVet
+end note
+
+note left of UC_CargarPatentesRecursivo
+  **PATRÓN COMPOSITE**
+  ====================
+  Navegación recursiva de jerarquía:
+
+  Familia (Composite)
+    ├─ Familia hija (Composite)
+    │   ├─ Patente (Leaf)
+    │   └─ Patente (Leaf)
+    ├─ Patente (Leaf)
+    └─ Patente (Leaf)
+
+  Método: ObtenerPatentesRecursivo()
+  1. Obtener patentes directas
+  2. Obtener familias hijas
+  3. Por cada hija: llamada recursiva
+
+  Resultado: TODAS las patentes
+  (directas + heredadas)
+end note
+
+note left of UC_UnitOfWork
+  **PATRÓN UNIT OF WORK**
+  =======================
+  Garantiza atomicidad (todo o nada):
+
+  1. BEGIN TRANSACTION
+  2. Múltiples operaciones:
+     - DELETE patentes antiguas
+     - INSERT patentes nuevas
+     - UPDATE relaciones
+  3. COMMIT (éxito)
+     ó ROLLBACK (error)
+
+  Usado en:
+  - ActualizarPatentesDeRol()
+  - EliminarRol()
+  - CambiarRol()
+
+  Si falla CUALQUIER operación,
+  TODAS se revierten automáticamente.
+end note
+
+note top of UC_VerificarRolesProtegidos
+  **ROLES PROTEGIDOS**
+  =====================
+  No pueden ser eliminados:
+  - ROL_Administrador
+  - ROL_ADMINISTRADOR
+  - ROL_Admin
+  - ROL_ADMIN
+
+  Validación case-insensitive.
+end note
+
+note bottom of UC_RegistrarBitacora
+  **AUDITORÍA COMPLETA**
+  ======================
+  Se registra en Bitacora:
+  - CrearRol
+  - EliminarRol
+  - ActualizarPatentes
+  - AsignarPatenteAFamilia
+  - QuitarPatenteDeFamilia
+  - CambiarRol (usuario)
+  - AsignarPatente (usuario)
+  - QuitarPatente (usuario)
+
+  Criticidad: Advertencia
+  Incluye: Usuario, Fecha, Detalle
+end note
+
+note right of UC_CrearRol
+  **CREAR ROL**
+  =============
+  Validaciones:
+  - Nombre no vacío
+  - Longitud 3-50 chars
+  - No duplicado
+
+  Procesamiento:
+  - Trim() espacios
+  - Agregar prefijo ROL_
+  - Guid.NewGuid()
+  - Insert en tabla Familia
+  - Registro en Bitácora
+end note
+
+note right of UC_EliminarRol
+  **ELIMINAR ROL**
+  ================
+  Validaciones CRÍTICAS:
+  1. NO es rol protegido
+  2. NO tiene usuarios asignados
+  3. Confirmación explícita
+
+  Eliminación en orden:
+  1. FamiliaPatente (relaciones)
+  2. FamiliaFamilia (jerarquía)
+  3. Familia (rol)
+
+  TODO dentro de Unit of Work.
+  Si falla, ROLLBACK completo.
+end note
+
+note left of UC_ActualizarPermisosRol
+  **ACTUALIZAR PERMISOS DE ROL**
+  ===============================
+  Proceso con Unit of Work:
+
+  1. BEGIN TRAN
+  2. Obtener patentes actuales
+  3. DELETE patentes desmarcadas
+  4. INSERT patentes nuevas
+  5. COMMIT
+
+  Beneficios:
+  - Atomicidad garantizada
+  - Rollback automático si falla
+  - Consistencia de BD
+
+  Bitácora registra:
+  "{cantidad} patentes asignadas
+  ({primeras 5 nombres})"
+end note
+
+note bottom of UC_AsignarRolUsuario
+  **CAMBIAR ROL DE USUARIO**
+  ===========================
+  Operación CRÍTICA con Unit of Work:
+
+  1. BEGIN TRAN
+  2. DELETE UsuarioFamilia
+     (rol anterior)
+  3. INSERT UsuarioFamilia
+     (nuevo rol)
+  4. COMMIT
+
+  Garantiza que el usuario SIEMPRE
+  tiene exactamente 1 rol asignado.
+
+  Nunca queda sin rol ni con
+  múltiples roles simultáneamente.
+end note
+
+note bottom of UC_AsignarPermisosIndividuales
+  **PERMISOS INDIVIDUALES**
+  ==========================
+  Permiten otorgar permisos ADICIONALES
+  al usuario más allá de su rol.
+
+  Ejemplo:
+  - Usuario con ROL_Recepcionista
+  - Hereda: Gestión Clientes, Citas
+  - Permisos individuales: Backup
+
+  Resultado:
+  Puede hacer Backup (permiso directo)
+  + todo lo de Recepcionista (heredado)
+
+  Relación: UsuarioPatente
+end note
+
+' ============================================================================
+' METADATOS
+' ============================================================================
+
+legend bottom
+  **CONVENCIONES:**
+  <<include>> = Operación siempre ejecutada
+  <<extend>> = Flujo alternativo condicional
+
+  **ARCHIVOS RELACIONADOS:**
+  - Especificación: CU-A003_GESTIONAR_PERMISOS.txt
+  - Código UI: UI/WinUi/Administración/gestionPermisos.cs (605 líneas)
+  - Código BLL: ServicesSeguridad/BLL/FamiliaBLL.cs (540 líneas)
+  - Código BLL: ServicesSeguridad/BLL/UsuarioBLL.cs
+  - Unit of Work: ServicesSeguridad/DAL/Implementations/SecurityUnitOfWork.cs
+
+  **STORED PROCEDURES PRINCIPALES:**
+  - Familia_Insert, Familia_Delete, Familia_SelectAll, Familia_SelectOne
+  - FamiliaPatente_Insert, FamiliaPatente_DeleteRelacion, FamiliaPatente_GetChildrenRelations
+  - FamiliaFamilia_Insert, FamiliaFamilia_DeleteRelacion, FamiliaFamilia_GetChildrenRelations
+  - UsuarioFamilia_Insert, UsuarioFamilia_Delete, UsuarioFamilia_SelectAll
+  - UsuarioPatente_Insert, UsuarioPatente_DeleteRelacion, UsuarioPatente_GetPatentesDelUsuario
+  - Patente_SelectAll, Patente_SelectOne
+  - Bitacora_Insert
+
+  **PATRONES APLICADOS:**
+  - Composite: Jerarquía Familia (composite) + Patente (leaf)
+  - Unit of Work: Transacciones atómicas para operaciones múltiples
+  - Singleton: FamiliaBLL (estático), Repositories (.Current), Bitacora
+  - Repository: Abstracción de acceso a datos
+  - Exception Manager: Manejo centralizado de errores
+
+  **VALIDACIONES CRÍTICAS:**
+  - Roles protegidos no eliminables (ROL_Administrador)
+  - Roles con usuarios no eliminables
+  - Nombres únicos (case-insensitive)
+  - Prefijo ROL_ obligatorio
+  - Longitud nombre: 3-50 caracteres
+  - Confirmación explícita para eliminaciones
+
+  **SEGURIDAD:**
+  - Auditoría completa en Bitácora (CriticidadBitacora.Advertencia)
+  - Unit of Work garantiza atomicidad (ROLLBACK automático en errores)
+  - Permisos aditivos (rol + individuales)
+  - Recursión Composite para herencia de permisos
+
+  **ÚLTIMA ACTUALIZACIÓN:** 2025-01-16
+  **VERSIÓN:** 1.0
+endlegend
+
+@enduml

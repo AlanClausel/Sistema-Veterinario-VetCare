@@ -1,0 +1,1087 @@
+===============================================================================
+    CASOS DE USO: CU-N007, CU-N008, CU-N009 - CONSULTAR HISTORIAL CLÍNICO
+===============================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+Estos 3 casos de uso forman un flujo drill-down (navegación progresiva) para
+consultar el historial clínico de mascotas:
+
+CU-N007 → CU-N008 → CU-N009
+Cliente  Mascota  Consulta
+(DNI)    (Lista)  (Detalle)
+
+===============================================================================
+
+ID:             CU-N007
+Nombre:         Consultar Historial Clínico (Búsqueda por Cliente)
+Actor(es):      Administrador, Recepcionista, Veterinario
+Descripción:    Búsqueda de cliente por DNI, visualización de mascotas asociadas
+                con última visita, y acceso a historial detallado. Punto de
+                entrada al módulo de consultas médicas en modo solo lectura.
+                Muestra listado de mascotas con nombre, especie, edad calculada,
+                y última visita (si tiene consultas). NO requiere patente específica.
+
+Precondiciones:
+  - Usuario autenticado
+
+Postcondiciones:
+  - Cliente y mascotas visualizados
+  - Última visita calculada para cada mascota
+  - Acceso a FormHistorialDetallado (CU-N008)
+
+Frecuencia de Uso: Alta
+Criticidad:        Media
+
+---
+
+ID:             CU-N008
+Nombre:         Ver Historial Detallado (Consultas de Mascota)
+Actor(es):      Administrador, Recepcionista, Veterinario
+Descripción:    Vista de TODAS las consultas médicas de una mascota específica.
+                Muestra fecha, diagnóstico, y veterinario que realizó cada consulta.
+                Ordenamiento cronológico descendente (más reciente primero). Doble
+                clic en fila o botón "Ver Detalle" abre CU-N009. Muestra información
+                completa de mascota y dueño en header.
+
+Precondiciones:
+  - Usuario seleccionó mascota en CU-N007
+
+Postcondiciones:
+  - Historial de consultas visualizado
+  - Acceso a FormDetalleConsulta (CU-N009)
+
+Frecuencia de Uso: Alta
+Criticidad:        Media
+
+---
+
+ID:             CU-N009
+Nombre:         Ver Detalle de Consulta (Solo Lectura)
+Actor(es):      Administrador, Recepcionista, Veterinario
+Descripción:    Vista completa de UNA consulta médica específica en modo SOLO
+                LECTURA. Muestra fecha/hora, veterinario, síntomas, diagnóstico,
+                tratamiento, medicamentos recetados con cantidad/indicaciones, y
+                observaciones. Formato texto multilínea con StringBuilder. Botón
+                "Imprimir" (funcionalidad no implementada aún). NO permite edición.
+
+Precondiciones:
+  - Usuario seleccionó consulta en CU-N008
+
+Postcondiciones:
+  - Detalle de consulta visualizado
+  - (Opcional) Consulta impresa
+
+Frecuencia de Uso: Alta
+Criticidad:        Baja (solo lectura, no modifica datos)
+
+
+===============================================================================
+    FLUJO PRINCIPAL - CU-N007: CONSULTAR HISTORIAL CLÍNICO
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    OPERACIÓN 1: BUSCAR CLIENTE POR DNI                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista/     SISTEMA
+       Veterinario)
+────────────────────────────────────────┼────────────────────────────────────────
+1. Accede a "Historial Clínico" desde   │
+menú Negocio                            │
+                                        │ 2. Abre FormHistorialClinico
+                                        │ 3. Ejecuta FormHistorialClinico_Load()
+                                        │ 4. Configura DataGridView mascotas:
+                                        │    Columnas: Mascota, Especie, Edad,
+                                        │    Ultima Visita
+                                        │ 5. Ejecuta LimpiarCliente():
+                                        │    - grpCliente.Visible = false
+                                        │    - dgvMascotas.DataSource = null
+                                        │    - btnVerHistorial.Enabled = false
+────────────────────────────────────────┼────────────────────────────────────────
+6. Ingresa DNI en txtDNI: "12345678"    │
+────────────────────────────────────────┼────────────────────────────────────────
+7. Presiona Enter o clic en "Buscar"    │
+                                        │ 8. Ejecuta btnBuscar_Click()
+                                        │ 9. Obtiene dni = txtDNI.Text.Trim()
+                                        │ 10. Valida DNI NO vacío
+                                        │ 11. Llama ClienteBLL.Current
+                                        │     .BuscarClientePorDNI("12345678")
+                                        │ 12. BLL ejecuta SP:
+                                        │     EXEC Cliente_SelectByDNI @DNI
+                                        │ 13. SP retorna cliente si existe:
+                                        │     SELECT * FROM Cliente
+                                        │     WHERE DNI = @DNI AND Activo = 1
+                                        │ 14. IF cliente != null:
+                                        │       Asigna _clienteSeleccionado
+                                        │     15. Ejecuta MostrarCliente():
+                                        │         txtClienteInfo.Text =
+                                        │           "{Nombre} {Apellido} - DNI: {DNI}
+                                        │            Tel: {Telefono}"
+                                        │         grpCliente.Visible = true
+                                        │     16. Ejecuta CargarMascotas(idCliente)
+────────────────────────────────────────┼────────────────────────────────────────
+17. Visualiza información del cliente   │
+    y grupo de mascotas habilitado      │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            OPERACIÓN 2: CARGAR MASCOTAS CON ÚLTIMA VISITA                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+(Continuación de Op. 1)                 │
+                                        │ 1. Ejecuta CargarMascotas(idCliente)
+                                        │ 2. Llama MascotaBLL.Current
+                                        │    .ListarMascotasPorCliente(idCliente)
+                                        │ 3. BLL ejecuta SP:
+                                        │    EXEC Mascota_SelectByCliente @IdCliente
+                                        │ 4. SP retorna mascotas activas del cliente
+                                        │ 5. dgvMascotas.DataSource = mascotas
+                                        │ 6. Para cada fila en dgvMascotas:
+                                        │    IF row.DataBoundItem is Mascota mascota:
+                                        │      7. Llama ConsultaMedicaBLL.Current
+                                        │         .ObtenerHistorialMascota(idMascota)
+                                        │      8. BLL ejecuta SP:
+                                        │         EXEC ConsultaMedica_SelectByMascota
+                                        │           @IdMascota
+                                        │      9. SP retorna TODAS consultas de esa
+                                        │         mascota ordenadas por fecha DESC
+                                        │      10. Obtiene última consulta:
+                                        │          var ultimaConsulta = consultas
+                                        │            .OrderByDescending(c => c.FechaConsulta)
+                                        │            .FirstOrDefault()
+                                        │      11. IF ultimaConsulta != null:
+                                        │            row.Cells["UltimaVisita"].Value =
+                                        │              ultimaConsulta.FechaConsulta
+                                        │                .ToString("dd/MM/yyyy")
+                                        │          ELSE:
+                                        │            row.Cells["UltimaVisita"].Value =
+                                        │              "Sin visitas"
+                                        │ 12. Ejecuta ActualizarEstadoBoton():
+                                        │     btnVerHistorial.Enabled =
+                                        │       dgvMascotas.SelectedRows.Count > 0
+────────────────────────────────────────┼────────────────────────────────────────
+13. Visualiza grid con mascotas:        │
+    Nombre | Especie | Edad | Última   │
+    Visita                              │
+    "Rex" | "Canino" | 5 | 15/01/2025  │
+    "Michi" | "Felino" | 2 | Sin visitas│
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            OPERACIÓN 3: ABRIR HISTORIAL DETALLADO (CU-N008)                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona mascota en grid           │
+(ej: "Rex")                             │
+                                        │ 2. Ejecuta dgvMascotas_SelectionChanged()
+                                        │ 3. ActualizarEstadoBoton():
+                                        │    btnVerHistorial.Enabled = true
+────────────────────────────────────────┼────────────────────────────────────────
+4. Clic en "Ver Historial"              │
+                                        │ 5. Ejecuta btnVerHistorial_Click()
+                                        │ 6. Valida mascota seleccionada != null
+                                        │ 7. Obtiene mascotaSeleccionada del grid
+                                        │ 8. Crea FormHistorialDetallado(mascota,
+                                        │    cliente)
+                                        │ 9. formDetalle.ShowDialog()
+────────────────────────────────────────┼────────────────────────────────────────
+10. Formulario CU-N008 abierto (modal)  │
+    (Ver siguiente sección)             │
+
+
+===============================================================================
+    FLUJO PRINCIPAL - CU-N008: VER HISTORIAL DETALLADO
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│          OPERACIÓN 1: CARGAR HISTORIAL DE CONSULTAS DE MASCOTA             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. FormHistorialDetallado abierto desde │
+CU-N007 con mascota y cliente           │
+                                        │ 2. Ejecuta FormHistorialDetallado_Load()
+                                        │ 3. Configura DataGridView consultas:
+                                        │    Columnas: Fecha, Diagnostico,
+                                        │    Veterinario
+                                        │ 4. Ejecuta MostrarDatosMascota():
+                                        │    txtDatosMascota.Text =
+                                        │      "Mascota: {Nombre} | Especie: {Especie}
+                                        │       | Edad: {EdadEnAnios} años | Peso: {Peso} kg
+                                        │       Cliente: {Cliente.Nombre} {Cliente.Apellido}
+                                        │       | Tel: {Telefono}"
+                                        │ 5. Ejecuta CargarHistorialConsultas()
+                                        │ 6. Llama ConsultaMedicaBLL.Current
+                                        │    .ObtenerHistorialMascota(idMascota)
+                                        │ 7. BLL ejecuta SP:
+                                        │    EXEC ConsultaMedica_SelectByMascota
+                                        │      @IdMascota
+                                        │ 8. SP retorna TODAS consultas:
+                                        │    SELECT cm.*, c.FechaCita
+                                        │    FROM ConsultaMedica cm
+                                        │    INNER JOIN Cita c ON cm.IdCita = c.IdCita
+                                        │    INNER JOIN Mascota m ON c.IdMascota = m.IdMascota
+                                        │    WHERE m.IdMascota = @IdMascota
+                                        │      AND cm.Activo = 1
+                                        │    ORDER BY cm.FechaConsulta DESC
+                                        │ 9. BLL hidrata medicamentos para cada consulta:
+                                        │    consulta.Medicamentos =
+                                        │      ObtenerMedicamentosPorConsulta(idConsulta)
+                                        │ 10. dgvConsultas.DataSource = consultas
+                                        │ 11. Para cada fila en dgvConsultas:
+                                        │     IF row.DataBoundItem is ConsultaMedica:
+                                        │       12. Llama VeterinarioBLL.Current
+                                        │           .ObtenerVeterinarioPorId(idVeterinario)
+                                        │       13. IF veterinario != null:
+                                        │             row.Cells["Veterinario"].Value =
+                                        │               "Dr. {Nombre}"
+                                        │           ELSE:
+                                        │             row.Cells["Veterinario"].Value = "N/A"
+                                        │ 14. IF consultas.Count == 0:
+                                        │       Muestra MessageBox:
+                                        │         "Esta mascota no tiene consultas
+                                        │          médicas registradas"
+                                        │ 15. ActualizarEstadoBoton():
+                                        │     btnVerDetalle.Enabled =
+                                        │       dgvConsultas.SelectedRows.Count > 0
+────────────────────────────────────────┼────────────────────────────────────────
+16. Visualiza header con datos mascota  │
+    y grid con consultas:               │
+    Fecha      | Diagnóstico           | │
+    Veterinario                         │
+    15/01/2025 | Gastroenteritis       | │
+    Dr. Martínez                        │
+    10/12/2024 | Vacunación anual      | │
+    Dr. López                           │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│          OPERACIÓN 2: ABRIR DETALLE DE CONSULTA (CU-N009)                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona consulta en grid          │
+(ej: "15/01/2025 - Gastroenteritis")    │
+                                        │ 2. Ejecuta dgvConsultas_SelectionChanged()
+                                        │ 3. ActualizarEstadoBoton():
+                                        │    btnVerDetalle.Enabled = true
+────────────────────────────────────────┼────────────────────────────────────────
+4. Doble clic en fila O clic en "Ver    │
+Detalle"                                │
+                                        │ 5. Ejecuta btnVerDetalle_Click() o
+                                        │    dgvConsultas_CellDoubleClick()
+                                        │ 6. Valida consulta seleccionada != null
+                                        │ 7. Obtiene consultaSeleccionada del grid
+                                        │ 8. Crea FormDetalleConsulta(consulta)
+                                        │ 9. formDetalle.ShowDialog()
+────────────────────────────────────────┼────────────────────────────────────────
+10. Formulario CU-N009 abierto (modal)  │
+    (Ver siguiente sección)             │
+
+
+===============================================================================
+    FLUJO PRINCIPAL - CU-N009: VER DETALLE DE CONSULTA
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 1: MOSTRAR DETALLE COMPLETO (Solo Lectura)          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. FormDetalleConsulta abierto con      │
+consulta (ya hidratada con medicamentos)│
+                                        │ 2. Ejecuta FormDetalleConsulta_Load()
+                                        │ 3. Ejecuta MostrarDetalleConsulta()
+                                        │ 4. Obtiene veterinario:
+                                        │    var veterinario = VeterinarioBLL.Current
+                                        │      .ObtenerVeterinarioPorId(
+                                        │        _consulta.IdVeterinario)
+                                        │    nombreVeterinario = "Dr. {Nombre}"
+                                        │ 5. Construye texto con StringBuilder:
+                                        │    detalle = new StringBuilder()
+                                        │    detalle.AppendLine(
+                                        │      "Fecha: {dd/MM/yyyy} - Hora: {HH:mm}")
+                                        │    detalle.AppendLine(
+                                        │      "Veterinario: {nombreVeterinario}")
+                                        │    detalle.AppendLine()
+                                        │    detalle.AppendLine("SÍNTOMAS:")
+                                        │    detalle.AppendLine(_consulta.Sintomas)
+                                        │    detalle.AppendLine()
+                                        │    detalle.AppendLine("DIAGNÓSTICO:")
+                                        │    detalle.AppendLine(_consulta.Diagnostico)
+                                        │    detalle.AppendLine()
+                                        │    detalle.AppendLine("TRATAMIENTO:")
+                                        │    detalle.AppendLine(_consulta.Tratamiento
+                                        │      ?? "No especificado")
+                                        │    detalle.AppendLine()
+                                        │ 6. IF _consulta.Medicamentos.Count > 0:
+                                        │      detalle.AppendLine(
+                                        │        "MEDICAMENTOS RECETADOS:")
+                                        │      Para cada medicamento:
+                                        │        detalle.AppendLine(
+                                        │          "• {NombreMedicamento} ({Presentacion})")
+                                        │        detalle.AppendLine(
+                                        │          "  Cantidad: {Cantidad}")
+                                        │        IF Indicaciones NO vacío:
+                                        │          detalle.AppendLine(
+                                        │            "  Indicaciones: {Indicaciones}")
+                                        │        detalle.AppendLine()
+                                        │    ELSE:
+                                        │      detalle.AppendLine("MEDICAMENTOS:")
+                                        │      detalle.AppendLine(
+                                        │        "No se recetaron medicamentos")
+                                        │ 7. IF Observaciones NO vacío:
+                                        │      detalle.AppendLine("OBSERVACIONES:")
+                                        │      detalle.AppendLine(
+                                        │        _consulta.Observaciones)
+                                        │ 8. txtDetalle.Text = detalle.ToString()
+                                        │    NOTA: txtDetalle es TextBox multilínea
+                                        │    ReadOnly=true (SOLO LECTURA)
+────────────────────────────────────────┼────────────────────────────────────────
+9. Visualiza detalle completo en formato│
+   texto estructurado:                  │
+                                        │
+   Fecha: 15/01/2025 - Hora: 10:30     │
+   Veterinario: Dr. Martínez           │
+                                        │
+   SÍNTOMAS:                            │
+   Fiebre alta, decaimiento, vómitos   │
+                                        │
+   DIAGNÓSTICO:                         │
+   Gastroenteritis bacteriana          │
+                                        │
+   TRATAMIENTO:                         │
+   Reposo, hidratación, medicación     │
+                                        │
+   MEDICAMENTOS RECETADOS:              │
+   • Amoxicilina 500mg (cápsulas)      │
+     Cantidad: 14                       │
+     Indicaciones: Tomar cada 8 horas  │
+                                        │
+   • Ibuprofeno 400mg (comprimidos)    │
+     Cantidad: 10                       │
+     Indicaciones: Cada 12 horas       │
+                                        │
+   OBSERVACIONES:                       │
+   Control en 7 días                   │
+────────────────────────────────────────┼────────────────────────────────────────
+10. Clic en "Imprimir" (opcional)       │
+                                        │ 11. Ejecuta btnImprimir_Click()
+                                        │ 12. Muestra MessageBox:
+                                        │     "Funcionalidad de impresión no
+                                        │      implementada"
+                                        │     NOTA: Placeholder para futura
+                                        │     implementación
+────────────────────────────────────────┼────────────────────────────────────────
+13. Clic en "Volver"                    │
+                                        │ 14. this.Close()
+                                        │ 15. Retorna a FormHistorialDetallado
+
+
+===============================================================================
+    FLUJOS ALTERNATIVOS
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                  FA-1: DNI VACÍO (CU-N007, Buscar)                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N007, Operación 1, paso 7:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Deja txtDNI vacío                    │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Buscar"                     │
+                                        │ 3. Ejecuta btnBuscar_Click()
+                                        │ 4. Valida string.IsNullOrWhiteSpace(dni)
+                                        │ 5. Condición TRUE (vacío)
+                                        │ 6. Muestra MessageBox:
+                                        │    "Debe ingresar un DNI para buscar"
+                                        │    Tipo: Warning
+                                        │ 7. return → NO continúa con búsqueda
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-2: CLIENTE NO ENCONTRADO (CU-N007, Buscar)                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N007, Operación 1, paso 12:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Ingresa DNI inexistente: "99999999"  │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Buscar"                     │
+                                        │ 3. Ejecuta búsqueda en BLL
+                                        │ 4. SP retorna NULL (cliente no existe)
+                                        │ 5. ClienteBLL.BuscarClientePorDNI()
+                                        │    retorna null
+                                        │ 6. Muestra MessageBox:
+                                        │    "No se encontró un cliente con DNI
+                                        │     99999999"
+                                        │    Tipo: Information
+                                        │ 7. Ejecuta LimpiarCliente():
+                                        │    - Oculta grupo cliente
+                                        │    - Limpia grid mascotas
+                                        │    - Deshabilita btnVerHistorial
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│          FA-3: CLIENTE SIN MASCOTAS (CU-N007, Cargar Mascotas)              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N007, Operación 2:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Cliente encontrado tiene 0 mascotas  │
+                                        │ 2. MascotaBLL.ListarMascotasPorCliente()
+                                        │    retorna lista vacía
+                                        │ 3. dgvMascotas.DataSource = lista vacía
+                                        │ 4. Grid muestra 0 filas
+                                        │ 5. ActualizarEstadoBoton():
+                                        │    btnVerHistorial.Enabled = false
+                                        │    (ninguna selección)
+────────────────────────────────────────┼────────────────────────────────────────
+6. Visualiza cliente pero grid vacío    │
+   (resultado válido, no error)         │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│        FA-4: MASCOTA SIN CONSULTAS (CU-N008, Cargar Historial)             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N008, Operación 1, paso 14:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Mascota seleccionada nunca tuvo      │
+consultas médicas                       │
+                                        │ 2. ConsultaMedicaBLL.ObtenerHistorialMascota()
+                                        │    retorna lista vacía
+                                        │ 3. dgvConsultas.DataSource = lista vacía
+                                        │ 4. Valida consultas.Count == 0
+                                        │ 5. Muestra MessageBox:
+                                        │    "Esta mascota no tiene consultas
+                                        │     médicas registradas"
+                                        │    Tipo: Information
+                                        │ 6. Grid vacío
+                                        │ 7. btnVerDetalle.Enabled = false
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│      FA-5: CONSULTA SIN MEDICAMENTOS (CU-N009, Mostrar Detalle)            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N009, Operación 1, paso 6:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Consulta seleccionada NO tiene       │
+medicamentos recetados                  │
+                                        │ 2. _consulta.Medicamentos.Count == 0
+                                        │ 3. ELSE branch:
+                                        │    detalle.AppendLine("MEDICAMENTOS:")
+                                        │    detalle.AppendLine(
+                                        │      "No se recetaron medicamentos")
+────────────────────────────────────────┼────────────────────────────────────────
+4. Visualiza detalle con sección        │
+   "No se recetaron medicamentos"       │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│        FA-6: SOLO NÚMEROS EN DNI (CU-N007, Input Validation)               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N007, al escribir en txtDNI:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Intenta escribir letras en txtDNI:   │
+   "ABC123"                             │
+                                        │ 2. Ejecuta txtDNI_KeyPress() para cada tecla
+                                        │ 3. Para 'A':
+                                        │    IF !char.IsControl(e.KeyChar) &&
+                                        │       !char.IsDigit(e.KeyChar):
+                                        │      (TRUE - es letra)
+                                        │      e.Handled = true (bloquea tecla)
+                                        │ 4. SOLO acepta dígitos numéricos
+────────────────────────────────────────┼────────────────────────────────────────
+5. txtDNI muestra SOLO: "123"           │
+   (letras bloqueadas)                  │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            FA-7: BUSCAR CON ENTER (CU-N007, Atajo Teclado)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N007, al escribir DNI:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Ingresa DNI: "12345678"              │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Presiona Enter (en lugar de clic     │
+   "Buscar")                            │
+                                        │ 3. Ejecuta txtDNI_KeyPress()
+                                        │ 4. Detecta e.KeyChar == (char)Keys.Enter
+                                        │ 5. Llama btnBuscar_Click(sender, e)
+                                        │ 6. e.Handled = true
+                                        │ 7. Ejecuta búsqueda (igual que botón)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│        FA-8: DOBLE CLIC EN CONSULTA (CU-N008, Atajo Mouse)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En CU-N008, al visualizar consultas:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Doble clic en fila de consulta       │
+                                        │ 2. Ejecuta dgvConsultas_CellDoubleClick()
+                                        │ 3. Valida e.RowIndex >= 0 (fila válida)
+                                        │ 4. Llama btnVerDetalle_Click(sender, e)
+                                        │ 5. Abre FormDetalleConsulta
+                                        │    (igual que botón "Ver Detalle")
+
+
+===============================================================================
+    REGLAS DE NEGOCIO
+===============================================================================
+
+RN-N007-01: BÚSQUEDA POR DNI EXACTO
+  - Búsqueda usa coincidencia exacta de DNI (no parcial)
+  - SP: WHERE DNI = @DNI (no LIKE)
+  - Solo retorna cliente activo (Activo = 1)
+  - Implementado en: ClienteBLL.BuscarClientePorDNI()
+
+RN-N007-02: SOLO NÚMEROS EN DNI
+  - txtDNI acepta SOLO caracteres numéricos
+  - Validación en evento KeyPress
+  - Previene entrada inválida en UI
+  - Implementado en: FormHistorialClinico.txtDNI_KeyPress() líneas 213-219
+
+RN-N007-03: ÚLTIMA VISITA CALCULADA DINÁMICAMENTE
+  - Última visita NO está en BD (se calcula en UI)
+  - Obtiene TODAS consultas de mascota y selecciona última con LINQ
+  - OrderByDescending(c => c.FechaConsulta).FirstOrDefault()
+  - Si no tiene consultas: muestra "Sin visitas"
+  - Implementado en: FormHistorialClinico.CargarMascotas() líneas 143-161
+
+RN-N008-01: ORDENAMIENTO CRONOLÓGICO DESCENDENTE
+  - SP retorna consultas ORDER BY FechaConsulta DESC
+  - Más reciente primero en grid
+  - Facilita acceso a consultas actuales
+  - Implementado en: SP ConsultaMedica_SelectByMascota
+
+RN-N008-02: HIDRATACIÓN DE MEDICAMENTOS
+  - BLL obtiene medicamentos para CADA consulta
+  - Medicamentos cargados con relación ConsultaMedicamento
+  - Disponibles para CU-N009 (detalle)
+  - Implementado en: ConsultaMedicaBLL.ObtenerHistorialMascota() líneas 295-299
+
+RN-N008-03: NOMBRE VETERINARIO CON PREFIJO
+  - Veterinario mostrado con prefijo "Dr."
+  - Traducible (LanguageManager.Translate("dr_prefijo"))
+  - Si veterinario no existe: muestra "N/A"
+  - Implementado en: FormHistorialDetallado.CargarHistorialConsultas() líneas 93-101
+
+RN-N009-01: MODO SOLO LECTURA
+  - FormDetalleConsulta NO permite editar consulta
+  - txtDetalle.ReadOnly = true
+  - NO hay botones Guardar/Modificar
+  - Solo visualización de información
+  - Implementado en: FormDetalleConsulta (diseño)
+
+RN-N009-02: FORMATO ESTRUCTURADO CON STRINGBUILDER
+  - StringBuilder para construcción eficiente de texto largo
+  - Formato legible con secciones: SÍNTOMAS, DIAGNÓSTICO, etc.
+  - Cada medicamento con viñeta (•) y sangría
+  - Implementado en: FormDetalleConsulta.MostrarDetalleConsulta() líneas 44-90
+
+RN-N009-03: CAMPOS OPCIONALES CON FALLBACK
+  - Tratamiento, Observaciones: si vacío muestra "No especificado"
+  - Medicamentos: si lista vacía muestra "No se recetaron medicamentos"
+  - Indicaciones: si vacío NO muestra línea
+  - Implementado en: FormDetalleConsulta.MostrarDetalleConsulta()
+
+
+===============================================================================
+    EXCEPCIONES Y MANEJO DE ERRORES
+===============================================================================
+
+EX-N007-01: ERROR AL CARGAR FORMULARIO (CU-N007)
+  Condición:    Excepción en FormHistorialClinico_Load()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar formulario: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormHistorialClinico.cs (líneas 33-37)
+
+EX-N007-02: DNI VACÍO (CU-N007)
+  Condición:    string.IsNullOrWhiteSpace(txtDNI.Text)
+  Validación:   btnBuscar_Click()
+  Mensaje:      "Debe ingresar un DNI para buscar"
+  Acción:       Muestra advertencia, NO continúa
+  Código:       FormHistorialClinico.cs (líneas 90-95)
+
+EX-N007-03: CLIENTE NO ENCONTRADO (CU-N007)
+  Condición:    ClienteBLL.BuscarClientePorDNI() retorna null
+  Validación:   btnBuscar_Click()
+  Mensaje:      "No se encontró un cliente con DNI {dni}"
+  Acción:       Muestra información, limpia UI
+  Código:       FormHistorialClinico.cs (líneas 100-106)
+
+EX-N007-04: ERROR AL BUSCAR CLIENTE (CU-N007)
+  Condición:    Excepción en btnBuscar_Click()
+  Manejo:       Catch
+  Mensaje:      "Error al buscar cliente: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormHistorialClinico.cs (líneas 113-117)
+
+EX-N007-05: ERROR AL CARGAR MASCOTAS (CU-N007)
+  Condición:    Excepción en CargarMascotas()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar mascotas: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormHistorialClinico.cs (líneas 165-169)
+
+EX-N007-06: MASCOTA NO SELECCIONADA (CU-N007)
+  Condición:    dgvMascotas.SelectedRows.Count == 0
+  Validación:   btnVerHistorial_Click()
+  Mensaje:      "Debe seleccionar una mascota para ver su historial"
+  Acción:       Muestra advertencia, NO continúa
+  Código:       FormHistorialClinico.cs (líneas 186-191)
+
+EX-N007-07: ERROR AL ABRIR HISTORIAL (CU-N007)
+  Condición:    Excepción en btnVerHistorial_Click()
+  Manejo:       Catch
+  Mensaje:      "Error al abrir historial: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormHistorialClinico.cs (líneas 201-205)
+
+EX-N008-01: ERROR AL CARGAR FORMULARIO (CU-N008)
+  Condición:    Excepción en FormHistorialDetallado_Load()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar formulario: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormHistorialDetallado.cs (líneas 30-34)
+
+EX-N008-02: ERROR AL CARGAR HISTORIAL (CU-N008)
+  Condición:    Excepción en CargarHistorialConsultas()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar historial: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormHistorialDetallado.cs (líneas 113-117)
+
+EX-N008-03: CONSULTA NO SELECCIONADA (CU-N008)
+  Condición:    dgvConsultas.SelectedRows.Count == 0
+  Validación:   btnVerDetalle_Click()
+  Mensaje:      "Debe seleccionar una consulta"
+  Acción:       Muestra advertencia, NO continúa
+  Código:       FormHistorialDetallado.cs (líneas 134-139)
+
+EX-N008-04: ERROR AL ABRIR DETALLE (CU-N008)
+  Condición:    Excepción en btnVerDetalle_Click()
+  Manejo:       Catch
+  Mensaje:      "Error al abrir detalle: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormHistorialDetallado.cs (líneas 149-153)
+
+EX-N009-01: ERROR AL CARGAR FORMULARIO (CU-N009)
+  Condición:    Excepción en FormDetalleConsulta_Load()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar formulario: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormDetalleConsulta.cs (líneas 26-30)
+
+EX-N009-02: ERROR AL MOSTRAR DETALLE (CU-N009)
+  Condición:    Excepción en MostrarDetalleConsulta()
+  Manejo:       Catch
+  Mensaje:      "Error al mostrar detalle: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormDetalleConsulta.cs (líneas 92-96)
+
+EX-N009-03: ERROR AL IMPRIMIR (CU-N009)
+  Condición:    Excepción en btnImprimir_Click()
+  Manejo:       Catch
+  Mensaje:      "Error al imprimir: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormDetalleConsulta.cs (líneas 112-116)
+
+
+===============================================================================
+    VALIDACIONES
+===============================================================================
+
+VALIDACIONES DE ENTRADA (CU-N007):
+-----------------------------------
+V-N007-01: DNI no vacío
+  - Regla: !string.IsNullOrWhiteSpace(txtDNI.Text)
+  - Momento: Al hacer clic en "Buscar"
+  - Código: FormHistorialClinico.cs (líneas 90-95)
+
+V-N007-02: Solo números en DNI
+  - Regla: char.IsDigit(e.KeyChar) OR char.IsControl(e.KeyChar)
+  - Momento: Al escribir en txtDNI (KeyPress)
+  - Código: FormHistorialClinico.cs (líneas 213-219)
+
+V-N007-03: Mascota seleccionada para ver historial
+  - Regla: dgvMascotas.SelectedRows.Count > 0
+  - Momento: Al hacer clic en "Ver Historial"
+  - Código: FormHistorialClinico.cs (líneas 186-191)
+
+VALIDACIONES DE SELECCIÓN (CU-N008):
+-------------------------------------
+V-N008-01: Consulta seleccionada para ver detalle
+  - Regla: dgvConsultas.SelectedRows.Count > 0
+  - Momento: Al hacer clic en "Ver Detalle"
+  - Código: FormHistorialDetallado.cs (líneas 134-139)
+
+VALIDACIONES DE DATOS (CU-N009):
+---------------------------------
+V-N009-01: Campos opcionales con fallback
+  - Regla: Tratamiento ?? "No especificado"
+  - Momento: Al construir StringBuilder
+  - Código: FormDetalleConsulta.cs (líneas 57-58)
+
+
+===============================================================================
+    REQUERIMIENTOS NO FUNCIONALES
+===============================================================================
+
+RNF-N007-01: USABILIDAD - ATAJO TECLADO ENTER
+  - txtDNI acepta Enter para ejecutar búsqueda
+  - Evita uso de mouse para buscar
+  - Mejora UX para usuarios frecuentes
+
+RNF-N007-02: USABILIDAD - SOLO NÚMEROS EN DNI
+  - Validación en tiempo real (KeyPress)
+  - Previene errores de entrada
+  - Feedback inmediato al usuario
+
+RNF-N007-03: RENDIMIENTO - CÁLCULO ÚLTIMA VISITA
+  - Última visita calculada SOLO para mascotas mostradas
+  - Loop SOLO sobre filas visibles en grid
+  - Evita consultas innecesarias a BD
+
+RNF-N008-01: USABILIDAD - DOBLE CLIC EN CONSULTA
+  - Doble clic abre detalle (alternativa a botón)
+  - Patrón estándar de interacción con grids
+  - Reduce clics necesarios
+
+RNF-N008-02: USABILIDAD - INFORMACIÓN CONTEXTUAL
+  - Header muestra datos completos: Mascota + Cliente
+  - Usuario siempre sabe QUIÉN está viendo
+  - Evita confusión en ventanas múltiples
+
+RNF-N009-01: LEGIBILIDAD - FORMATO ESTRUCTURADO
+  - StringBuilder con secciones claras (SÍNTOMAS, DIAGNÓSTICO, etc.)
+  - Viñetas (•) para medicamentos
+  - Sangría para cantidad/indicaciones
+  - Fácil lectura visual
+
+RNF-N009-02: USABILIDAD - SOLO LECTURA
+  - txtDetalle.ReadOnly = true
+  - Previene edición accidental
+  - Claridad de propósito: consulta histórica
+
+RNF-N009-03: EXTENSIBILIDAD - PLACEHOLDER IMPRIMIR
+  - btnImprimir presente pero no implementado
+  - Facilita futura implementación
+  - Funcionalidad planificada
+
+RNF-GENERAL-01: TRADUCCIÓN - MULTI-IDIOMA
+  - TODOS los textos traducidos con LanguageManager
+  - Soporta es-AR / en-GB
+  - Textos de error, etiquetas, mensajes
+
+RNF-GENERAL-02: NAVEGACIÓN - FLUJO DRILL-DOWN
+  - Navegación progresiva: Cliente → Mascota → Consulta → Detalle
+  - Formularios modales (ShowDialog) con retorno automático
+  - Contexto preservado en cada nivel
+
+
+===============================================================================
+    ARCHIVOS INVOLUCRADOS
+===============================================================================
+
+CAPA UI (Presentación):
+-----------------------
+FormHistorialClinico.cs (CU-N007)
+  Ruta: UI/WinUi/Negocio/FormHistorialClinico.cs
+  Líneas: 230
+  Responsabilidad:
+    - Búsqueda de cliente por DNI
+    - Visualización de mascotas con última visita
+    - Punto de entrada a historial médico
+  Métodos clave:
+    - FormHistorialClinico_Load() → Línea 26
+    - ConfigurarDataGridView() → Línea 40
+    - btnBuscar_Click() → Línea 84
+    - MostrarCliente(Cliente) → Línea 120
+    - LimpiarCliente() → Línea 126
+    - CargarMascotas(Guid) → Línea 135
+    - ActualizarEstadoBoton() → Línea 177
+    - btnVerHistorial_Click() → Línea 182
+    - txtDNI_KeyPress() → Línea 213
+
+FormHistorialDetallado.cs (CU-N008)
+  Ruta: UI/WinUi/Negocio/FormHistorialDetallado.cs
+  Líneas: 170
+  Responsabilidad:
+    - Vista de TODAS las consultas de una mascota
+    - Navegación a detalle de consulta
+    - Información contextual mascota/cliente
+  Métodos clave:
+    - FormHistorialDetallado_Load() → Línea 22
+    - ConfigurarDataGridView() → Línea 37
+    - MostrarDatosMascota() → Línea 74
+    - CargarHistorialConsultas() → Línea 80
+    - ActualizarEstadoBoton() → Línea 125
+    - btnVerDetalle_Click() → Línea 130
+    - dgvConsultas_CellDoubleClick() → Línea 161
+
+FormDetalleConsulta.cs (CU-N009)
+  Ruta: UI/WinUi/Negocio/FormDetalleConsulta.cs
+  Líneas: 120
+  Responsabilidad:
+    - Vista completa de UNA consulta en solo lectura
+    - Formato estructurado con StringBuilder
+    - Placeholder para impresión
+  Métodos clave:
+    - FormDetalleConsulta_Load() → Línea 20
+    - MostrarDetalleConsulta() → Línea 33
+    - btnImprimir_Click() → Línea 104 (no implementado)
+
+CAPA BLL (Lógica de Negocio):
+------------------------------
+ClienteBLL.cs
+  Métodos usados:
+    - BuscarClientePorDNI(string dni)
+
+MascotaBLL.cs
+  Métodos usados:
+    - ListarMascotasPorCliente(Guid idCliente)
+
+ConsultaMedicaBLL.cs
+  Métodos usados:
+    - ObtenerHistorialMascota(Guid idMascota)
+
+VeterinarioBLL.cs
+  Métodos usados:
+    - ObtenerVeterinarioPorId(Guid idVeterinario)
+
+CAPA DOMINIO:
+-------------
+Cliente.cs
+  Propiedades usadas:
+    - IdCliente, Nombre, Apellido, DNI, Telefono
+
+Mascota.cs
+  Propiedades usadas:
+    - IdMascota, Nombre, Especie, EdadEnAnios (calculada), Peso
+
+ConsultaMedica.cs
+  Propiedades usadas:
+    - IdConsulta, IdCita, IdVeterinario, FechaConsulta
+    - Sintomas, Diagnostico, Tratamiento, Observaciones
+    - Medicamentos : List<MedicamentoRecetado>
+
+MedicamentoRecetado.cs
+  Propiedades usadas:
+    - NombreMedicamento, Presentacion, Cantidad, Indicaciones
+
+BASE DE DATOS:
+--------------
+Stored Procedures (VetCareDB):
+  Cliente_SelectByDNI
+    Parámetros: @DNI
+    Retorna: Cliente con coincidencia exacta de DNI
+
+  Mascota_SelectByCliente
+    Parámetros: @IdCliente
+    Retorna: Mascotas activas del cliente
+
+  ConsultaMedica_SelectByMascota
+    Parámetros: @IdMascota
+    Retorna: TODAS consultas de la mascota ORDER BY FechaConsulta DESC
+
+  ConsultaMedicamento_SelectByConsulta
+    Parámetros: @IdConsulta
+    Retorna: Medicamentos recetados en consulta con JOIN a tabla Medicamento
+
+
+===============================================================================
+    PATRONES DE DISEÑO APLICADOS
+===============================================================================
+
+PATRÓN 1: DRILL-DOWN NAVIGATION
+--------------------------------
+Aplicado en: Flujo CU-N007 → CU-N008 → CU-N009
+
+Justificación:
+  - Navegación progresiva de general a específico
+  - Cada nivel reduce scope: Cliente → Mascota → Consulta → Detalle
+  - Formularios modales preservan contexto
+
+Implementación:
+  FormHistorialClinico → FormHistorialDetallado → FormDetalleConsulta
+  ShowDialog() para modalidad
+
+PATRÓN 2: LAZY LOADING
+-----------------------
+Aplicado en: Carga de última visita
+
+Justificación:
+  - Última visita calculada SOLO al visualizar mascotas
+  - NO pre-cargada en entidad Mascota
+  - Reduce consultas innecesarias
+
+Implementación:
+  Loop sobre dgvMascotas.Rows, consulta historial por mascota
+
+PATRÓN 3: DATA TRANSFER OBJECT (DTO)
+-------------------------------------
+Aplicado en: ConsultaMedica con Medicamentos hidratados
+
+Justificación:
+  - ConsultaMedica transporta datos entre BLL y UI
+  - Propiedad Medicamentos hidratada en BLL
+  - UI NO necesita consultas adicionales
+
+PATRÓN 4: BUILDER (StringBuilder)
+----------------------------------
+Aplicado en: FormDetalleConsulta.MostrarDetalleConsulta()
+
+Justificación:
+  - Construcción eficiente de texto largo
+  - Múltiples AppendLine() más eficiente que concatenación
+  - Legibilidad de código
+
+PATRÓN 5: READ-ONLY VIEW
+-------------------------
+Aplicado en: FormDetalleConsulta
+
+Justificación:
+  - Vista histórica NO debe permitir edición
+  - txtDetalle.ReadOnly = true
+  - NO botones Guardar/Modificar
+
+
+===============================================================================
+    TRAZABILIDAD
+===============================================================================
+
+RELACIONADO CON:
+----------------
+CU-N001: Gestionar Clientes
+  - Búsqueda por DNI usa ClienteBLL.BuscarClientePorDNI()
+  - Cliente debe existir y estar activo
+
+CU-N002: Gestionar Mascotas
+  - Listado de mascotas usa MascotaBLL.ListarMascotasPorCliente()
+  - EdadEnAnios calculada en entidad Mascota
+
+CU-N006: Registrar Consulta Médica
+  - Consultas visualizadas fueron creadas con FormConsultaMedica
+  - Medicamentos recetados en CU-N006 visibles en CU-N009
+
+CU-N010: Gestionar Medicamentos
+  - Medicamentos recetados referencian catálogo de Medicamento
+  - NombreMedicamento y Presentacion hidratados desde Medicamento
+
+PATENTES REQUERIDAS:
+--------------------
+NO REQUIERE PATENTE ESPECÍFICA
+  - Acceso abierto para Administrador, Recepcionista, Veterinario
+  - Funcionalidad de consulta (no modifica datos)
+
+TABLAS RELACIONADAS:
+--------------------
+Cliente → Mascota → Cita → ConsultaMedica → ConsultaMedicamento → Medicamento
+
+Flujo de datos:
+  1. CU-N007: Cliente (por DNI) + Mascotas
+  2. CU-N008: ConsultaMedica (por IdMascota)
+  3. CU-N009: ConsultaMedica + ConsultaMedicamento (JOIN Medicamento)
+
+
+===============================================================================
+    NOTAS DE IMPLEMENTACIÓN
+===============================================================================
+
+NOTA 1: ÚLTIMA VISITA NO EN BD
+  - Última visita calculada dinámicamente en UI
+  - NO almacenada como columna en tabla Mascota
+  - Requiere consulta por mascota (puede afectar rendimiento con muchas mascotas)
+  - Alternativa futura: columna calculada o vista materializada en BD
+
+NOTA 2: SOLO NÚMEROS EN DNI (KEYPRESS)
+  - Validación preventiva en evento KeyPress
+  - e.Handled = true bloquea tecla antes de ingresar en TextBox
+  - Previene entrada de letras, símbolos
+  - char.IsControl() permite Backspace, Delete, etc.
+
+NOTA 3: ENTER PARA BUSCAR
+  - Atajo de teclado mejora UX
+  - KeyPress detecta Enter y llama btnBuscar_Click()
+  - e.Handled = true previene "ding" de sistema
+
+NOTA 4: MEDICAMENTOS HIDRATADOS EN BLL
+  - BLL obtiene medicamentos para CADA consulta
+  - Loop en ObtenerHistorialMascota() (líneas 295-299)
+  - Consulta.Medicamentos ya disponible en UI
+  - Evita N+1 queries si se hiciera en UI
+
+NOTA 5: DOBLE CLIC EN GRID
+  - dgvConsultas_CellDoubleClick() llama btnVerDetalle_Click()
+  - Reutilización de código (DRY)
+  - Validación de e.RowIndex >= 0 (evita header)
+
+NOTA 6: FORMULARIOS MODALES
+  - ShowDialog() en lugar de Show()
+  - Bloquea formulario padre hasta cerrar
+  - DialogResult no usado (solo navegación)
+
+NOTA 7: STRINGBUILDER PARA DETALLE
+  - StringBuilder más eficiente que concatenación de strings
+  - AppendLine() agrega salto de línea automático
+  - ToString() al final para asignar a txtDetalle.Text
+
+NOTA 8: PLACEHOLDER IMPRIMIR
+  - btnImprimir presente pero NO implementado
+  - Muestra mensaje "Funcionalidad no implementada"
+  - Preparado para futura implementación con PrintDocument
+
+
+===============================================================================
+    METADATOS
+===============================================================================
+
+Autor:              Sistema VetCare
+Versión:            1.0
+Fecha Creación:     2025-01-16
+Última Actualización: 2025-01-16
+Revisado por:       Claude Code
+Estado:             ✅ COMPLETO
+
+Archivos relacionados:
+  - CU-N001_Template_EA.txt (Gestionar Clientes)
+  - CU-N002_Template_EA.txt (Gestionar Mascotas)
+  - CU-N006_Template_EA.txt (Registrar Consulta Médica)
+  - CU-N010_Template_EA.txt (Gestionar Medicamentos)
+
+Casos de Uso dependientes:
+  - CU-N011: Generar Reportes (puede usar consultas médicas para estadísticas)
+
+===============================================================================

@@ -1,0 +1,794 @@
+================================================================================
+CASO DE USO: CU-N003 - GESTIONAR CITAS
+================================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+Código:             CU-N003
+Nombre:             Gestionar Citas
+Tipo:               NEGOCIO - CRUD + Gestión de Estados
+Actor Principal:    Veterinario, Recepcionista, Administrador
+Módulo:             Citas
+Formulario:         gestionCitas.cs (603 líneas)
+Patente Requerida:  FormGestionCitas
+Complejidad:        Alta
+Estado:             ✅ IMPLEMENTADO
+
+DESCRIPCIÓN
+-----------
+Gestión completa de citas veterinarias con máquina de estados, filtros avanzados,
+validación de conflictos de horario y código de colores por estado. Incluye
+agendar nuevas citas con validación de horarios (±30 minutos), modificar citas
+pendientes, cancelar citas, actualizar estados según flujo permitido, filtrado
+por fecha/veterinario/estado y visualización con colores.
+
+ESTADOS POSIBLES: Agendada → Confirmada → Completada
+                          ↘ Cancelada (solo desde Agendada/Confirmada)
+                          ↘ No Asistió (solo desde Agendada/Confirmada)
+
+REGLAS DE NEGOCIO CRÍTICAS:
+1. Conflicto de Horario: NO permite agendar si veterinario o mascota tienen
+   cita en ±30 minutos
+2. Modificación Restringida: SOLO Agendadas o Confirmadas pueden modificarse
+3. Cancelación Restringida: SOLO Agendadas o Confirmadas pueden cancelarse
+4. Estados Terminales: Completada NO cambia estado. Cancelada/NoAsistio solo
+   pueden reagendarse
+5. Fecha No Pasada: NO permite agendar citas en el pasado
+
+AUDITORÍA: Operaciones críticas (Agendar, Cancelar, Confirmar) en Bitácora.
+
+================================================================================
+OPERACIONES DEL CASO DE USO
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 1: LISTAR Y FILTRAR CITAS                                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado con patente correcta
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Abrir formulario Gestión Citas  │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Evento GestionCitas_Load             │
+│                                    │ 3. Aplicar traducciones multi-idioma    │
+│                                    │ 4. Configurar DataGridView:             │
+│                                    │    - Columnas: Hora, Mascota, Dueño,    │
+│                                    │      Tipo, Veterinario, Estado,         │
+│                                    │      Observaciones                      │
+│                                    │ 5. Cargar ComboBox Fecha:               │
+│                                    │    ["Hoy", "Esta Semana", "Este Mes",   │
+│                                    │     "Todas", "Fecha Específica..."]     │
+│                                    │ 6. Cargar ComboBox Veterinarios:        │
+│                                    │    - "Todos"                            │
+│                                    │    - Lista de VeterinarioBLL.           │
+│                                    │      ListarVeterinariosActivos()        │
+│                                    │      ordenados por Nombre               │
+│                                    │ 7. Cargar ComboBox Estados:             │
+│                                    │    ["Todos", "Agendada", "Confirmada",  │
+│                                    │     "Completada", "Cancelada",          │
+│                                    │     "No Asistió"]                       │
+│                                    │ 8. Seleccionar filtro "Hoy" por defecto │
+│                                    │ 9. Ejecutar CitaBLL.ListarTodasLasCitas │
+│                                    │ 10. Filtrar por fecha = HOY:            │
+│                                    │     WHERE FechaCita.Date = DateTime.Today│
+│                                    │ 11. Cargar resultados en grid           │
+│                                    │ 12. Ordenar por FechaCita ASC           │
+│                                    │ 13. Aplicar colores por estado:         │
+│                                    │     - Agendada: Amarillo claro          │
+│                                    │       (LightYellow)                     │
+│                                    │     - Confirmada: Verde claro           │
+│                                    │       (LightGreen)                      │
+│                                    │     - Completada: Azul claro            │
+│                                    │       (LightBlue)                       │
+│                                    │     - Cancelada: Coral claro            │
+│                                    │       (LightCoral)                      │
+│                                    │     - No Asistió: Gris claro            │
+│                                    │       (LightGray)                       │
+│                                    │ 14. Mostrar contador: "Total: X cita(s)"│
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Grid con citas del día filtradas, colores aplicados, contador
+                 visible, filtros listos para usar.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 2: FILTRAR CITAS (FECHA/VETERINARIO/ESTADO)                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Formulario cargado con citas
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar filtros:            │                                         │
+│    - Fecha: "Esta Semana" ó        │                                         │
+│      "Este Mes" ó "Todas" ó        │                                         │
+│      "Fecha Específica..."         │                                         │
+│    - Veterinario: Seleccionar      │                                         │
+│      de combo o "Todos"            │                                         │
+│    - Estado: Seleccionar o "Todos" │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 2. SI seleccionó "Fecha            │                                         │
+│    Específica...":                 │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 3. Abrir FormSeleccionarFecha           │
+│                                    │ 4. Mostrar DateTimePicker               │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 5. Seleccionar fecha y Aceptar     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 6. Capturar fecha seleccionada          │
+│                                    │ 7. Cerrar diálogo                       │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 8. Clic en "Buscar"                │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 9. Cursor = WaitCursor                  │
+│                                    │ 10. Obtener todas las citas:            │
+│                                    │     CitaBLL.ListarTodasLasCitas()       │
+│                                    │ 11. Aplicar filtro de FECHA:            │
+│                                    │     - "Hoy": FechaCita.Date = Today     │
+│                                    │     - "Esta Semana": Today hasta        │
+│                                    │       Domingo (fin semana)              │
+│                                    │     - "Este Mes": Mes y Año actual      │
+│                                    │     - "Todas": Sin filtro de fecha      │
+│                                    │     - "Fecha Específica": Fecha elegida │
+│                                    │ 12. Aplicar filtro VETERINARIO:         │
+│                                    │     SI cboVeterinario.SelectedIndex > 0:│
+│                                    │       WHERE Veterinario = seleccionado  │
+│                                    │ 13. Aplicar filtro ESTADO:              │
+│                                    │     SI cboEstado.SelectedIndex > 0:     │
+│                                    │       WHERE Estado = seleccionado       │
+│                                    │ 14. Ordenar por FechaCita ASC           │
+│                                    │ 15. Cargar en grid                      │
+│                                    │ 16. Aplicar colores por estado          │
+│                                    │ 17. Actualizar contador                 │
+│                                    │ 18. Cursor = Default                    │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Grid con citas filtradas según criterios, colores aplicados,
+                 contador actualizado.
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Usuario cancela selección de fecha específica → Muestra citas de HOY
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 3: AGENDAR NUEVA CITA                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, al menos 1 mascota activa y 1 veterinario
+                activo en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Clic en "Nueva Cita"            │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Abrir FormNuevaCita (modal)          │
+│                                    │ 3. Cargar ComboBox Clientes activos     │
+│                                    │ 4. Cargar ComboBox Veterinarios activos │
+│                                    │ 5. Cargar ComboBox Tipos de Consulta    │
+│                                    │ 6. Configurar DateTimePicker con        │
+│                                    │    DateTime.Now                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 7. Seleccionar Cliente             │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 8. Evento Cliente_SelectedIndexChanged  │
+│                                    │ 9. Cargar mascotas del cliente:         │
+│                                    │    MascotaBLL.ListarMascotasActivasPor  │
+│                                    │    Cliente(idCliente)                   │
+│                                    │ 10. Llenar ComboBox Mascotas            │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 11. Ingresar datos:                │                                         │
+│     - Seleccionar Mascota          │                                         │
+│     - Fecha y Hora (DateTimePicker)│                                         │
+│     - Tipo Consulta                │                                         │
+│     - Veterinario                  │                                         │
+│     - Observaciones (opcional)     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 12. Clic en "Agendar"              │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 13. Construir objeto Cita               │
+│                                    │ 14. Validar campos obligatorios:        │
+│                                    │     - IdMascota != Empty                │
+│                                    │     - FechaCita != MinValue             │
+│                                    │     - TipoConsulta no vacío (max 100)   │
+│                                    │     - Veterinario no vacío (max 150)    │
+│                                    │     - Observaciones max 500 chars       │
+│                                    │ 15. Verificar mascota existe y activa:  │
+│                                    │     MascotaRepository.ObtenerPorId()    │
+│                                    │ 16. **VALIDACIÓN CRÍTICA**:             │
+│                                    │     Verificar fecha NO en pasado        │
+│                                    │     (con margen -5 minutos):            │
+│                                    │     SI FechaCita < DateTime.Now         │
+│                                    │        .AddMinutes(-5):                 │
+│                                    │       → Error: "No se puede agendar     │
+│                                    │          cita en el pasado"             │
+│                                    │ 17. **VALIDACIÓN CONFLICTO VETERINARIO**│
+│                                    │     CitaRepository.SelectByVeterinario  │
+│                                    │     Buscar citas en ±30 minutos:        │
+│                                    │     WHERE Veterinario = seleccionado    │
+│                                    │     AND Estado IN (Agendada, Confirmada)│
+│                                    │     AND ABS(FechaCita - nueva) < 30 min │
+│                                    │     SI existe conflicto:                │
+│                                    │       → Error: "Conflicto de horario:   │
+│                                    │          Veterinario [X] ya tiene cita  │
+│                                    │          a las [HH:mm] (Mascota: [Y])"  │
+│                                    │ 18. **VALIDACIÓN CONFLICTO MASCOTA**:   │
+│                                    │     CitaRepository.SelectAll()          │
+│                                    │     WHERE IdMascota = seleccionada      │
+│                                    │     AND Estado IN (Agendada, Confirmada)│
+│                                    │     AND ABS(FechaCita - nueva) < 30 min │
+│                                    │     SI existe conflicto:                │
+│                                    │       → Error: "Mascota [X] ya tiene    │
+│                                    │          cita a las [HH:mm] con         │
+│                                    │          veterinario [Y]"               │
+│                                    │ 19. Establecer Estado = Agendada        │
+│                                    │ 20. Establecer FechaRegistro = Now      │
+│                                    │ 21. Establecer Activo = true            │
+│                                    │ 22. Ejecutar SP: Cita_Insert            │
+│                                    │ 23. Registrar en Bitácora:              │
+│                                    │     Módulo: "Citas"                     │
+│                                    │     Acción: "AgendarCita"               │
+│                                    │     Criticidad: Info                    │
+│                                    │     Descripción: "Cita agendada:        │
+│                                    │     [Mascota] con [Veterinario] el      │
+│                                    │     [fecha]"                            │
+│                                    │ 24. Cerrar FormNuevaCita (DialogResult  │
+│                                    │     = OK)                               │
+│                                    │ 25. Recargar grid citas en formulario   │
+│                                    │     principal                           │
+│                                    │ 26. Mensaje: "Cita agendada             │
+│                                    │     exitosamente"                       │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Cita creada en BD con estado Agendada, visible en grid con
+                 color amarillo, registro en Bitácora.
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Cliente sin mascotas activas (paso 9) → ComboBox mascotas vacío,
+       advertencia al intentar agendar
+[FA-2] Fecha en el pasado (paso 16) → Error, campos permanecen habilitados
+[FA-3] Conflicto horario veterinario (paso 17) → Error con detalle de cita
+       conflictiva, usuario debe cambiar fecha/hora o veterinario
+[FA-4] Conflicto horario mascota (paso 18) → Error con detalle de cita
+       conflictiva, usuario debe cambiar fecha/hora
+[FA-5] Validación fallida (paso 14) → Mensaje de error, foco en campo
+       correspondiente
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 4: MODIFICAR CITA                                                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Al menos una cita en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar cita en grid        │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Evento SelectionChanged              │
+│                                    │ 3. Cargar _citaSeleccionada             │
+│                                    │ 4. Actualizar estado botones:           │
+│                                    │    - btnModificar.Enabled =             │
+│                                    │      cita.PuedeSerModificada()          │
+│                                    │      (Agendada o Confirmada)            │
+│                                    │    - btnCancelar.Enabled =              │
+│                                    │      cita.PuedeSerCancelada()           │
+│                                    │      (Agendada o Confirmada)            │
+│                                    │    - btnActualizarEstado.Enabled = true │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 5. Clic en "Modificar"             │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 6. Verificar cita seleccionada          │
+│                                    │ 7. Verificar cita.PuedeSerModificada(): │
+│                                    │    SI Estado NOT IN (Agendada,          │
+│                                    │       Confirmada):                      │
+│                                    │      → Advertencia: "No puede modificar │
+│                                    │         cita en estado [Estado]"        │
+│                                    │      → CANCELAR operación               │
+│                                    │ 8. Abrir FormModificarCita (modal)      │
+│                                    │ 9. Cargar datos cita actual:            │
+│                                    │    - Cliente (deshabilitado)            │
+│                                    │    - Mascota (deshabilitado)            │
+│                                    │    - Fecha/Hora (habilitado)            │
+│                                    │    - TipoConsulta (habilitado)          │
+│                                    │    - Veterinario (habilitado)           │
+│                                    │    - Observaciones (habilitado)         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 10. Modificar datos (permitidos):  │                                         │
+│     Fecha, Hora, Tipo, Veterinario,│                                         │
+│     Observaciones                  │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 11. Clic en "Guardar Cambios"     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 12. Validar campos (igual crear)        │
+│                                    │ 13. Obtener cita actual de BD:          │
+│                                    │     CitaRepository.SelectOne(id)        │
+│                                    │ 14. Verificar puede modificarse         │
+│                                    │ 15. Verificar mascota activa            │
+│                                    │ 16. SI cambió Fecha o Veterinario:      │
+│                                    │     → Validar conflicto horario         │
+│                                    │       veterinario (±30 min, excluyendo  │
+│                                    │       esta cita)                        │
+│                                    │ 17. SI cambió Fecha o Mascota:          │
+│                                    │     → Validar conflicto horario mascota │
+│                                    │       (±30 min, excluyendo esta cita)   │
+│                                    │ 18. Ejecutar SP: Cita_Update            │
+│                                    │ 19. Cerrar FormModificarCita            │
+│                                    │ 20. Recargar grid citas                 │
+│                                    │ 21. Mensaje: "Cita modificada           │
+│                                    │     exitosamente"                       │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Cita actualizada en BD, cambios reflejados en grid.
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin cita seleccionada (paso 6) → "Debe seleccionar una cita"
+[FA-2] Cita NO modificable (paso 7) → Advertencia con estado actual, botón
+       "Modificar" deshabilitado
+[FA-3] Conflicto horario al cambiar (pasos 16-17) → Error, datos permanecen
+       en formulario para corrección
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 5: CANCELAR CITA                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Al menos una cita Agendada o Confirmada en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar cita en grid        │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Cargar cita seleccionada             │
+│                                    │ 3. Actualizar botones (Cancelar         │
+│                                    │    habilitado solo si puede cancelarse) │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 4. Clic en "Cancelar Cita"         │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 5. Verificar cita seleccionada          │
+│                                    │ 6. Verificar cita.PuedeSerCancelada():  │
+│                                    │    SI Estado NOT IN (Agendada,          │
+│                                    │       Confirmada):                      │
+│                                    │      → Advertencia: "No puede cancelar  │
+│                                    │         cita en estado [Estado]"        │
+│                                    │      → CANCELAR operación               │
+│                                    │ 7. Construir mensaje confirmación:      │
+│                                    │    "¿Confirmar cancelación de cita?     │
+│                                    │     Cliente: [NombreCompleto]           │
+│                                    │     Mascota: [Nombre]                   │
+│                                    │     Fecha: [dd/MM/yyyy HH:mm]"          │
+│                                    │ 8. Mostrar MessageBox confirmación      │
+│                                    │    (Sí/No)                              │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 9. Confirmar "Sí"                  │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 10. Ejecutar CitaBLL.CancelarCita(id)   │
+│                                    │ 11. Verificar puede cancelarse          │
+│                                    │ 12. Ejecutar SP: Cita_UpdateEstado      │
+│                                    │     SET Estado = 'Cancelada'            │
+│                                    │ 13. Registrar en Bitácora:              │
+│                                    │     Módulo: "Citas"                     │
+│                                    │     Acción: "CancelarCita"              │
+│                                    │     Criticidad: Advertencia             │
+│                                    │     Descripción: "Cita cancelada:       │
+│                                    │     [fecha] con [Veterinario]"          │
+│                                    │ 14. Recargar grid citas                 │
+│                                    │ 15. Cita ahora con color Coral          │
+│                                    │     (estado Cancelada)                  │
+│                                    │ 16. Mensaje: "Cita cancelada            │
+│                                    │     exitosamente"                       │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Cita con estado Cancelada, color coral en grid, registro en
+                 Bitácora con criticidad Advertencia.
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin cita seleccionada (paso 5) → "Debe seleccionar una cita"
+[FA-2] Cita NO cancelable (paso 6) → Advertencia, botón deshabilitado
+[FA-3] Usuario cancela confirmación (paso 9) → No ejecuta cancelación
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 6: ACTUALIZAR ESTADO DE CITA                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Al menos una cita en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar cita en grid        │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Cargar cita, habilitar botón         │
+│                                    │    "Actualizar Estado"                  │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 3. Clic en "Actualizar Estado"     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 4. Verificar cita seleccionada          │
+│                                    │ 5. Abrir FormActualizarEstado (modal)   │
+│                                    │ 6. Mostrar estado actual                │
+│                                    │ 7. Cargar ComboBox estados PERMITIDOS   │
+│                                    │    según transiciones válidas:          │
+│                                    │    - Agendada → Confirmada, Completada, │
+│                                    │      Cancelada, NoAsistio               │
+│                                    │    - Confirmada → Completada, Cancelada,│
+│                                    │      NoAsistio (NO Agendada)            │
+│                                    │    - Completada → NINGUNO (terminal)    │
+│                                    │    - Cancelada → Agendada (reagendar)   │
+│                                    │    - NoAsistio → Agendada (reagendar)   │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 8. Seleccionar nuevo estado        │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 9. Clic en "Actualizar"            │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 10. Obtener cita actual de BD           │
+│                                    │ 11. Validar transición estado:          │
+│                                    │     ValidarTransicionEstado(actual,     │
+│                                    │     nuevo)                              │
+│                                    │     SI transición NO válida:            │
+│                                    │       → InvalidOperationException       │
+│                                    │ 12. Ejecutar SP: Cita_UpdateEstado      │
+│                                    │     UPDATE Cita SET Estado = @nuevo     │
+│                                    │ 13. SI nuevo estado = Confirmada:       │
+│                                    │     → Registrar en Bitácora:            │
+│                                    │       Acción: "Confirmacion"            │
+│                                    │       Criticidad: Info                  │
+│                                    │ 14. Cerrar FormActualizarEstado         │
+│                                    │ 15. Recargar grid citas                 │
+│                                    │ 16. Actualizar referencia cita          │
+│                                    │     seleccionada con datos frescos      │
+│                                    │ 17. Aplicar color según nuevo estado    │
+│                                    │ 18. Mensaje: "Estado actualizado        │
+│                                    │     exitosamente"                       │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Cita con nuevo estado, color actualizado en grid.
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin cita seleccionada (paso 4) → "Debe seleccionar una cita"
+[FA-2] Transición inválida (paso 11) → Error: "[Mensaje regla específica]",
+       formulario permanece abierto
+[FA-3] Cita Completada (paso 7) → ComboBox estados vacío o deshabilitado,
+       advertencia "No se puede cambiar estado de cita completada"
+
+REGLAS DE TRANSICIÓN DE ESTADOS:
+┌──────────────┬──────────────────────────────────────────────────────────────┐
+│ Estado Actual│ Estados Permitidos                                           │
+├──────────────┼──────────────────────────────────────────────────────────────┤
+│ Agendada     │ Confirmada, Completada, Cancelada, No Asistió (todos)        │
+│ Confirmada   │ Completada, Cancelada, No Asistió (NO puede volver Agendada) │
+│ Completada   │ NINGUNO (estado terminal, NO cambia)                         │
+│ Cancelada    │ Agendada (solo reagendar)                                    │
+│ No Asistió   │ Agendada (solo reagendar)                                    │
+└──────────────┴──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 7: VER DETALLE DE CITA                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Al menos una cita en grid
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Doble clic en fila de cita      │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Evento DgvCitas_DoubleClick          │
+│                                    │ 3. Verificar _citaSeleccionada != null  │
+│                                    │ 4. Construir mensaje detalle usando     │
+│                                    │    cita.ResumenCita:                    │
+│                                    │    "DETALLE DE CITA                     │
+│                                    │     Cliente: [Apellido, Nombre]         │
+│                                    │     Mascota: [Nombre]                   │
+│                                    │     Fecha: [dd/MM/yyyy HH:mm]           │
+│                                    │     Tipo: [TipoConsulta]                │
+│                                    │     Veterinario: [Nombre]               │
+│                                    │     Estado: [EstadoDescripcion]         │
+│                                    │                                         │
+│                                    │     Observaciones:                      │
+│                                    │     [Observaciones]"                    │
+│                                    │ 5. Mostrar MessageBox con detalle       │
+│                                    │    (solo lectura, botón OK)             │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Usuario visualiza información completa de cita.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 8: LIMPIAR FILTROS                                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Formulario abierto con filtros aplicados
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Clic en "Limpiar"               │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Restablecer filtros a defecto:       │
+│                                    │    cboFecha.SelectedIndex = 0 (Hoy)     │
+│                                    │    cboVeterinario.SelectedIndex = 0     │
+│                                    │    (Todos)                              │
+│                                    │    cboEstado.SelectedIndex = 0 (Todos)  │
+│                                    │ 3. Ejecutar CargarCitas()               │
+│                                    │ 4. Mostrar citas de HOY, sin filtro de  │
+│                                    │    veterinario ni estado                │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Filtros restablecidos a valores por defecto, grid muestra
+                 citas del día.
+
+================================================================================
+ARQUITECTURA Y PATRONES
+================================================================================
+
+CAPAS (N-Tier):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ UI          → gestionCitas.cs + FormNuevaCita + FormModificarCita +         │
+│               FormActualizarEstado + FormSeleccionarFecha                   │
+│ BLL         → CitaBLL.cs (validaciones, conflictos horario, transiciones)   │
+│ DAL         → CitaRepository.cs + CitaAdapter.cs                            │
+│ Database    → VetCareDB (tabla Cita, 12+ SPs)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PATRONES APLICADOS:
+1. SINGLETON: CitaBLL.Current, CitaRepository.Current (thread-safe con lock)
+2. REPOSITORY: ICitaRepository (contrato) + implementación
+3. ADAPTER: CitaAdapter.Adaptar(DataRow) → Cita con datos de Mascota/Cliente
+4. STATE MACHINE: EstadoCita enum con transiciones validadas
+5. EXCEPTION MANAGER: Bitacora.Current.RegistrarExcepcion()
+
+MÁQUINA DE ESTADOS (STATE MACHINE):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   [Agendada] ─────┬──────→ [Confirmada] ────→ [Completada]                 │
+│       │           │             │                    ↑                      │
+│       │           │             │                    │ (terminal)           │
+│       │           ↓             ↓                    ↓                      │
+│       │      [Cancelada] ←─────┴────────────────────┘                      │
+│       │           ↑                                                         │
+│       │           │ (solo reagendar)                                        │
+│       └──────→ [No Asistió]                                                 │
+│                   ↑                                                         │
+│                   │ (solo reagendar)                                        │
+│                   └─────────────────────────────────────────────────────────┤
+│                                                                             │
+│ REGLAS:                                                                     │
+│ - Completada NO cambia (estado terminal)                                   │
+│ - Confirmada NO retrocede a Agendada                                        │
+│ - Cancelada/NoAsistio solo pueden reagendarse a Agendada                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+VALIDACIONES (CitaBLL):
+┌────────────────┬──────────────────────────────────────────────────────────┐
+│ Validación     │ Regla                                                    │
+├────────────────┼──────────────────────────────────────────────────────────┤
+│ IdMascota      │ Obligatorio (Guid != Empty), debe existir y estar activa │
+│ FechaCita      │ Obligatoria, NO en pasado (con margen -5 minutos)       │
+│ TipoConsulta   │ Obligatorio, no vacío, máximo 100 caracteres            │
+│ Veterinario    │ Obligatorio (IdVeterinario o nombre), máximo 150 chars  │
+│ Observaciones  │ OPCIONAL, máximo 500 caracteres                          │
+│ Conflicto      │ NO permitir si veterinario tiene cita en ±30 minutos    │
+│ Horario        │ NO permitir si mascota tiene cita en ±30 minutos        │
+│ Veterinario    │                                                          │
+│ Conflicto      │                                                          │
+│ Horario Mascota│                                                          │
+└────────────────┴──────────────────────────────────────────────────────────┘
+
+VALIDACIÓN DE CONFLICTO DE HORARIO:
+```csharp
+// Veterinario - líneas 538-557 en CitaBLL
+var citasVeterinario = SelectByVeterinario(veterinario);
+var citasConflicto = citasVeterinario.Where(c =>
+    c.IdCita != idCitaExcluir &&
+    (c.Estado == Agendada || c.Estado == Confirmada) &&
+    Math.Abs((c.FechaCita - fechaNueva).TotalMinutes) < 30
+);
+SI citasConflicto.Any() → InvalidOperationException con detalle
+
+// Mascota - líneas 563-583 en CitaBLL
+var citasMascota = SelectAll().Where(c => c.IdMascota == idMascota);
+var citasConflicto = citasMascota.Where(c =>
+    c.IdCita != idCitaExcluir &&
+    (c.Estado == Agendada || c.Estado == Confirmada) &&
+    Math.Abs((c.FechaCita - fechaNueva).TotalMinutes) < 30
+);
+SI citasConflicto.Any() → InvalidOperationException con detalle
+```
+
+AUDITORÍA (Bitácora):
+┌──────────────────┬────────────┬──────────┬──────────────┬─────────────────┐
+│ Operación        │ Criticidad │ Módulo   │ Acción       │ Registro        │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Agendar Cita     │ Info       │ Citas    │ AgendarCita  │ Sí (línea 96)   │
+│ Cancelar Cita    │ Advertencia│ Citas    │ CancelarCita │ Sí (línea 260)  │
+│ Confirmar Cita   │ Info       │ Citas    │ Confirmacion │ Sí (línea 196)  │
+│ Modificar Cita   │ -          │ Citas    │ -            │ No (por ahora)  │
+│ Excepción        │ Error      │ Citas    │ Excepcion    │ Sí (catch)      │
+└──────────────────┴────────────┴──────────┴──────────────┴─────────────────┘
+
+================================================================================
+STORED PROCEDURES
+================================================================================
+
+Base de datos: VetCareDB | Tabla: Cita
+
+┌──────────────────────────┬────────────────────────────────────────────────┐
+│ SP Name                  │ Propósito                                      │
+├──────────────────────────┼────────────────────────────────────────────────┤
+│ Cita_Insert              │ Insertar nueva cita, retorna IdCita            │
+│ Cita_Update              │ Modificar cita existente (datos completos)     │
+│ Cita_UpdateEstado        │ Cambiar solo el estado de una cita             │
+│ Cita_Delete              │ Soft delete (Activo=0)                         │
+│ Cita_SelectOne           │ Obtener cita por ID con JOIN Mascota/Cliente   │
+│ Cita_SelectAll           │ Listar todas WHERE Activo=1 con JOINs          │
+│ Cita_SelectByMascota     │ Obtener citas de una mascota                   │
+│ Cita_SelectByCliente     │ Obtener citas de un cliente (via Mascota)      │
+│ Cita_SelectByFecha       │ Obtener citas de una fecha específica          │
+│ Cita_SelectByVeterinario │ Obtener citas de un veterinario                │
+│ Cita_SelectByEstado      │ Obtener citas por estado                       │
+│ Cita_SelectByFechaRango  │ Obtener citas en rango de fechas               │
+│ Cita_Search              │ Búsqueda con filtros opcionales combinables    │
+└──────────────────────────┴────────────────────────────────────────────────┘
+
+NOTA: Todos los SPs que retornan citas incluyen JOINs con Mascota y Cliente
+      para tener datos completos (MascotaNombre, ClienteNombreCompleto, etc.)
+
+================================================================================
+MODELO DE DOMINIO
+================================================================================
+
+ENTIDAD: Cita (DomainModel/Cita.cs - 226 líneas)
+
+Propiedades:
+┌────────────────┬──────────┬────────────────────────────────────────────────┐
+│ Propiedad      │ Tipo     │ Descripción                                    │
+├────────────────┼──────────┼────────────────────────────────────────────────┤
+│ IdCita         │ Guid     │ PK, generado con NEWID() o Guid.NewGuid()      │
+│ IdMascota      │ Guid     │ FK a Mascota, obligatoria                      │
+│ FechaCita      │ DateTime │ Fecha y hora de la cita                        │
+│ TipoConsulta   │ string   │ Consulta, Vacunación, Cirugía, etc.            │
+│ IdVeterinario  │ Guid?    │ FK a Veterinario (NUEVO, opcional)             │
+│ Veterinario    │ string   │ Nombre veterinario (LEGACY, compatibilidad)    │
+│ Estado         │ EstadoCita│ Enum: Agendada/Confirmada/Completada/etc.     │
+│ Observaciones  │ string   │ Notas adicionales (opcional)                   │
+│ FechaRegistro  │ DateTime │ Fecha de creación de cita                      │
+│ Activo         │ bool     │ Soft delete flag (true=activo)                 │
+│ Mascota        │ Mascota  │ Navegación a entidad Mascota (cargada por JOIN)│
+│ MascotaNombre  │ string   │ Nombre mascota (desde JOIN en SPs)             │
+│ ClienteNombre  │ string   │ Nombre cliente (desde JOIN)                    │
+│ ClienteApellido│ string   │ Apellido cliente (desde JOIN)                  │
+│ ClienteDNI     │ string   │ DNI cliente (desde JOIN)                       │
+│ ClienteTelefono│ string   │ Teléfono cliente (desde JOIN)                  │
+│ IdCliente      │ Guid     │ ID cliente (desde JOIN)                        │
+└────────────────┴──────────┴────────────────────────────────────────────────┘
+
+Propiedades Calculadas:
+- ClienteNombreCompleto → "{Apellido}, {Nombre}"
+- FechaCitaFormateada → "dd/MM/yyyy HH:mm"
+- HoraCita → "HH:mm"
+- FechaSoloFecha → "dd/MM/yyyy"
+- EstadoDescripcion → String del enum
+- ResumenCita → Texto completo con todos los datos de la cita
+
+Métodos:
+- PuedeSerModificada() → bool (true si Agendada o Confirmada)
+- PuedeSerCancelada() → bool (true si Agendada o Confirmada)
+- EsCitaPasada() → bool
+- EsCitaHoy() → bool
+- Validar() → List<string> con errores
+
+ENUM EstadoCita:
+- Agendada (estado inicial)
+- Confirmada (cliente confirmó asistencia)
+- Completada (cita finalizada con consulta médica)
+- Cancelada (cita cancelada)
+- NoAsistio (cliente no asistió a cita)
+
+RELACIONES:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Mascota (1) ──────► (N) Cita                                                │
+│   IdMascota (PK)       IdMascota (FK)                                       │
+│                                                                             │
+│ Veterinario (1) ──────► (N) Cita (NUEVO, opcional)                          │
+│   IdVeterinario (PK)       IdVeterinario (FK nullable)                      │
+│                                                                             │
+│ Cita (1) ──────► (1) ConsultaMedica (cuando estado = Completada)            │
+│   IdCita (PK)        IdCita (FK)                                            │
+│                                                                             │
+│ Flujo: Cliente → Mascota → Cita → ConsultaMedica → MedicamentoRecetado      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+INTERFAZ DE USUARIO
+================================================================================
+
+FORMULARIO: gestionCitas.cs (603 líneas)
+UBICACIÓN: UI/WinUi/Negocio/gestionCitas.cs
+
+CONTROLES PRINCIPALES:
+- cboFecha: ComboBox filtro fecha (Hoy, Esta Semana, Este Mes, Todas, Fecha
+  Específica)
+- cboVeterinario: ComboBox filtro veterinario (Todos + lista de activos)
+- cboEstado: ComboBox filtro estado (Todos + 5 estados)
+- btnBuscar: Aplicar filtros
+- btnLimpiarFiltros: Resetear a defecto
+- dgvCitas: Grid principal con citas (7 columnas)
+- lblTotalCitas: Contador de citas visibles
+- btnNuevaCita, btnModificar, btnCancelar, btnActualizarEstado: Acciones
+- FormSeleccionarFecha: Diálogo auxiliar para elegir fecha específica
+
+COLORES POR ESTADO (ColorearFilasPorEstado - líneas 311-338):
+- Agendada: LightYellow (amarillo claro)
+- Confirmada: LightGreen (verde claro)
+- Completada: LightBlue (azul claro)
+- Cancelada: LightCoral (coral claro)
+- No Asistió: LightGray (gris claro)
+
+FILTRO DE FECHA (FiltrarPorFecha - líneas 249-285):
+- "Hoy": FechaCita.Date == DateTime.Today
+- "Esta Semana": Hoy hasta Domingo (fin de semana)
+- "Este Mes": Mes y año actuales
+- "Todas": Sin filtro de fecha
+- "Fecha Específica": Abre FormSeleccionarFecha (DateTimePicker)
+
+ESTADO BOTONES (ActualizarEstadoBotones - líneas 357-364):
+- btnModificar: Habilitado solo si cita.PuedeSerModificada()
+- btnCancelar: Habilitado solo si cita.PuedeSerCancelada()
+- btnActualizarEstado: Siempre habilitado si hay cita seleccionada
+
+MULTI-IDIOMA:
+Formulario usa LanguageManager.Translate() para todos los textos.
+Método: AplicarTraducciones() - líneas 66-90
+
+================================================================================
+CASOS DE USO RELACIONADOS
+================================================================================
+
+REQUIERE (Dependencias):
+- CU-N001: Gestionar Clientes (debe existir cliente para agendar)
+- CU-N002: Gestionar Mascotas (debe existir mascota para agendar)
+- CU-N004: Gestionar Veterinarios (debe existir veterinario para agendar)
+
+UTILIZADO POR:
+- CU-N009: Registrar Consulta Médica (cita debe estar Completada)
+- CU-N014: Consultar Historial Clínico (visualiza citas de mascota)
+- CU-N015: Ver Mis Citas (veterinarios ven sus citas)
+
+FLUJO TÍPICO DE USUARIO:
+1. CU-N001: Crear Cliente
+2. CU-N002: Crear Mascota
+3. CU-N003: Agendar Cita (este CU)
+4. CU-N003: Confirmar Cita (actualizar estado)
+5. CU-N009: Registrar Consulta Médica (completar cita)
+
+================================================================================
+ARCHIVOS RELACIONADOS
+================================================================================
+
+CÓDIGO FUENTE:
+- UI/WinUi/Negocio/gestionCitas.cs (603 líneas)
+- UI/WinUi/Negocio/FormNuevaCita.cs (agendar cita)
+- UI/WinUi/Negocio/FormModificarCita.cs (modificar cita)
+- UI/WinUi/Negocio/FormActualizarEstado.cs (cambiar estado)
+- VetCareNegocio/BLL/CitaBLL.cs (588 líneas)
+- VetCareNegocio/DAL/Contracts/ICitaRepository.cs
+- VetCareNegocio/DAL/Implementations/CitaRepository.cs
+- VetCareNegocio/DAL/Implementations/Adapter/CitaAdapter.cs
+- VetCareNegocio/DomainModel/Cita.cs (226 líneas)
+
+STORED PROCEDURES:
+- Database/XX_CreateSP_Cita.sql (12+ SPs)
+- Database/XX_CreateTable_Cita.sql
+
+RECURSOS:
+- UI/Resources/I18n/idioma.es-AR
+- UI/Resources/I18n/idioma.en-GB
+
+DIAGRAMAS (a crear):
+- CU-N003_GestionarCitas.puml
+- CU-N003_AgendarCita_Secuencia.puml
+
+================================================================================
+ÚLTIMA ACTUALIZACIÓN: 2025-01-16 | VERSIÓN: 1.0 | ESTADO: ✅ COMPLETO
+================================================================================

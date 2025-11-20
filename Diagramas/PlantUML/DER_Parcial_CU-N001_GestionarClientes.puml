@@ -1,0 +1,109 @@
+@startuml DER_Parcial_CU-N001_GestionarClientes
+title DER Parcial - CU-N001: Gestionar Clientes
+
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) <i>x</i>
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES PRINCIPALES
+' ═══════════════════════════════════════════════════════════════
+
+entity "Cliente" as Cliente {
+  primary_key(IdCliente) : Guid <<PK>>
+  --
+  Nombre : string <<NOT NULL>>
+  Apellido : string <<NOT NULL>>
+  DNI : string <<UNIQUE, NOT NULL>>
+  Telefono : string
+  Email : string
+  Direccion : string
+  Activo : bool
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES RELACIONADAS (Contexto)
+' ═══════════════════════════════════════════════════════════════
+
+entity "Mascota" as Mascota {
+  primary_key(IdMascota) : Guid <<PK>>
+  --
+  foreign_key(IdCliente) : Guid <<FK>>
+  Nombre : string <<NOT NULL>>
+  Especie : string <<NOT NULL>>
+  Raza : string
+  FechaNacimiento : DateTime
+  Sexo : string
+  Peso : decimal
+  Color : string
+  Observaciones : string
+  FechaRegistro : DateTime
+  Activo : bool
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+Cliente ||--o{ Mascota : "tiene"
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of Cliente
+  **Operaciones del CU-N001:**
+
+  **CREATE (Registrar):**
+  - SP: Cliente_Insert
+  - Validar DNI único
+  - Validar formato email
+  - Generar IdCliente (Guid)
+
+  **READ (Buscar/Listar):**
+  - SP: Cliente_SelectAll
+  - SP: Cliente_SelectOne
+  - SP: Cliente_SelectByDNI
+  - Buscar por: DNI, Nombre, Apellido
+
+  **UPDATE (Modificar):**
+  - SP: Cliente_Update
+  - Validar DNI único (excepto mismo cliente)
+  - Mantener IdCliente inmutable
+
+  **DELETE (Dar de Baja):**
+  - SP: Cliente_Delete
+  - Soft delete (Activo = 0)
+  - Cascada: Inactiva todas las mascotas
+  - NO elimina físicamente
+
+  **Validaciones:**
+  ✓ DNI único en la tabla
+  ✓ Email formato válido
+  ✓ Nombre y Apellido obligatorios
+  ✓ DNI obligatorio
+end note
+
+note bottom of Mascota
+  **Relación con Mascota:**
+
+  Cuando se da de baja un Cliente:
+  - Todas sus Mascotas se inactivan (Activo = 0)
+  - Se ejecuta en el SP Cliente_Delete
+  - Cascada implementada en código/SP
+
+  Navegación:
+  - Desde detalle de Cliente
+  - Se puede acceder a:
+    • Listar mascotas del cliente
+    • Registrar nueva mascota
+    • Ver historial de citas
+end note
+
+note top of Cliente
+  **Índices:**
+  - PK: IdCliente
+  - UNIQUE: DNI
+  - INDEX: Apellido, Nombre (búsquedas)
+end note
+
+@enduml

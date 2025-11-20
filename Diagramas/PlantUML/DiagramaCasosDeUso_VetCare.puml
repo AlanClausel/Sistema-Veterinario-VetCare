@@ -1,0 +1,185 @@
+@startuml DiagramaCasosDeUso_VetCare
+title Diagrama de Casos de Uso - Sistema VetCare
+
+left to right direction
+
+' ═══════════════════════════════════════════════════════════════
+'  ACTORES
+' ═══════════════════════════════════════════════════════════════
+
+actor "Administrador" as Admin
+actor "Recepcionista" as Recep
+actor "Veterinario" as Vet
+
+' ═══════════════════════════════════════════════════════════════
+'  CASOS DE USO - SEGURIDAD Y ADMINISTRACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "Seguridad y Administración" {
+    usecase "CU-A001\nIniciar Sesión" as CUA001
+    usecase "CU-A002\nGestionar Usuarios" as CUA002
+    usecase "CU-A003\nGestionar Permisos\n(Familias/Patentes)" as CUA003
+    usecase "CU-A004\nConsultar Bitácora" as CUA004
+    usecase "CU-A005\nCambiar Idioma" as CUA005
+    usecase "CU-A006\nBackup y Restore" as CUA006
+    usecase "CU-A007\nVerificar Integridad\n(DVH)" as CUA007
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CASOS DE USO - GESTIÓN DE NEGOCIO
+' ═══════════════════════════════════════════════════════════════
+
+package "Gestión de Clientes y Mascotas" {
+    usecase "CU-N001\nGestionar Clientes" as CUN001
+    usecase "CU-N002\nGestionar Mascotas" as CUN002
+}
+
+package "Gestión de Citas" {
+    usecase "CU-N003\nGestionar Citas" as CUN003
+    usecase "CU-N005\nVer Mis Citas\n(Veterinario)" as CUN005
+}
+
+package "Consultas Médicas" {
+    usecase "CU-N006\nRegistrar Consulta\nMédica" as CUN006
+    usecase "CU-N007\nConsultar Historial\nClínico" as CUN007
+    usecase "CU-N008\nVer Historial\nDetallado" as CUN008
+    usecase "CU-N009\nVer Detalle de\nConsulta" as CUN009
+}
+
+package "Inventario y Reportes" {
+    usecase "CU-N010\nGestionar\nMedicamentos" as CUN010
+    usecase "CU-N011\nGenerar Reportes" as CUN011
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES - SEGURIDAD Y ADMINISTRACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+' Todos los actores inician sesión
+Admin --> CUA001
+Recep --> CUA001
+Vet --> CUA001
+
+' Todos pueden cambiar idioma
+Admin --> CUA005
+Recep --> CUA005
+Vet --> CUA005
+
+' Solo Administrador: gestión de usuarios, permisos, bitácora, backup, DVH
+Admin --> CUA002
+Admin --> CUA003
+Admin --> CUA004
+Admin --> CUA006
+Admin --> CUA007
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES - GESTIÓN DE CLIENTES Y MASCOTAS
+' ═══════════════════════════════════════════════════════════════
+
+' Administrador y Recepcionista gestionan clientes
+Admin --> CUN001
+Recep --> CUN001
+
+' Administrador y Recepcionista gestionan mascotas
+Admin --> CUN002
+Recep --> CUN002
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES - GESTIÓN DE CITAS
+' ═══════════════════════════════════════════════════════════════
+
+' Administrador y Recepcionista gestionan citas (CRUD completo)
+Admin --> CUN003
+Recep --> CUN003
+
+' SOLO Veterinario ve sus propias citas
+Vet --> CUN005
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES - CONSULTAS MÉDICAS
+' ═══════════════════════════════════════════════════════════════
+
+' SOLO Veterinario registra consultas médicas
+Vet --> CUN006
+
+' Todos pueden consultar historial clínico
+Admin --> CUN007
+Recep --> CUN007
+Vet --> CUN007
+
+' Todos pueden ver historial detallado
+Admin --> CUN008
+Recep --> CUN008
+Vet --> CUN008
+
+' Todos pueden ver detalle de consulta
+Admin --> CUN009
+Recep --> CUN009
+Vet --> CUN009
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES - INVENTARIO Y REPORTES
+' ═══════════════════════════════════════════════════════════════
+
+' Administrador y Veterinario gestionan medicamentos
+Admin --> CUN010
+Vet --> CUN010
+
+' Todos pueden generar reportes
+Admin --> CUN011
+Recep --> CUN011
+Vet --> CUN011
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES <<include>> y <<extend>>
+' ═══════════════════════════════════════════════════════════════
+
+' Ver Mis Citas puede iniciar Registrar Consulta Médica
+CUN005 ..> CUN006 : <<include>>
+
+' Consultar Historial Clínico abre Ver Historial Detallado
+CUN007 ..> CUN008 : <<include>>
+
+' Ver Historial Detallado abre Ver Detalle de Consulta
+CUN008 ..> CUN009 : <<include>>
+
+' Gestionar Clientes puede abrir Gestionar Mascotas
+CUN001 ..> CUN002 : <<extend>>
+
+' Gestionar Mascotas puede abrir Gestionar Citas
+CUN002 ..> CUN003 : <<extend>>
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of Vet
+    **Veterinario:**
+    - Solo ve SUS citas (filtro por IdVeterinario)
+    - Único rol que registra consultas médicas
+    - Gestiona medicamentos (inventario)
+end note
+
+note top of CUN006
+    **CRÍTICO:**
+    Operación transaccional
+    - Valida stock
+    - Actualiza cita a Completada
+    - Reduce stock de medicamentos
+    - ROLLBACK si falla
+end note
+
+note bottom of CUA006
+    **Backup y Restore:**
+    - Backup completo de BDs
+    - Restore con validaciones
+    - Solo Administrador
+end note
+
+note left of CUN007
+    **Drill-down:**
+    N007 → N008 → N009
+    Cliente → Mascota → Consulta
+end note
+
+@enduml

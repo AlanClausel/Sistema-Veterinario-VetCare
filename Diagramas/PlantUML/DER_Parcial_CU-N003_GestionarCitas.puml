@@ -1,0 +1,189 @@
+@startuml DER_Parcial_CU-N003_GestionarCitas
+title DER Parcial - CU-N003: Gestionar Citas
+
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) <i>x</i>
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES PRINCIPALES
+' ═══════════════════════════════════════════════════════════════
+
+entity "Cita" as Cita {
+  primary_key(IdCita) : Guid <<PK>>
+  --
+  foreign_key(IdMascota) : Guid <<FK>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  FechaHora : DateTime <<NOT NULL>>
+  TipoConsulta : string
+  Estado : string <<NOT NULL>>
+  Observaciones : string
+  Activo : bool
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES RELACIONADAS
+' ═══════════════════════════════════════════════════════════════
+
+entity "Mascota" as Mascota {
+  primary_key(IdMascota) : Guid <<PK>>
+  --
+  foreign_key(IdCliente) : Guid <<FK>>
+  Nombre : string <<NOT NULL>>
+  Especie : string <<NOT NULL>>
+  Activo : bool
+}
+
+entity "Cliente" as Cliente {
+  primary_key(IdCliente) : Guid <<PK>>
+  --
+  Nombre : string <<NOT NULL>>
+  Apellido : string <<NOT NULL>>
+  DNI : string <<UNIQUE>>
+  Telefono : string
+  Activo : bool
+}
+
+entity "Veterinario" as Veterinario {
+  primary_key(IdVeterinario) : Guid <<PK>>
+  --
+  Nombre : string <<NOT NULL>>
+  Matricula : string <<UNIQUE>>
+  Telefono : string
+  Activo : bool
+}
+
+entity "ConsultaMedica" as ConsultaMedica {
+  primary_key(IdConsultaMedica) : Guid <<PK>>
+  --
+  foreign_key(IdCita) : Guid <<FK, UNIQUE>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  Diagnostico : string
+  Tratamiento : string
+  FechaConsulta : DateTime
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+Cliente ||--o{ Mascota : "tiene"
+Mascota ||--o{ Cita : "agenda\n(0..N)"
+Veterinario ||--o{ Cita : "atiende\n(0..N)"
+Cita ||--o| ConsultaMedica : "genera\n(0..1)"
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of Cita
+  **Operaciones del CU-N003:**
+
+  **CREATE (Agendar):**
+  - SP: Cita_Insert
+  - Requiere IdMascota y IdVeterinario
+  - Estado inicial: "Agendada"
+  - Validar disponibilidad horaria
+
+  **READ (Buscar/Listar):**
+  - SP: Cita_SelectAll
+  - SP: Cita_SelectOne
+  - SP: Cita_SelectByMascota
+  - SP: Cita_SelectByVeterinario
+  - SP: Cita_SelectByRangoFechas
+  - SP: Cita_SelectPendientes
+
+  **UPDATE (Modificar):**
+  - SP: Cita_Update
+  - SP: Cita_UpdateEstado
+  - Cambiar fecha/hora, veterinario
+  - Cambiar estado (workflow)
+
+  **DELETE (Cancelar):**
+  - SP: Cita_UpdateEstado → "Cancelada"
+  - No se elimina físicamente
+  - Permite reprogramar
+
+  **Validaciones:**
+  ✓ FechaHora >= Hoy (no en pasado)
+  ✓ Horario laboral (8:00-20:00)
+  ✓ Veterinario sin conflictos (±30 min)
+  ✓ Mascota activa
+  ✓ Veterinario activo
+end note
+
+note top of Cita
+  **Estados de Cita (Enum):**
+
+  Workflow normal:
+  Agendada → Confirmada → Completada
+
+  Estados especiales:
+  - **Cancelada:** Desde cualquier estado
+  - **NoAsistio:** Solo desde Confirmada
+
+  Restricciones:
+  - Solo "Completada" permite crear ConsultaMedica
+  - "Cancelada" y "NoAsistio" no permiten consulta
+  - Transiciones válidas controladas en BLL
+end note
+
+note bottom of ConsultaMedica
+  **Relación 1:1 con ConsultaMedica:**
+
+  - Una Cita puede tener 0 o 1 ConsultaMedica
+  - Solo Citas "Completadas" tienen consulta
+  - IdCita en ConsultaMedica es UNIQUE (FK)
+
+  Proceso:
+  1. Cita en estado "Agendada" o "Confirmada"
+  2. Veterinario atiende paciente
+  3. Registra ConsultaMedica (CU-N006)
+  4. Cita cambia a "Completada" automáticamente
+end note
+
+note left of Veterinario
+  **Validación de Disponibilidad:**
+
+  Al agendar/modificar cita:
+  1. Buscar citas del veterinario
+  2. En rango: FechaHora ± 30 minutos
+  3. Estados: Agendada, Confirmada
+  4. Si hay conflicto:
+     - Mostrar citas existentes
+     - Sugerir horarios alternativos
+     - Permitir forzar (con advertencia)
+end note
+
+note bottom of Mascota
+  **Búsqueda de Citas:**
+
+  Criterios combinables:
+  - Por Cliente (DNI o nombre)
+  - Por Mascota (nombre)
+  - Por Veterinario
+  - Por rango de fechas
+  - Por estado
+  - Por tipo de consulta
+
+  Vista Calendario:
+  - Día / Semana / Mes
+  - Colores por estado
+  - Filtros dinámicos
+end note
+
+note top of Cliente
+  **Información Necesaria:**
+
+  Para agendar cita, se muestra:
+  - Cliente: Nombre, Teléfono
+  - Mascota: Nombre, Especie, Raza
+  - Última cita (si existe)
+  - Última consulta (si existe)
+
+  Esto permite:
+  - Contactar al cliente
+  - Confirmar cita por teléfono
+  - Ver historial resumido
+end note
+
+@enduml

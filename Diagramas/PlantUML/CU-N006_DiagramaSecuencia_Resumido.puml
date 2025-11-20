@@ -1,0 +1,155 @@
+@startuml CU-N006_DiagramaSecuencia_Resumido
+title CU-N006: Registrar Consulta Médica - Diagrama de Secuencia (Resumido)
+
+actor "Veterinario" as Vet
+participant "FormConsultaMedica" as Form
+participant "ConsultaMedicaBLL" as BLL
+participant "MedicamentoBLL" as MedBLL
+participant "Repository" as Repo
+database "VetCareDB\n(Transaccional)" as DB
+
+== 1. Iniciar Consulta ==
+
+Vet -> Form: Abre formulario desde MisCitas
+activate Form
+
+Form -> BLL: ObtenerConsultaPorCita(idCita)
+activate BLL
+BLL -> DB: EXEC ConsultaMedica_SelectByCita
+DB --> BLL: consulta o NULL
+deactivate BLL
+
+alt Consulta NO existe (Modo Creación)
+    Form -> BLL: IniciarConsulta(idCita, idVeterinario)
+    activate BLL
+    BLL -> Repo: Crear(consultaNueva)
+    Repo -> DB: INSERT ConsultaMedica
+    BLL --> Form: consultaCreada
+    deactivate BLL
+else Consulta existe (Modo Edición)
+    Form -> BLL: ObtenerMedicamentosDeConsulta(idConsulta)
+    activate BLL
+    BLL -> DB: SELECT medicamentos recetados
+    BLL --> Form: List<MedicamentoRecetado>
+    deactivate BLL
+end
+
+Form -> MedBLL: ListarMedicamentosDisponibles()
+activate MedBLL
+MedBLL -> DB: SELECT * FROM Medicamento WHERE Stock > 0
+MedBLL --> Form: List<Medicamento>
+deactivate MedBLL
+
+Form --> Vet: Formulario cargado\n(campos + medicamentos disponibles)
+deactivate Form
+
+== 2. Agregar Medicamentos ==
+
+Vet -> Form: Selecciona medicamento y clic "Añadir"
+activate Form
+
+Form -> Form: Abre FormCantidadMedicamento (modal)
+note right
+    Captura:
+    - Cantidad
+    - Indicaciones
+end note
+
+Form -> Form: Agrega a _medicamentosSeleccionados
+
+Form --> Vet: Medicamento agregado a receta
+deactivate Form
+
+== 3. Finalizar Consulta (TRANSACCIONAL) ==
+
+Vet -> Form: Completa campos y clic "Finalizar Consulta"
+activate Form
+
+Form -> Form: Valida Síntomas y Diagnóstico NO vacíos
+
+Form -> BLL: GuardarConsulta(consulta)
+activate BLL
+BLL -> Repo: Actualizar(consulta)
+Repo -> DB: UPDATE ConsultaMedica
+BLL --> Form: void
+deactivate BLL
+
+Form -> BLL: EliminarMedicamento() para cada medicamento anterior
+activate BLL
+BLL -> DB: DELETE FROM ConsultaMedicamento
+deactivate BLL
+
+loop Para cada medicamento seleccionado
+    Form -> BLL: AgregarMedicamento(idConsulta, idMed, cant, ind)
+    activate BLL
+    BLL -> BLL: Valida stock >= cantidad
+    BLL -> Repo: AgregarMedicamento(...)
+    Repo -> DB: INSERT ConsultaMedicamento
+    BLL --> Form: void
+    deactivate BLL
+end
+
+Form -> BLL: FinalizarConsulta(idConsulta)
+activate BLL
+
+BLL -> Repo: FinalizarConsulta(idConsulta, idCita)
+activate Repo
+
+Repo -> DB: EXEC ConsultaMedica_Finalizar(@IdConsulta, @IdCita)
+activate DB
+
+note over DB #LightYellow
+    **STORED PROCEDURE TRANSACCIONAL**
+    ═══════════════════════════════════
+    BEGIN TRANSACTION
+
+    1. Validar stock TODOS los medicamentos
+       IF stock insuficiente:
+         ROLLBACK + ERROR
+
+    2. UPDATE Cita
+       SET Estado = 'Completada'
+
+    3. UPDATE Medicamento
+       SET Stock = Stock - Cantidad
+
+    COMMIT TRANSACTION
+end note
+
+alt Stock insuficiente
+    DB --> Repo: ERROR: Stock insuficiente
+    deactivate DB
+    Repo --> BLL: throw Exception
+    deactivate Repo
+    BLL --> Form: throw Exception
+    deactivate BLL
+
+    Form -> Form: Muestra error al usuario
+    Form --> Vet: ✗ Error: Stock insuficiente\n(ROLLBACK - sin cambios)
+
+else Stock OK
+    DB --> Repo: Éxito (Resultado = 1)
+    deactivate DB
+    Repo --> BLL: true
+    deactivate Repo
+    BLL --> Form: void
+    deactivate BLL
+
+    Form -> Form: Muestra mensaje: "Consulta finalizada exitosamente"
+    Form -> Form: this.Close()
+
+    Form --> Vet: ✓ Consulta finalizada\n✓ Cita → Completada\n✓ Stock reducido
+
+    note right
+        **TRANSACCIÓN EXITOSA**
+        ACID garantizado:
+        - Atomicidad ✓
+        - Consistencia ✓
+        - Aislamiento ✓
+        - Durabilidad ✓
+    end note
+end
+
+deactivate Form
+
+@enduml

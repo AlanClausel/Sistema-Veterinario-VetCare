@@ -1,0 +1,172 @@
+@startuml CU-N002_GestionarMascotas_Detallado
+title CU-N002: Gestionar Mascotas - Casos de Uso Detallados
+
+left to right direction
+
+' ═══════════════════════════════════════════════════════════════
+'  ACTORES
+' ═══════════════════════════════════════════════════════════════
+
+actor "Administrador" as Admin
+actor "Recepcionista" as Recep
+
+' ═══════════════════════════════════════════════════════════════
+'  CASOS DE USO
+' ═══════════════════════════════════════════════════════════════
+
+package "CU-N002: Gestión de Mascotas" {
+
+    ' Casos de uso específicos (CRUD)
+    usecase "CU-N002.1\nRegistrar Mascota" as UC2_1
+    usecase "CU-N002.2\nModificar Mascota" as UC2_2
+    usecase "CU-N002.3\nDar de Baja Mascota" as UC2_3
+    usecase "CU-N002.4\nBuscar Mascota" as UC2_4
+    usecase "CU-N002.5\nListar Mascotas\nde Cliente" as UC2_5
+    usecase "CU-N002.6\nVer Ficha\nde Mascota" as UC2_6
+
+    ' Casos de uso relacionados
+    usecase "Seleccionar Cliente" as UCSelCliente
+    usecase "Validar Datos\nMascota" as UCValidar
+    usecase "Registrar en Bitácora" as UCBitacora
+
+    ' Navegación
+    usecase "CU-N003\nGestionar Citas\nde la Mascota" as UCCitas
+    usecase "CU-N007\nVer Historial\nClínico" as UCHistorial
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES CON ACTORES
+' ═══════════════════════════════════════════════════════════════
+
+Admin --> UC2_1
+Admin --> UC2_2
+Admin --> UC2_3
+Admin --> UC2_4
+Admin --> UC2_5
+Admin --> UC2_6
+
+Recep --> UC2_1
+Recep --> UC2_2
+Recep --> UC2_3
+Recep --> UC2_4
+Recep --> UC2_5
+Recep --> UC2_6
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES <<include>>
+' ═══════════════════════════════════════════════════════════════
+
+UC2_1 ..> UCSelCliente : <<include>>
+UC2_1 ..> UCValidar : <<include>>
+UC2_1 ..> UCBitacora : <<include>>
+
+UC2_2 ..> UCValidar : <<include>>
+UC2_2 ..> UCBitacora : <<include>>
+
+UC2_3 ..> UCBitacora : <<include>>
+
+UC2_5 ..> UCSelCliente : <<include>>
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES <<extend>>
+' ═══════════════════════════════════════════════════════════════
+
+UC2_6 ..> UCCitas : <<extend>>
+UC2_6 ..> UCHistorial : <<extend>>
+UC2_4 ..> UC2_6 : <<extend>>
+UC2_5 ..> UC2_6 : <<extend>>
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of UC2_1
+    **Entidad: Mascota**
+
+    **Relación DER:**
+    Cliente (1) ──→ (N) Mascota
+
+    **Atributos:**
+    - IdMascota (Guid, PK)
+    - IdCliente (Guid, FK → Cliente)
+    - Nombre (string, requerido)
+    - Especie (string, requerido)
+    - Raza (string)
+    - FechaNacimiento (DateTime)
+    - Sexo (string: M/F)
+    - Peso (decimal, kg)
+    - Color (string)
+    - Observaciones (string)
+    - FechaRegistro (DateTime, auto)
+    - Activo (bool)
+
+    **Stored Procedures:**
+    - Mascota_Insert
+    - Mascota_Update
+    - Mascota_Delete
+    - Mascota_SelectOne
+    - Mascota_SelectByCliente
+    - Mascota_SelectAll
+end note
+
+note bottom of UCSelCliente
+    **Seleccionar Cliente:**
+
+    Puede hacerse de 2 formas:
+    1. Navegando desde Gestión de Clientes
+       (IdCliente ya seleccionado)
+
+    2. Búsqueda manual:
+       - Por DNI del dueño
+       - Por nombre del dueño
+       - Lista desplegable
+end note
+
+note left of UCValidar
+    **Validaciones:**
+    ✓ Nombre obligatorio
+    ✓ Especie obligatoria
+    ✓ Peso > 0 (si se ingresa)
+    ✓ FechaNacimiento <= Hoy
+    ✓ Sexo: 'M' o 'F'
+    ✓ IdCliente debe existir y estar activo
+end note
+
+note bottom of UC2_3
+    **Baja de Mascota:**
+    - Soft delete (Activo = 0)
+    - No elimina datos físicamente
+    - Mantiene historial clínico
+    - Cancela citas futuras
+    - Registra en bitácora
+end note
+
+note top of UC2_6
+    **Ficha de Mascota:**
+
+    Muestra:
+    - Datos de la mascota
+    - Datos del dueño (Cliente)
+    - Última cita
+    - Próxima cita
+    - Resumen historial clínico
+
+    Acciones disponibles:
+    - Editar datos
+    - Agendar cita
+    - Ver historial completo
+    - Dar de baja
+end note
+
+note bottom of UC2_4
+    **Búsqueda por:**
+    - Nombre de mascota (parcial)
+    - DNI del dueño (exacto)
+    - Nombre del dueño (parcial)
+    - Especie
+    - Combinación de filtros
+
+    **SP:** Mascota_SelectAll + filtros
+end note
+
+@enduml

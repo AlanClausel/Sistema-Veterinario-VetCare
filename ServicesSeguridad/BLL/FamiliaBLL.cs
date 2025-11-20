@@ -9,6 +9,11 @@ using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.BLL
 {
+    /// <summary>
+    /// Capa de lógica de negocio para gestión de Familias (roles) y sus relaciones con Patentes.
+    /// Implementa operaciones CRUD y gestión de permisos mediante el patrón Composite.
+    /// Utiliza Unit of Work para operaciones transaccionales que requieren atomicidad.
+    /// </summary>
     public static class FamiliaBLL
     {
         /// <summary>

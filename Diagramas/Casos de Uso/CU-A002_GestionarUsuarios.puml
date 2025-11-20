@@ -1,0 +1,202 @@
+@startuml CU-A002_GestionarUsuarios
+
+' ============================================================================
+' CASO DE USO: CU-A002 - GESTIONAR USUARIOS
+' Sistema: VetCare - Veterinaria
+' Módulo: Seguridad y Administración
+' Tipo: Arquitectura/Administración
+' ============================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+
+' ============================================================================
+' ACTORES
+' ============================================================================
+
+actor "Administrador" as Admin #LightBlue
+actor "Sistema de\nSeguridad" as SistemaSeg #LightGray
+
+' ============================================================================
+' CASOS DE USO PRINCIPALES
+' ============================================================================
+
+rectangle "CU-A002: Gestionar Usuarios" {
+
+  usecase "Gestionar Usuarios" as UC_GestionarUsuarios #Technology
+
+  ' --- Operaciones CRUD ---
+  usecase "Crear Usuario" as UC_CrearUsuario
+  usecase "Modificar Usuario" as UC_ModificarUsuario
+  usecase "Eliminar Usuario" as UC_EliminarUsuario
+  usecase "Buscar Usuario" as UC_BuscarUsuario
+  usecase "Listar Usuarios" as UC_ListarUsuarios
+
+  ' --- Operaciones de Soporte ---
+  usecase "Validar Datos\nde Usuario" as UC_ValidarDatos
+  usecase "Hashear Contraseña\n(SHA256)" as UC_HashearPassword
+  usecase "Calcular DVH" as UC_CalcularDVH
+  usecase "Cambiar Rol\n(Unit of Work)" as UC_CambiarRol
+  usecase "Verificar Unicidad\nNombre Usuario" as UC_VerificarUnicidad
+  usecase "Prevenir\nAuto-eliminación" as UC_PrevenirAutoEliminacion
+
+  ' --- Auditoría ---
+  usecase "Registrar en\nBitácora" as UC_RegistrarBitacora
+
+}
+
+' ============================================================================
+' RELACIONES PRINCIPALES
+' ============================================================================
+
+Admin --> UC_GestionarUsuarios : "Administra usuarios"
+
+' Operaciones CRUD incluidas
+UC_GestionarUsuarios .down.> UC_CrearUsuario : <<include>>
+UC_GestionarUsuarios .down.> UC_ModificarUsuario : <<include>>
+UC_GestionarUsuarios .down.> UC_EliminarUsuario : <<include>>
+UC_GestionarUsuarios .down.> UC_BuscarUsuario : <<include>>
+UC_GestionarUsuarios .down.> UC_ListarUsuarios : <<include>>
+
+' Validaciones (extends - opcionales/condicionales)
+UC_ValidarDatos .up.> UC_CrearUsuario : <<extend>>\n[campos inválidos]
+UC_ValidarDatos .up.> UC_ModificarUsuario : <<extend>>\n[campos inválidos]
+UC_VerificarUnicidad .up.> UC_CrearUsuario : <<extend>>\n[nombre duplicado]
+UC_PrevenirAutoEliminacion .up.> UC_EliminarUsuario : <<extend>>\n[intenta eliminarse]
+
+' Operaciones de seguridad incluidas
+UC_CrearUsuario .down.> UC_HashearPassword : <<include>>
+UC_CrearUsuario .down.> UC_CalcularDVH : <<include>>
+UC_ModificarUsuario .down.> UC_CalcularDVH : <<include>>
+
+' Cambio de rol con Unit of Work
+UC_ModificarUsuario .down.> UC_CambiarRol : <<include>>\n[si cambia rol]
+
+' Sistema de Seguridad participa
+UC_HashearPassword --> SistemaSeg
+UC_CalcularDVH --> SistemaSeg
+UC_RegistrarBitacora --> SistemaSeg
+
+' Auditoría en todas las operaciones críticas
+UC_CrearUsuario .down.> UC_RegistrarBitacora : <<include>>
+UC_ModificarUsuario .down.> UC_RegistrarBitacora : <<include>>
+UC_EliminarUsuario .down.> UC_RegistrarBitacora : <<include>>
+
+' ============================================================================
+' NOTAS TÉCNICAS
+' ============================================================================
+
+note right of UC_GestionarUsuarios
+  **CU-A002: Gestionar Usuarios**
+  ================================
+  **Propósito:** CRUD completo de usuarios
+  del sistema con seguridad y auditoría.
+
+  **5 Operaciones Principales:**
+  1. Crear Usuario
+  2. Modificar Usuario
+  3. Eliminar Usuario (soft delete)
+  4. Buscar Usuario
+  5. Listar Usuarios
+
+  **Módulo:** Administración / Seguridad
+  **Base de Datos:** SecurityVet
+  **Patrón:** Composite (permisos jerárquicos)
+end note
+
+note left of UC_HashearPassword
+  **Seguridad de Contraseñas**
+  ============================
+  - Algoritmo: SHA256
+  - Encoding: Unicode (UTF-16)
+  - Servicio: CryptographyService
+  - Sin almacenamiento de texto plano
+end note
+
+note left of UC_CalcularDVH
+  **DVH - Dígito Verificador**
+  ============================
+  Garantiza integridad de datos:
+  - Auto-cálculo en INSERT/UPDATE
+  - Validación en SELECT
+  - Detecta modificaciones no autorizadas
+end note
+
+note right of UC_CambiarRol
+  **Patrón Unit of Work**
+  =======================
+  Cambio de rol usa transacción atómica:
+  1. BEGIN TRANSACTION
+  2. DELETE usuario de rol anterior
+  3. INSERT usuario en nuevo rol
+  4. COMMIT o ROLLBACK
+
+  Garantiza consistencia de permisos.
+end note
+
+note bottom of UC_RegistrarBitacora
+  **Auditoría Completa**
+  ======================
+  Se registra en Bitacora:
+  - Usuario que ejecuta la acción
+  - Fecha/hora exacta
+  - Operación (Alta/Baja/Modificación)
+  - Entidad afectada (Usuario)
+  - Detalles del cambio
+end note
+
+note right of UC_EliminarUsuario
+  **Soft Delete**
+  ===============
+  No se elimina físicamente.
+  Se marca como inactivo:
+  UPDATE Usuario
+  SET Activo = 0
+  WHERE IdUsuario = @Id
+
+  Previene pérdida de datos
+  y mantiene integridad referencial.
+end note
+
+' ============================================================================
+' METADATOS
+' ============================================================================
+
+note top of Admin
+  **Precondición:**
+  Usuario debe tener
+  ROL_Administrador
+  con patente
+  "FormGestionUsuarios"
+end note
+
+legend bottom
+  **CONVENCIONES:**
+  <<include>> = Siempre ejecutado
+  <<extend>> = Condicional/Opcional
+
+  **ARCHIVOS RELACIONADOS:**
+  - Especificación: CU-A002_GESTIONAR_USUARIOS.txt
+  - Código UI: UI/WinUi/Administración/gestionUsuarios.cs
+  - Código BLL: ServicesSeguridad/BLL/UsuarioBLL.cs
+  - Código DAL: ServicesSeguridad/DAL/Implementations/UsuarioRepository.cs
+
+  **STORED PROCEDURES:**
+  - Usuario_Insert
+  - Usuario_Update
+  - Usuario_Delete (soft delete)
+  - Usuario_SelectAll
+  - Usuario_SelectOneByName
+  - Usuario_VerificarExistenciaNombre
+
+  **PATRONES APLICADOS:**
+  - Singleton (UsuarioBLL, UsuarioRepository)
+  - Unit of Work (cambio de rol transaccional)
+  - Composite (jerarquía de permisos)
+  - Repository (abstracción de acceso a datos)
+
+  **ÚLTIMA ACTUALIZACIÓN:** 2025-01-16
+  **VERSIÓN:** 1.0
+endlegend
+
+@enduml

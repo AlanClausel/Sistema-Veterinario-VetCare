@@ -1,0 +1,996 @@
+===============================================================================
+    CASO DE USO: CU-N005 - VER MIS CITAS
+===============================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+ID:             CU-N005
+Nombre:         Ver Mis Citas
+Actor(es):      Veterinario (con ROL_Veterinario)
+Descripción:    Vista personalizada de citas para veterinarios. Muestra SOLO las
+                citas asignadas al veterinario logueado (filtradas por IdVeterinario).
+                Permite listar citas por fecha (defecto: hoy), iniciar consulta médica,
+                marcar como completada, cancelar, y copiar DNI del cliente al
+                portapapeles. Código de colores según estado: Agendada (amarillo),
+                Confirmada (verde), Completada (gris), Cancelada (rojo coral), No
+                Asistió (salmón). Botones habilitados dinámicamente según estado de
+                cita. Iniciar Consulta verifica si ya existe consulta médica para esa
+                cita (si existe abre la existente, si no crea nueva). NO requiere
+                patente específica, solo ser veterinario.
+
+Precondiciones:
+  - Usuario autenticado con ROL_Veterinario
+  - Registro en tabla Veterinario con IdVeterinario = IdUsuario
+
+Postcondiciones:
+  - Cita actualizada según operación (Completada, Cancelada)
+  - Consulta médica iniciada (abre FormConsultaMedica)
+  - DNI copiado al portapapeles (si aplica)
+
+Frecuencia de Uso: Muy Alta (uso diario por veterinarios)
+Criticidad:        Alta (workflow principal del veterinario)
+
+
+===============================================================================
+    FLUJO PRINCIPAL
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│             OPERACIÓN 1: LISTAR MIS CITAS DEL DÍA (Carga Inicial)           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Accede a "Mis Citas" desde menú      │
+Negocio                                 │
+                                        │ 2. Ejecuta MisCitas_Load()
+                                        │ 3. Obtiene usuario logueado:
+                                        │    LoginService.GetUsuarioLogueado()
+                                        │ 4. Valida usuario != null
+                                        │ 5. Asigna _idVeterinarioActual =
+                                        │    usuarioLogueado.IdUsuario
+                                        │ 6. Llama VeterinarioBLL.Current
+                                        │    .EsVeterinario(_idVeterinarioActual)
+                                        │ 7. BLL consulta tabla Veterinario:
+                                        │    SELECT * FROM Veterinario
+                                        │    WHERE IdVeterinario = @IdUsuario
+                                        │      AND Activo = 1
+                                        │ 8. IF NO es veterinario:
+                                        │      Muestra error: "El usuario no es
+                                        │      veterinario"
+                                        │      Cierra formulario
+                                        │ 9. ELSE (es veterinario):
+                                        │      Configura dtpFecha = DateTime.Today
+                                        │ 10. Ejecuta ConfigurarDataGridView():
+                                        │     Columnas: Hora, Mascota, Cliente,
+                                        │     DNI, Tipo, Estado, Motivo
+                                        │ 11. Ejecuta CargarCitas()
+                                        │ 12. Obtiene fechaSeleccionada = dtpFecha.Value
+                                        │     (fecha actual: hoy)
+                                        │ 13. Llama CitaBLL.Current
+                                        │     .ObtenerCitasPorFecha(fechaSeleccionada)
+                                        │ 14. BLL ejecuta SP:
+                                        │     EXEC Cita_SelectByFecha @Fecha
+                                        │ 15. SP retorna TODAS las citas de esa fecha
+                                        │     (sin filtro por veterinario)
+                                        │ 16. Filtra en memoria:
+                                        │     var citasVeterinario = todasLasCitas
+                                        │       .Where(c => c.IdVeterinario.HasValue
+                                        │         && c.IdVeterinario.Value ==
+                                        │            _idVeterinarioActual)
+                                        │       .OrderBy(c => c.FechaCita)
+                                        │     NOTA: Muestra SOLO citas del
+                                        │     veterinario logueado
+                                        │ 17. dgvCitas.DataSource = citasVeterinario
+                                        │ 18. Ejecuta ColorearFilasSegunEstado():
+                                        │     - Agendada: LightYellow
+                                        │     - Confirmada: LightGreen
+                                        │     - Completada: LightGray
+                                        │     - Cancelada: LightCoral
+                                        │     - NoAsistio: LightSalmon
+                                        │ 19. Ejecuta ActualizarEstadoBotones():
+                                        │     - Ninguna cita seleccionada:
+                                        │       TODOS los botones deshabilitados
+────────────────────────────────────────┼────────────────────────────────────────
+20. Visualiza citas del día ordenadas   │
+por hora con código de colores          │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   OPERACIÓN 2: FILTRAR CITAS POR FECHA                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Cambia fecha en DateTimePicker       │
+(ej: selecciona mañana)                 │
+                                        │ 2. Ejecuta dtpFecha_ValueChanged()
+                                        │ 3. Llama CargarCitas()
+                                        │ 4. Obtiene fechaSeleccionada = dtpFecha.Value
+                                        │    (fecha nueva seleccionada)
+                                        │ 5. Llama CitaBLL.Current
+                                        │    .ObtenerCitasPorFecha(fechaSeleccionada)
+                                        │ 6. Filtra en memoria por IdVeterinario:
+                                        │    citasVeterinario = todasLasCitas
+                                        │      .Where(c => c.IdVeterinario ==
+                                        │         _idVeterinarioActual)
+                                        │      .OrderBy(c => c.FechaCita)
+                                        │ 7. Actualiza grid con citas de nueva fecha
+                                        │ 8. Colorea filas según estado
+                                        │ 9. Actualiza estado de botones (ninguna
+                                        │    seleccionada → todos deshabilitados)
+────────────────────────────────────────┼────────────────────────────────────────
+10. Clic en botón "Actualizar" (manual) │
+                                        │ 11. Ejecuta btnActualizar_Click()
+                                        │ 12. Llama CargarCitas() con fecha actual
+                                        │ 13. Recarga citas (útil si hubo cambios
+                                        │     externos)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    OPERACIÓN 3: INICIAR CONSULTA MÉDICA                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona cita en grid               │
+(ej: "10:00 - Rex - Vacunación")        │
+                                        │ 2. Ejecuta dgvCitas_SelectionChanged()
+                                        │ 3. Asigna citaSeleccionada
+                                        │ 4. Ejecuta ActualizarEstadoBotones():
+                                        │
+                                        │    btnIniciarConsulta.Enabled =
+                                        │      (estado == Agendada ||
+                                        │       estado == Confirmada)
+                                        │
+                                        │    btnCompletada.Enabled =
+                                        │      (estado == Agendada ||
+                                        │       estado == Confirmada)
+                                        │
+                                        │    btnCancelar.Enabled =
+                                        │      citaSeleccionada.PuedeSerCancelada()
+                                        │
+                                        │ 5. Habilita botones según estado
+────────────────────────────────────────┼────────────────────────────────────────
+6. Clic en "Iniciar Consulta"           │
+                                        │ 7. Ejecuta btnIniciarConsulta_Click()
+                                        │ 8. Valida cita seleccionada != null
+                                        │ 9. Llama ConsultaMedicaBLL.Current
+                                        │    .ObtenerConsultaPorCita(idCita)
+                                        │ 10. BLL ejecuta SP:
+                                        │     EXEC ConsultaMedica_SelectByCita
+                                        │       @IdCita
+                                        │ 11. SP retorna consulta si existe, NULL
+                                        │     si no existe
+                                        │
+                                        │ 12. IF consultaExistente != null:
+                                        │       // Ya tiene consulta (caso: edición)
+                                        │       formConsulta = new FormConsultaMedica(
+                                        │         idCita, _idVeterinarioActual)
+                                        │       formConsulta.ShowDialog()
+                                        │       NOTA: FormConsultaMedica carga
+                                        │       consulta existente
+                                        │
+                                        │     ELSE:
+                                        │       // No tiene consulta (caso: nueva)
+                                        │       formConsulta = new FormConsultaMedica(
+                                        │         idCita, _idVeterinarioActual)
+                                        │       formConsulta.ShowDialog()
+                                        │       NOTA: FormConsultaMedica crea
+                                        │       nueva consulta
+                                        │
+                                        │ 13. Al cerrar FormConsultaMedica:
+                                        │     CargarCitas() → Recarga grid
+                                        │     (actualiza estado si pasó a Completada)
+────────────────────────────────────────┼────────────────────────────────────────
+14. Formulario de consulta médica abierto│
+(ver CU-N006: Registrar Consulta Médica)│
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 OPERACIÓN 4: MARCAR CITA COMO COMPLETADA                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona cita en estado Agendada o │
+Confirmada                              │
+                                        │ 2. Habilita btnCompletada
+────────────────────────────────────────┼────────────────────────────────────────
+3. Clic en "Completada"                 │
+                                        │ 4. Ejecuta btnCompletada_Click()
+                                        │ 5. Valida cita seleccionada != null
+                                        │ 6. Muestra MessageBox confirmación:
+                                        │    "¿Está seguro de marcar como
+                                        │    completada la cita de {MascotaNombre}?"
+                                        │    [Sí] [No]
+────────────────────────────────────────┼────────────────────────────────────────
+7. Confirma (Sí)                        │
+                                        │ 8. Llama CitaBLL.Current
+                                        │    .CompletarCita(idCita)
+                                        │ 9. BLL valida transición de estado:
+                                        │    (Agendada/Confirmada → Completada)
+                                        │ 10. BLL llama CitaRepository.Current
+                                        │     .ActualizarEstado(idCita, Completada)
+                                        │ 11. Repository ejecuta SP:
+                                        │     EXEC Cita_UpdateEstado
+                                        │       @IdCita,
+                                        │       @Estado = 'Completada'
+                                        │ 12. SP actualiza:
+                                        │     UPDATE Cita
+                                        │     SET Estado = 'Completada'
+                                        │     WHERE IdCita = @IdCita
+                                        │ 13. BLL registra en Bitácora:
+                                        │     - Módulo: "Citas"
+                                        │     - Acción: "CompletarCita"
+                                        │     - Criticidad: Info
+                                        │ 14. Muestra mensaje: "Cita marcada como
+                                        │     completada"
+                                        │ 15. Llama CargarCitas()
+                                        │ 16. Actualiza grid → Fila ahora gris
+                                        │     (estado Completada)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        OPERACIÓN 5: CANCELAR CITA                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona cita en estado Agendada o │
+Confirmada                              │
+                                        │ 2. Valida citaSeleccionada.PuedeSerCancelada()
+                                        │    (solo Agendada/Confirmada)
+                                        │ 3. Habilita btnCancelar
+────────────────────────────────────────┼────────────────────────────────────────
+4. Clic en "Cancelar"                   │
+                                        │ 5. Ejecuta btnCancelar_Click()
+                                        │ 6. Valida cita seleccionada != null
+                                        │ 7. Muestra MessageBox confirmación:
+                                        │    "¿Está seguro de cancelar la cita de
+                                        │    {MascotaNombre}?"
+                                        │    [Sí] [No]
+────────────────────────────────────────┼────────────────────────────────────────
+8. Confirma (Sí)                        │
+                                        │ 9. Llama CitaBLL.Current
+                                        │    .CancelarCita(idCita)
+                                        │ 10. BLL valida cita.PuedeSerCancelada()
+                                        │ 11. BLL llama CitaRepository.Current
+                                        │     .ActualizarEstado(idCita, Cancelada)
+                                        │ 12. Repository ejecuta SP:
+                                        │     EXEC Cita_UpdateEstado
+                                        │       @IdCita,
+                                        │       @Estado = 'Cancelada'
+                                        │ 13. SP actualiza estado a Cancelada
+                                        │ 14. BLL registra en Bitácora:
+                                        │     - Módulo: "Citas"
+                                        │     - Acción: "CancelarCita"
+                                        │     - Criticidad: Advertencia
+                                        │ 15. Muestra mensaje: "Cita cancelada"
+                                        │ 16. Llama CargarCitas()
+                                        │ 17. Actualiza grid → Fila ahora coral
+                                        │     (estado Cancelada)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    OPERACIÓN 6: COPIAR DNI AL PORTAPAPELES                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona cita en grid               │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Copiar DNI"                 │
+                                        │ 3. Ejecuta btnCopiarDNI_Click()
+                                        │ 4. Valida cita seleccionada != null
+                                        │ 5. Valida citaSeleccionada.ClienteDNI
+                                        │    != null y no vacío
+                                        │ 6. Ejecuta:
+                                        │    Clipboard.SetText(
+                                        │      citaSeleccionada.ClienteDNI.Trim())
+                                        │ 7. Muestra mensaje:
+                                        │    "DNI {dni} copiado al portapapeles"
+                                        │    Tipo: Information
+                                        │ NOTA: Útil para buscar cliente en otros
+                                        │ sistemas o formularios
+
+
+===============================================================================
+    FLUJOS ALTERNATIVOS
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                  FA-1: USUARIO NO ES VETERINARIO (Load)                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1 (Carga Inicial), paso 6:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Accede a "Mis Citas"                 │
+                                        │ 2. Obtiene usuarioLogueado
+                                        │ 3. Llama VeterinarioBLL.Current
+                                        │    .EsVeterinario(idUsuario)
+                                        │ 4. BLL consulta tabla Veterinario:
+                                        │    SELECT * FROM Veterinario
+                                        │    WHERE IdVeterinario = @IdUsuario
+                                        │      AND Activo = 1
+                                        │ 5. Retorna NULL (usuario NO es veterinario)
+                                        │ 6. Muestra MessageBox:
+                                        │    "El usuario no es veterinario"
+                                        │    Tipo: Error
+                                        │ 7. this.Close() → Cierra formulario
+                                        │    inmediatamente
+────────────────────────────────────────┼────────────────────────────────────────
+8. Retorna al menú principal            │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-2: SIN CITAS PARA LA FECHA SELECCIONADA                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1 (Listar Citas) o 2 (Filtrar por Fecha):
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona fecha sin citas asignadas │
+                                        │ 2. Llama CitaBLL.Current
+                                        │    .ObtenerCitasPorFecha(fecha)
+                                        │ 3. SP retorna lista vacía (0 citas en esa
+                                        │    fecha)
+                                        │ 4. Filtro por IdVeterinario retorna lista
+                                        │    vacía
+                                        │ 5. dgvCitas.DataSource = lista vacía
+                                        │ 6. Grid muestra 0 filas
+                                        │ 7. ActualizarEstadoBotones():
+                                        │    TODOS los botones deshabilitados
+                                        │    (ninguna selección)
+────────────────────────────────────────┼────────────────────────────────────────
+8. Visualiza grid vacío (resultado      │
+válido, no error)                       │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            FA-3: INICIAR CONSULTA SIN CITA SELECCIONADA                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 3 (Iniciar Consulta), paso 6:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. NO selecciona ninguna fila en grid   │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Iniciar Consulta" (si       │
+estuviera habilitado)                   │
+                                        │ 3. Ejecuta btnIniciarConsulta_Click()
+                                        │ 4. Valida dgvCitas.SelectedRows.Count == 0
+                                        │ 5. Muestra MessageBox:
+                                        │    "Debe seleccionar una cita"
+                                        │    Tipo: Warning
+                                        │ 6. return → NO continúa
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            FA-4: MARCAR COMPLETADA CITA YA COMPLETADA                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 4 (Marcar Completada), validación de botón:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona cita en estado Completada │
+(fila gris)                             │
+                                        │ 2. Ejecuta ActualizarEstadoBotones()
+                                        │ 3. Evalúa:
+                                        │    btnCompletada.Enabled =
+                                        │      (estado == Agendada ||
+                                        │       estado == Confirmada)
+                                        │    (Completada NO cumple condición)
+                                        │ 4. btnCompletada.Enabled = false
+                                        │    (botón deshabilitado)
+────────────────────────────────────────┼────────────────────────────────────────
+5. NO puede hacer clic en "Completada"  │
+(botón deshabilitado)                   │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│               FA-5: CANCELAR CITA YA COMPLETADA                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 5 (Cancelar), validación de botón:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona cita en estado Completada │
+                                        │ 2. Ejecuta ActualizarEstadoBotones()
+                                        │ 3. Llama citaSeleccionada.PuedeSerCancelada()
+                                        │ 4. Método en entidad Cita:
+                                        │    public bool PuedeSerCancelada()
+                                        │    {
+                                        │      return Estado == EstadoCita.Agendada ||
+                                        │             Estado == EstadoCita.Confirmada;
+                                        │    }
+                                        │    (Completada NO cumple)
+                                        │ 5. Retorna false
+                                        │ 6. btnCancelar.Enabled = false
+────────────────────────────────────────┼────────────────────────────────────────
+7. NO puede cancelar cita completada   │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-6: COPIAR DNI SIN CLIENTE (DNI vacío)                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6 (Copiar DNI), paso 2:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona cita con ClienteDNI NULL  │
+o vacío (caso raro)                     │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Copiar DNI"                 │
+                                        │ 3. Ejecuta btnCopiarDNI_Click()
+                                        │ 4. Valida string.IsNullOrWhiteSpace(
+                                        │    citaSeleccionada.ClienteDNI)
+                                        │ 5. Condición TRUE (DNI vacío)
+                                        │ 6. Muestra MessageBox:
+                                        │    "No hay DNI para copiar"
+                                        │    Tipo: Warning
+                                        │ 7. return → NO copia nada
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                FA-7: CANCELAR CONFIRMACIÓN DE COMPLETAR                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 4 (Marcar Completada), paso 7:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Clic en "Completada"                 │
+                                        │ 2. Muestra MessageBox confirmación:
+                                        │    "¿Está seguro de marcar como
+                                        │    completada...?"
+                                        │    [Sí] [No]
+────────────────────────────────────────┼────────────────────────────────────────
+3. Selecciona "No"                      │
+                                        │ 4. DialogResult == DialogResult.No
+                                        │ 5. NO ejecuta CitaBLL.CompletarCita()
+                                        │ 6. Permanece en formulario sin cambios
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 FA-8: CANCELAR CONFIRMACIÓN DE CANCELAR                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 5 (Cancelar Cita), paso 8:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Clic en "Cancelar"                   │
+                                        │ 2. Muestra MessageBox confirmación:
+                                        │    "¿Está seguro de cancelar la cita...?"
+                                        │    [Sí] [No]
+────────────────────────────────────────┼────────────────────────────────────────
+3. Selecciona "No"                      │
+                                        │ 4. DialogResult == DialogResult.No
+                                        │ 5. NO ejecuta CitaBLL.CancelarCita()
+                                        │ 6. Permanece en formulario sin cambios
+
+
+===============================================================================
+    REGLAS DE NEGOCIO
+===============================================================================
+
+RN-N005-01: FILTRO EXCLUSIVO POR VETERINARIO LOGUEADO
+  - Formulario SOLO muestra citas donde IdVeterinario = IdUsuario logueado
+  - Filtro aplicado en memoria (no en SP) después de obtener todas las citas de la fecha
+  - Garantiza privacidad: veterinario NO ve citas de otros veterinarios
+  - Implementado en: MisCitas.cs (líneas 146-149)
+
+RN-N005-02: VALIDACIÓN DE ROL VETERINARIO
+  - Usuario DEBE tener registro activo en tabla Veterinario
+  - Verificación mediante VeterinarioBLL.EsVeterinario(IdUsuario)
+  - Si NO es veterinario: cierra formulario inmediatamente con mensaje de error
+  - Implementado en: MisCitas.cs (líneas 43-49)
+
+RN-N005-03: CÓDIGO DE COLORES SEGÚN ESTADO
+  - Agendada: LightYellow (amarillo) → Pendiente de confirmación
+  - Confirmada: LightGreen (verde) → Cliente confirmó asistencia
+  - Completada: LightGray (gris) → Consulta finalizada
+  - Cancelada: LightCoral (rojo coral) → Cancelada por cliente/veterinario
+  - NoAsistio: LightSalmon (salmón) → Cliente no se presentó
+  - Aplicado automáticamente al cargar grid
+  - Implementado en: MisCitas.cs (líneas 166-192)
+
+RN-N005-04: HABILITACIÓN DINÁMICA DE BOTONES
+  - Iniciar Consulta: habilitado SOLO si estado = Agendada OR Confirmada
+  - Completada: habilitado SOLO si estado = Agendada OR Confirmada
+  - Cancelar: habilitado SOLO si cita.PuedeSerCancelada() = true
+  - Todos deshabilitados si ninguna cita seleccionada
+  - Implementado en: MisCitas.cs (líneas 194-223)
+
+RN-N005-05: VERIFICACIÓN DE CONSULTA MÉDICA EXISTENTE
+  - Al iniciar consulta, primero verifica si ya existe ConsultaMedica para esa cita
+  - Si existe: abre FormConsultaMedica en modo edición (carga consulta existente)
+  - Si NO existe: abre FormConsultaMedica en modo creación (nueva consulta)
+  - Evita duplicar consultas médicas para una misma cita
+  - Implementado en: MisCitas.cs (líneas 256-269)
+
+RN-N005-06: FECHA POR DEFECTO HOY
+  - Al abrir formulario, DateTimePicker se inicializa con DateTime.Today
+  - Muestra automáticamente citas del día actual
+  - Usuario puede cambiar fecha para ver agenda futura/pasada
+  - Implementado en: MisCitas.cs (línea 52)
+
+RN-N005-07: ORDENAMIENTO POR HORA
+  - Citas ordenadas por FechaCita ascendente (incluye hora)
+  - Veterinario ve su agenda cronológicamente
+  - Implementado en: MisCitas.cs (línea 148: .OrderBy(c => c.FechaCita))
+
+RN-N005-08: RECARGA AUTOMÁTICA POST-OPERACIÓN
+  - Después de Completar, Cancelar, o cerrar FormConsultaMedica: recarga grid automáticamente
+  - Garantiza que veterinario vea estado actualizado de citas
+  - Implementado en: MisCitas.cs (líneas 272, 307, 343)
+
+
+===============================================================================
+    EXCEPCIONES Y MANEJO DE ERRORES
+===============================================================================
+
+EX-N005-01: USUARIO NO LOGUEADO
+  Condición:    LoginService.GetUsuarioLogueado() retorna null
+  Validación:   MisCitas_Load()
+  Mensaje:      "No hay usuario logueado"
+  Acción:       Cierra formulario inmediatamente (this.Close())
+  Código:       MisCitas.cs (líneas 32-37)
+
+EX-N005-02: USUARIO NO ES VETERINARIO
+  Condición:    VeterinarioBLL.EsVeterinario(IdUsuario) retorna false
+  Validación:   MisCitas_Load()
+  Mensaje:      "El usuario no es veterinario"
+  Acción:       Cierra formulario inmediatamente (this.Close())
+  Código:       MisCitas.cs (líneas 43-49)
+
+EX-N005-03: ERROR AL CARGAR FORMULARIO
+  Condición:    Excepción en MisCitas_Load()
+  Manejo:       Catch general
+  Mensaje:      "Error al cargar formulario: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error
+  Código:       MisCitas.cs (líneas 60-64)
+
+EX-N005-04: ERROR AL CARGAR CITAS
+  Condición:    Excepción en CargarCitas() (ej: BD no disponible)
+  Manejo:       Catch en CargarCitas()
+  Mensaje:      "Error al cargar citas: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error, grid queda vacío
+  Código:       MisCitas.cs (líneas 159-163)
+
+EX-N005-05: CITA NO SELECCIONADA (Iniciar Consulta)
+  Condición:    dgvCitas.SelectedRows.Count == 0
+  Validación:   btnIniciarConsulta_Click()
+  Mensaje:      "Debe seleccionar una cita"
+  Acción:       Muestra MessageBox tipo Warning, NO continúa
+  Código:       MisCitas.cs (líneas 244-249)
+
+EX-N005-06: ERROR AL INICIAR CONSULTA
+  Condición:    Excepción al abrir FormConsultaMedica o consultar BD
+  Manejo:       Catch en btnIniciarConsulta_Click()
+  Mensaje:      "Error al iniciar consulta: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error
+  Código:       MisCitas.cs (líneas 274-278)
+
+EX-N005-07: CITA NO SELECCIONADA (Completar)
+  Condición:    dgvCitas.SelectedRows.Count == 0
+  Validación:   btnCompletada_Click()
+  Mensaje:      "Debe seleccionar una cita"
+  Acción:       Muestra MessageBox tipo Warning, NO continúa
+  Código:       MisCitas.cs (líneas 285-290)
+
+EX-N005-08: ERROR AL COMPLETAR CITA
+  Condición:    Excepción en CitaBLL.CompletarCita()
+  Manejo:       Catch en btnCompletada_Click()
+  Mensaje:      "Error al completar cita: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error
+  Código:       MisCitas.cs (líneas 310-314)
+
+EX-N005-09: CITA NO SELECCIONADA (Cancelar)
+  Condición:    dgvCitas.SelectedRows.Count == 0
+  Validación:   btnCancelar_Click()
+  Mensaje:      "Debe seleccionar una cita"
+  Acción:       Muestra MessageBox tipo Warning, NO continúa
+  Código:       MisCitas.cs (líneas 321-326)
+
+EX-N005-10: ERROR AL CANCELAR CITA
+  Condición:    Excepción en CitaBLL.CancelarCita()
+  Manejo:       Catch en btnCancelar_Click()
+  Mensaje:      "Error al cancelar cita: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error
+  Código:       MisCitas.cs (líneas 346-350)
+
+EX-N005-11: CITA NO SELECCIONADA (Copiar DNI)
+  Condición:    dgvCitas.SelectedRows.Count == 0
+  Validación:   btnCopiarDNI_Click()
+  Mensaje:      "Debe seleccionar una cita"
+  Acción:       Muestra MessageBox tipo Warning, NO continúa
+  Código:       MisCitas.cs (líneas 357-362)
+
+EX-N005-12: DNI VACÍO (Copiar DNI)
+  Condición:    string.IsNullOrWhiteSpace(citaSeleccionada.ClienteDNI)
+  Validación:   btnCopiarDNI_Click()
+  Mensaje:      "No hay DNI para copiar"
+  Acción:       Muestra MessageBox tipo Warning, NO copia
+  Código:       MisCitas.cs (líneas 365-372)
+
+EX-N005-13: ERROR AL COPIAR DNI
+  Condición:    Excepción al ejecutar Clipboard.SetText()
+  Manejo:       Catch en btnCopiarDNI_Click()
+  Mensaje:      "Error al copiar DNI: {ex.Message}"
+  Acción:       Muestra MessageBox tipo Error
+  Código:       MisCitas.cs (líneas 385-391)
+
+
+===============================================================================
+    VALIDACIONES
+===============================================================================
+
+VALIDACIONES DE ACCESO:
+------------------------
+V-N005-01: Usuario logueado existe
+  - Regla: LoginService.GetUsuarioLogueado() != null
+  - Momento: Al cargar formulario (Load)
+  - Acción si falla: Cierra formulario con mensaje de error
+  - Código: MisCitas.cs (líneas 31-37)
+
+V-N005-02: Usuario es veterinario
+  - Regla: VeterinarioBLL.EsVeterinario(IdUsuario) == true
+  - Momento: Al cargar formulario (Load)
+  - Acción si falla: Cierra formulario con mensaje de error
+  - Código: MisCitas.cs (líneas 43-49)
+
+VALIDACIONES DE OPERACIÓN:
+---------------------------
+V-N005-03: Cita seleccionada para Iniciar Consulta
+  - Regla: dgvCitas.SelectedRows.Count > 0
+  - Momento: Al hacer clic en "Iniciar Consulta"
+  - Código: MisCitas.cs (líneas 244-249)
+
+V-N005-04: Cita seleccionada para Completar
+  - Regla: dgvCitas.SelectedRows.Count > 0
+  - Momento: Al hacer clic en "Completada"
+  - Código: MisCitas.cs (líneas 285-290)
+
+V-N005-05: Cita seleccionada para Cancelar
+  - Regla: dgvCitas.SelectedRows.Count > 0
+  - Momento: Al hacer clic en "Cancelar"
+  - Código: MisCitas.cs (líneas 321-326)
+
+V-N005-06: Cita seleccionada para Copiar DNI
+  - Regla: dgvCitas.SelectedRows.Count > 0
+  - Momento: Al hacer clic en "Copiar DNI"
+  - Código: MisCitas.cs (líneas 357-362)
+
+VALIDACIONES DE ESTADO:
+------------------------
+V-N005-07: Estado permite Iniciar Consulta
+  - Regla: estado == Agendada OR estado == Confirmada
+  - Momento: Al actualizar estado de botones (SelectionChanged)
+  - Acción: Habilita/deshabilita btnIniciarConsulta
+  - Código: MisCitas.cs (líneas 214-215)
+
+V-N005-08: Estado permite Completar
+  - Regla: estado == Agendada OR estado == Confirmada
+  - Momento: Al actualizar estado de botones (SelectionChanged)
+  - Acción: Habilita/deshabilita btnCompletada
+  - Código: MisCitas.cs (líneas 218-219)
+
+V-N005-09: Estado permite Cancelar
+  - Regla: citaSeleccionada.PuedeSerCancelada() == true
+  - Momento: Al actualizar estado de botones (SelectionChanged)
+  - Acción: Habilita/deshabilita btnCancelar
+  - Código: MisCitas.cs (línea 222)
+
+VALIDACIONES DE DATOS:
+-----------------------
+V-N005-10: DNI no vacío para copiar
+  - Regla: !string.IsNullOrWhiteSpace(ClienteDNI)
+  - Momento: Al hacer clic en "Copiar DNI"
+  - Acción si falla: Muestra advertencia, NO copia
+  - Código: MisCitas.cs (líneas 365-372)
+
+
+===============================================================================
+    REQUERIMIENTOS NO FUNCIONALES
+===============================================================================
+
+RNF-N005-01: SEGURIDAD - AISLAMIENTO POR VETERINARIO
+  - Filtro WHERE IdVeterinario = IdUsuario garantiza privacidad
+  - Veterinario NO puede ver citas de colegas
+  - Auditoría: acceso registrado en LoginService
+
+RNF-N005-02: USABILIDAD - CÓDIGO DE COLORES INTUITIVO
+  - Amarillo: Agendada (atención pendiente)
+  - Verde: Confirmada (cliente asistirá)
+  - Gris: Completada (finalizada)
+  - Rojo coral: Cancelada (no se realizará)
+  - Salmón: No asistió (cliente ausente)
+  - Facilita identificación visual rápida del estado de agenda
+
+RNF-N005-03: USABILIDAD - BOTONES CONTEXTUALES
+  - Botones habilitados/deshabilitados según estado de cita seleccionada
+  - Previene operaciones inválidas (ej: completar cita ya completada)
+  - Reduce errores del usuario
+
+RNF-N005-04: USABILIDAD - FECHA POR DEFECTO
+  - Abre con fecha actual (DateTime.Today)
+  - Veterinario ve inmediatamente su agenda del día
+  - Comportamiento esperado: "ver mis citas de hoy"
+
+RNF-N005-05: RENDIMIENTO - FILTRO EN MEMORIA
+  - Filtro por IdVeterinario aplicado en código (no en SP)
+  - LINQ .Where() sobre lista en memoria
+  - Evita crear SP específico para cada veterinario
+  - Tradeoff: SP retorna más datos de los necesarios, pero simplifica DAL
+
+RNF-N005-06: INTEGRIDAD - VERIFICACIÓN DE CONSULTA EXISTENTE
+  - Previene duplicar ConsultaMedica para una misma cita
+  - Verifica existencia ANTES de abrir formulario
+  - Garantiza 1:1 entre Cita y ConsultaMedica
+
+RNF-N005-07: USABILIDAD - RECARGA AUTOMÁTICA
+  - Grid se actualiza automáticamente después de cada operación
+  - Veterinario ve cambios inmediatos sin refrescar manualmente
+  - Mejora percepción de responsividad
+
+RNF-N005-08: PRODUCTIVIDAD - COPIAR DNI AL PORTAPAPELES
+  - Facilita búsqueda de cliente en otros sistemas
+  - Evita transcripción manual (reduce errores)
+  - Clipboard.SetText() integrado con Windows
+
+RNF-N005-09: MANTENIBILIDAD - REUTILIZACIÓN DE LÓGICA DE CITAS
+  - Usa CitaBLL.Current (mismo BLL que gestionCitas)
+  - Métodos CompletarCita(), CancelarCita() compartidos
+  - NO duplica lógica de negocio
+
+
+===============================================================================
+    ARCHIVOS INVOLUCRADOS
+===============================================================================
+
+CAPA UI (Presentación):
+-----------------------
+MisCitas.cs
+  Ruta: UI/WinUi/Negocio/MisCitas.cs
+  Líneas: 395
+  Responsabilidad:
+    - Vista personalizada de citas para veterinarios
+    - Filtrado por IdVeterinario del usuario logueado
+    - Gestión de estado de citas (Completar, Cancelar)
+    - Integración con FormConsultaMedica
+    - Utilidad copiar DNI al portapapeles
+  Métodos clave:
+    - MisCitas_Load() → Línea 26 (validación de acceso)
+    - ConfigurarDataGridView() → Línea 67
+    - CargarCitas() → Línea 136 (filtro por IdVeterinario)
+    - ColorearFilasSegunEstado() → Línea 166
+    - ActualizarEstadoBotones() → Línea 194
+    - btnIniciarConsulta_Click() → Línea 240
+    - btnCompletada_Click() → Línea 281
+    - btnCancelar_Click() → Línea 317
+    - btnCopiarDNI_Click() → Línea 353
+    - dtpFecha_ValueChanged() → Línea 230
+    - btnActualizar_Click() → Línea 235
+
+MisCitas.Designer.cs
+  Ruta: UI/WinUi/Negocio/MisCitas.Designer.cs
+  Responsabilidad: Diseño visual del formulario
+
+CAPA BLL (Lógica de Negocio):
+------------------------------
+VeterinarioBLL.cs
+  Método usado: EsVeterinario(Guid idUsuario)
+  Responsabilidad: Verificar si usuario tiene registro activo en tabla Veterinario
+
+CitaBLL.cs
+  Métodos usados:
+    - ObtenerCitasPorFecha(DateTime fecha)
+    - CompletarCita(Guid idCita)
+    - CancelarCita(Guid idCita)
+  Responsabilidad: Gestión de citas (compartido con gestionCitas)
+
+ConsultaMedicaBLL.cs
+  Método usado: ObtenerConsultaPorCita(Guid idCita)
+  Responsabilidad: Verificar si cita ya tiene consulta médica
+
+CAPA DOMINIO:
+-------------
+Cita.cs
+  Propiedades usadas:
+    - IdCita, IdVeterinario, FechaCita, Estado
+    - MascotaNombre, ClienteNombre, ClienteDNI
+    - TipoConsulta, Motivo, EstadoDescripcion
+    - HoraCita (propiedad calculada)
+  Método usado: PuedeSerCancelada()
+
+EstadoCita.cs (enum)
+  Valores:
+    - Agendada, Confirmada, Completada, Cancelada, NoAsistio
+
+SERVICIOS:
+----------
+LoginService.cs
+  Método usado: GetUsuarioLogueado()
+  Responsabilidad: Obtener usuario autenticado actual
+
+LanguageManager.cs
+  Método usado: Translate(key)
+  Responsabilidad: Traducción de textos de interfaz
+
+BASE DE DATOS:
+--------------
+Stored Procedures (VetCareDB):
+  - Cita_SelectByFecha (@Fecha) → Retorna todas las citas de una fecha
+  - Cita_UpdateEstado (@IdCita, @Estado) → Actualiza estado de cita
+  - ConsultaMedica_SelectByCita (@IdCita) → Obtiene consulta por cita
+
+Tabla Veterinario (VetCareDB):
+  - IdVeterinario (FK a SecurityVet.Usuario.IdUsuario)
+  - Nombre, Matricula, Activo
+  - Usada para validar que usuario es veterinario
+
+
+===============================================================================
+    PATRONES DE DISEÑO APLICADOS
+===============================================================================
+
+PATRÓN 1: SINGLETON
+-------------------
+Aplicado en:
+  - CitaBLL.Current
+  - VeterinarioBLL.Current
+  - ConsultaMedicaBLL.Current
+
+Justificación:
+  - Servicios sin estado compartidos
+  - Instancia única en aplicación
+
+Implementación:
+  private static readonly CitaBLL _instance = new CitaBLL();
+  public static CitaBLL Current { get { return _instance; } }
+
+
+PATRÓN 2: REPOSITORY
+--------------------
+Aplicado en:
+  - CitaRepository (acceso a datos de citas)
+
+Justificación:
+  - Abstracción de acceso a datos
+  - Reutilización de lógica entre gestionCitas y MisCitas
+
+
+PATRÓN 3: STATE PATTERN (Habilitación de Botones)
+--------------------------------------------------
+Aplicado en:
+  - ActualizarEstadoBotones()
+
+Justificación:
+  - Comportamiento de UI según estado de cita seleccionada
+  - Previene operaciones inválidas
+
+Estados:
+  - Agendada/Confirmada: Iniciar Consulta, Completar, Cancelar habilitados
+  - Completada: TODOS los botones deshabilitados (terminal)
+  - Cancelada: TODOS los botones deshabilitados
+
+
+PATRÓN 4: ADAPTER
+-----------------
+Aplicado en:
+  - CitaAdapter (DataRow → Cita entity)
+
+Justificación:
+  - Conversión entre estructura de BD y modelo de dominio
+
+
+===============================================================================
+    TRAZABILIDAD
+===============================================================================
+
+RELACIONADO CON:
+----------------
+CU-N003: Gestionar Citas
+  - Comparte CitaBLL para operaciones CompletarCita(), CancelarCita()
+  - Código de colores idéntico
+  - MisCitas es vista filtrada para veterinarios
+
+CU-N006: Registrar Consulta Médica
+  - Botón "Iniciar Consulta" abre FormConsultaMedica
+  - Integración directa entre ambos casos de uso
+  - Flujo: Ver Mis Citas → Iniciar Consulta → Registrar Consulta Médica
+
+CU-A004: Consultar Bitácora
+  - CompletarCita() y CancelarCita() registran en Bitácora
+  - Criticidad: Info (Completar), Advertencia (Cancelar)
+
+TABLAS RELACIONADAS:
+--------------------
+SecurityVet.Usuario:
+  - IdUsuario (usado como IdVeterinario)
+  - Rol: ROL_Veterinario
+
+VetCareDB.Veterinario:
+  - IdVeterinario = IdUsuario
+  - Validación de acceso al formulario
+
+VetCareDB.Cita:
+  - IdVeterinario (FK a Veterinario)
+  - Filtro WHERE IdVeterinario = usuario.IdUsuario
+
+VetCareDB.ConsultaMedica:
+  - IdCita (FK a Cita)
+  - Verificación de consulta existente
+
+PATENTES REQUERIDAS:
+--------------------
+NO REQUIERE PATENTE ESPECÍFICA
+  - Solo requiere ROL_Veterinario
+  - Validación por tabla Veterinario (no por patente FormMisCitas)
+
+
+===============================================================================
+    NOTAS DE IMPLEMENTACIÓN
+===============================================================================
+
+NOTA 1: FILTRO EN MEMORIA VS SP
+  - SP Cita_SelectByFecha retorna TODAS las citas de la fecha
+  - Filtro por IdVeterinario aplicado en código (líneas 146-149)
+  - Alternativa: crear SP Cita_SelectByVeterinarioAndFecha
+  - Tradeoff: simplicidad de DAL vs tráfico de datos
+
+NOTA 2: CONSULTA MÉDICA EXISTENTE
+  - Verifica existencia ANTES de abrir FormConsultaMedica (línea 256)
+  - Evita duplicar consultas para misma cita
+  - FormConsultaMedica decide modo creación/edición según parámetros
+
+NOTA 3: MISMO USUARIO COMO IdVeterinario
+  - _idVeterinarioActual = usuarioLogueado.IdUsuario (línea 40)
+  - Tabla Veterinario usa mismo GUID que SecurityVet.Usuario
+  - Sincronización cross-database
+
+NOTA 4: RECARGA DESPUÉS DE OPERACIONES
+  - CargarCitas() después de CompletarCita (línea 307)
+  - CargarCitas() después de CancelarCita (línea 343)
+  - CargarCitas() después de cerrar FormConsultaMedica (línea 272)
+  - Garantiza vista actualizada
+
+NOTA 5: CLIPBOARD INTEGRATION
+  - Clipboard.SetText() copia DNI al portapapeles de Windows (línea 375)
+  - Útil para pegar DNI en otros formularios (ej: Historial Clínico)
+  - Mejora flujo de trabajo del veterinario
+
+NOTA 6: ORDENAMIENTO CRONOLÓGICO
+  - .OrderBy(c => c.FechaCita) ordena por DateTime completo (línea 148)
+  - Incluye hora, no solo fecha
+  - Veterinario ve agenda en orden temporal
+
+
+===============================================================================
+    METADATOS
+===============================================================================
+
+Autor:              Sistema VetCare
+Versión:            1.0
+Fecha Creación:     2025-01-16
+Última Actualización: 2025-01-16
+Revisado por:       Claude Code
+Estado:             ✅ COMPLETO
+
+Archivos relacionados:
+  - CU-N003_Template_EA.txt (Gestionar Citas)
+  - CU-N006_Template_EA.txt (Registrar Consulta Médica - pendiente)
+
+Casos de Uso dependientes:
+  - CU-N006: Registrar Consulta Médica (abierto desde "Iniciar Consulta")
+
+===============================================================================

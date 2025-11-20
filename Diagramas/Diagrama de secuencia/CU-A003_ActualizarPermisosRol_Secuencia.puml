@@ -1,0 +1,486 @@
+@startuml CU-A003_ActualizarPermisosRol_Secuencia
+
+' ============================================================================
+' DIAGRAMA DE SECUENCIA: CU-A003 - ACTUALIZAR PERMISOS DE ROL
+' Operación: Actualizar Permisos de Rol con Unit of Work
+' Sistema: VetCare - Veterinaria
+' Módulo: Seguridad y Administración
+' ============================================================================
+
+title Diagrama de Secuencia - CU-A003: Actualizar Permisos de Rol\n(Unit of Work + Composite Pattern)
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+
+' ============================================================================
+' PARTICIPANTES (LIFELINES)
+' ============================================================================
+
+actor "Administrador" as Admin #LightBlue
+participant "gestionPermisos.cs\n(WinForm)" as UI #LightYellow
+participant "FamiliaBLL\n(Static)" as BLL #LightGreen
+participant "FamiliaRepository\n(Singleton)" as FamiliaRepo #LightCoral
+participant "SecurityUnitOfWork" as UoW #Orchid
+database "SqlConnection +\nSqlTransaction" as DBConn #LightGray
+participant "FamiliaPatenteRepository\n(Singleton)" as FPRepo #LightCoral
+participant "PatenteRepository\n(Singleton)" as PatenteRepo #LightCoral
+database "BD SecurityVet" as DB #LightGray
+participant "Bitacora\n(Singleton)" as Bitacora #LightSalmon
+participant "ExceptionManager\n(Singleton)" as ExcMgr #Pink
+
+' ============================================================================
+' FLUJO PRINCIPAL: SELECCIONAR ROL Y CARGAR PERMISOS (COMPOSITE RECURSIVO)
+' ============================================================================
+
+== 1. SELECCIÓN DE ROL ==
+
+Admin -> UI: Seleccionar rol en ComboBox
+activate UI
+
+UI -> UI: CboRoles_SelectedIndexChanged()
+activate UI #DarkSalmon
+
+UI -> UI: _familiaSeleccionada = rol seleccionado
+
+== 2. CARGA DE PERMISOS RECURSIVA (PATRÓN COMPOSITE) ==
+
+UI -> BLL: ObtenerTodasLasPatentesDeRol(\n_familiaSeleccionada.IdComponent)
+activate BLL
+
+BLL -> FamiliaRepo: SelectOne(idFamilia)
+activate FamiliaRepo
+
+FamiliaRepo -> DB: EXEC Familia_SelectOne\n@IdFamilia
+activate DB
+DB --> FamiliaRepo: DataRow → Familia
+deactivate DB
+
+FamiliaRepo --> BLL: Familia (rol)
+deactivate FamiliaRepo
+
+BLL -> BLL: ObtenerPatentesRecursivo(\nfamilia, acumulador)
+activate BLL #DarkGreen
+
+note right
+  **RECURSIÓN COMPOSITE**
+  =======================
+  1. Obtener patentes DIRECTAS
+  2. Obtener familias HIJAS
+  3. Por cada hija: RECURSIÓN
+
+  Navega jerarquía completa.
+end note
+
+' --- Obtener patentes directas de esta familia ---
+BLL -> FPRepo: GetChildrenRelations(familia)
+activate FPRepo
+
+FPRepo -> DB: EXEC FamiliaPatente_GetChildrenRelations\n@IdFamilia
+activate DB
+DB --> FPRepo: DataTable → List<FamiliaPatente>
+deactivate DB
+
+FPRepo --> BLL: List<FamiliaPatente>
+deactivate FPRepo
+
+loop Para cada FamiliaPatente
+    BLL -> PatenteRepo: SelectOne(fp.idPatente)
+    activate PatenteRepo
+
+    PatenteRepo -> DB: EXEC Patente_SelectOne\n@IdPatente
+    activate DB
+    DB --> PatenteRepo: DataRow → Patente
+    deactivate DB
+
+    PatenteRepo --> BLL: Patente
+    deactivate PatenteRepo
+
+    BLL -> BLL: acumulador.Add(patente)
+end
+
+' --- Obtener familias hijas para recursión ---
+BLL -> FPRepo: FamiliaFamiliaRepository.Current.\nGetChildrenRelations(familia)
+activate FPRepo
+
+FPRepo -> DB: EXEC FamiliaFamilia_GetChildrenRelations\n@IdFamilia
+activate DB
+DB --> FPRepo: DataTable → List<FamiliaFamilia>
+deactivate DB
+
+FPRepo --> BLL: List<FamiliaFamilia> (familias hijas)
+deactivate FPRepo
+
+alt Tiene familias hijas
+    loop Para cada familia hija
+        BLL -> FamiliaRepo: SelectOne(familiaHija.idFamiliaHijo)
+        activate FamiliaRepo
+        FamiliaRepo -> DB: EXEC Familia_SelectOne
+        activate DB
+        DB --> FamiliaRepo: DataRow → Familia hija
+        deactivate DB
+        FamiliaRepo --> BLL: Familia hija
+        deactivate FamiliaRepo
+
+        ' LLAMADA RECURSIVA
+        BLL -> BLL: ObtenerPatentesRecursivo(\nfamiliaHija, acumulador)
+        note right: **RECURSIÓN**\nProcesa jerarquía completa
+    end
+end
+
+deactivate BLL
+
+BLL -> BLL: Eliminar duplicados:\nacumulador.GroupBy(p => p.IdComponent)\n.Select(g => g.First())
+
+BLL --> UI: IEnumerable<Patente> (TODAS las patentes)
+deactivate BLL
+
+== 3. MOSTRAR PATENTES EN INTERFAZ ==
+
+UI -> UI: Desmarcar todos los checks
+loop Para cada item en CheckedListBox
+    alt Es PatenteDisplay (no header)
+        UI -> UI: SetItemChecked(i, false)
+    end
+end
+
+UI -> UI: Marcar patentes asignadas al rol
+loop Para cada patente del rol
+    UI -> UI: Buscar en CheckedListBox\npor IdComponent
+    UI -> UI: SetItemChecked(index, true)
+end
+
+deactivate UI
+
+[<-- Admin: Visualiza permisos\ndel rol seleccionado
+
+== 4. MODIFICACIÓN DE PERMISOS ==
+
+Admin -> UI: Marca/desmarca checks\nsegún necesidad
+Admin -> UI: Clic en "Guardar Cambios"
+
+UI -> UI: BtnGuardarRol_Click()
+activate UI
+
+alt _familiaSeleccionada == null
+    UI -> UI: MessageBox.Show(\n"Seleccione un rol")
+    deactivate UI
+    [<-- UI: Retorna sin guardar
+else Rol seleccionado
+
+    == 5. OBTENER PATENTES SELECCIONADAS ==
+
+    UI -> UI: patentesSeleccionadas = new List<Patente>()
+    loop Para cada item en checkedListPatentesRol.CheckedItems
+        alt Es PatenteDisplay
+            UI -> UI: patentesSeleccionadas.Add(\ndisplayItem.Patente)
+        end
+    end
+
+    == 6. ACTUALIZAR CON UNIT OF WORK ==
+
+    UI -> BLL: ActualizarPatentesDeRol(\n_familiaSeleccionada.IdComponent,\npatentesSeleccionadas)
+    activate BLL
+
+    BLL -> UoW: new SecurityUnitOfWork()
+    activate UoW
+
+    UoW -> DBConn: new SqlConnection(\nconnectionString)
+    activate DBConn
+
+    UoW -> UoW: BeginTransaction()
+    UoW -> DBConn: connection.Open()
+    UoW -> DBConn: transaction = connection.BeginTransaction()
+
+    note over DBConn
+      **TRANSACCIÓN INICIADA**
+      ========================
+      Todas las operaciones siguientes
+      son parte de la misma transacción.
+
+      Se aplicarán TODAS o NINGUNA.
+    end note
+
+    try
+
+        == 7. VERIFICACIONES ==
+
+        BLL -> FamiliaRepo: SelectOne(idFamilia)
+        activate FamiliaRepo
+        FamiliaRepo -> DB: EXEC Familia_SelectOne
+        activate DB
+        DB --> FamiliaRepo: DataRow
+        deactivate DB
+        FamiliaRepo --> BLL: Familia
+        deactivate FamiliaRepo
+
+        alt Familia no existe
+            BLL -> BLL: throw ValidacionException(\n"La familia seleccionada no existe")
+        end
+
+        alt NO es rol (no tiene prefijo ROL_)
+            BLL -> BLL: throw ValidacionException(\n"La familia seleccionada no es un rol válido")
+        end
+
+        == 8. OBTENER PATENTES ACTUALES ==
+
+        BLL -> BLL: ObtenerPatentesDirectasDeFamilia(idFamilia)
+        activate BLL #DarkGreen
+
+        BLL -> FPRepo: GetChildrenRelations(familia)
+        activate FPRepo
+        FPRepo -> DB: EXEC FamiliaPatente_GetChildrenRelations
+        activate DB
+        DB --> FPRepo: DataTable
+        deactivate DB
+        FPRepo --> BLL: List<FamiliaPatente>
+        deactivate FPRepo
+
+        loop Para cada FamiliaPatente
+            BLL -> PatenteRepo: SelectOne(fp.idPatente)
+            activate PatenteRepo
+            PatenteRepo -> DB: EXEC Patente_SelectOne
+            activate DB
+            DB --> PatenteRepo: DataRow
+            deactivate DB
+            PatenteRepo --> BLL: Patente
+            deactivate PatenteRepo
+        end
+
+        deactivate BLL
+
+        BLL --> BLL: patentesActuales
+
+        == 9. ELIMINAR PATENTES DESMARCADAS ==
+
+        loop Para cada patenteActual
+            alt NO está en patentesSeleccionadas
+                BLL -> BLL: familiaPatente = new FamiliaPatente {\n  idFamilia, idPatente\n}
+
+                BLL -> FPRepo: DeleteRelacion(\nfamiliaPatente, unitOfWork)
+                activate FPRepo
+
+                FPRepo -> DBConn: ExecuteNonQuery(\nconnection, transaction,\n"FamiliaPatente_DeleteRelacion",\nparams)
+                activate DBConn #DarkSalmon
+
+                DBConn -> DB: EXEC FamiliaPatente_DeleteRelacion\n@IdFamilia, @IdPatente\nWITHIN TRANSACTION
+                activate DB #Red
+                DB --> DBConn: Rows affected
+                deactivate DB
+
+                DBConn --> FPRepo: OK
+                deactivate DBConn
+
+                FPRepo --> BLL: Relación eliminada
+                deactivate FPRepo
+            end
+        end
+
+        == 10. AGREGAR PATENTES NUEVAS ==
+
+        loop Para cada patenteSeleccionada
+            alt NO está en patentesActuales
+                BLL -> BLL: familiaPatente = new FamiliaPatente {\n  idFamilia, idPatente\n}
+
+                BLL -> FPRepo: Insert(familiaPatente, unitOfWork)
+                activate FPRepo
+
+                FPRepo -> DBConn: ExecuteNonQuery(\nconnection, transaction,\n"FamiliaPatente_Insert",\nparams)
+                activate DBConn #DarkSalmon
+
+                DBConn -> DB: EXEC FamiliaPatente_Insert\n@IdFamilia, @IdPatente\nWITHIN TRANSACTION
+                activate DB #Red
+                DB --> DBConn: Rows affected
+                deactivate DB
+
+                DBConn --> FPRepo: OK
+                deactivate DBConn
+
+                FPRepo --> BLL: Relación insertada
+                deactivate FPRepo
+            end
+        end
+
+        == 11. COMMIT DE TRANSACCIÓN ==
+
+        BLL -> UoW: Commit()
+        UoW -> DBConn: transaction.Commit()
+        DBConn --> UoW: COMMIT exitoso
+
+        note over DBConn
+          **TODAS LAS OPERACIONES CONFIRMADAS**
+          ======================================
+          DELETE + INSERT aplicados a BD.
+          Cambios permanentes.
+        end note
+
+        UoW -> DBConn: connection.Close()
+        deactivate DBConn
+
+        UoW --> BLL: Transacción completada
+        deactivate UoW
+
+        == 12. REGISTRO EN BITÁCORA ==
+
+        BLL -> BLL: usuarioLogueado = LoginService.GetUsuarioLogueado()
+
+        BLL -> BLL: patentesNombres = string.Join(\n", ", \npatentes.Select(p => p.FormName).Take(5))
+
+        BLL -> Bitacora: Registrar(\nusuarioLogueado.IdUsuario,\nusuarioLogueado.Nombre,\n"Permisos",\n"ActualizarPatentes",\ndetalle,\nCriticidadBitacora.Advertencia,\n"FamiliaPatente",\nidFamilia.ToString())
+        activate Bitacora
+
+        Bitacora -> DB: EXEC Bitacora_Insert\n@IdUsuario, @NombreUsuario,\n@Modulo, @Accion, @Detalle,\n@Criticidad, @TipoEntidad,\n@IdEntidad, @Fecha=GETDATE()
+        activate DB
+        DB --> Bitacora: OK
+        deactivate DB
+
+        Bitacora --> BLL: Registrado
+        deactivate Bitacora
+
+        BLL --> UI: Actualización exitosa
+        deactivate BLL
+
+        == 13. CONFIRMACIÓN AL USUARIO ==
+
+        UI -> UI: MessageBox.Show(\n"Permisos actualizados exitosamente",\nMessageBoxIcon.Information)
+
+        deactivate UI
+
+        [<-- Admin: Permisos actualizados
+
+    catch Exception durante transacción
+
+        == FLUJO ALTERNATIVO: ERROR Y ROLLBACK ==
+
+        note over DB
+          **ERROR DURANTE TRANSACCIÓN**
+          ==============================
+          Puede ser:
+          - SQLException (timeout, deadlock)
+          - ValidacionException
+          - Constraint violation
+        end note
+
+        DBConn --> FPRepo: SQLException
+        FPRepo --> BLL: Exception
+
+        BLL -> UoW: Rollback()
+        activate UoW
+
+        UoW -> DBConn: transaction.Rollback()
+        activate DBConn
+
+        note over DBConn
+          **ROLLBACK EJECUTADO**
+          ======================
+          TODAS las operaciones revertidas:
+          - Todos los DELETE cancelados
+          - Todos los INSERT cancelados
+
+          BD queda en estado ORIGINAL.
+          Atomicidad garantizada.
+        end note
+
+        DBConn --> UoW: ROLLBACK completado
+        UoW -> DBConn: connection.Close()
+        deactivate DBConn
+
+        UoW --> BLL: Rollback exitoso
+        deactivate UoW
+
+        BLL -> ExcMgr: Handle(ex)
+        activate ExcMgr
+
+        ExcMgr -> Bitacora: LogError(\n"Error al actualizar patentes del rol")
+        activate Bitacora
+        Bitacora -> DB: EXEC Bitacora_Insert\n(Error)
+        activate DB
+        DB --> Bitacora: OK
+        deactivate DB
+        Bitacora --> ExcMgr: OK
+        deactivate Bitacora
+
+        ExcMgr --> BLL: Excepción manejada
+        deactivate ExcMgr
+
+        BLL -> BLL: throw new Exception(\n"Error al actualizar patentes del rol", ex)
+        BLL --> UI: Exception
+        deactivate BLL
+
+        UI -> UI: MessageBox.Show(\n"Error al actualizar patentes: {mensaje}",\nMessageBoxIcon.Error)
+
+        deactivate UI
+
+        [<-- Admin: Error mostrado,\nsin cambios en BD
+    end
+end
+
+' ============================================================================
+' NOTAS TÉCNICAS
+' ============================================================================
+
+note over Admin, DB
+  **PATRONES APLICADOS:**
+  - Composite: Navegación recursiva de jerarquía Familia-Patente
+  - Unit of Work: Transacción atómica para múltiples operaciones
+  - Singleton: BLL (estático), Repositories (.Current), Bitacora
+  - Repository: Abstracción de acceso a datos
+
+  **RECURSIÓN COMPOSITE:**
+  ObtenerPatentesRecursivo() navega jerarquía completa:
+  1. Obtiene patentes directas de familia actual
+  2. Obtiene familias hijas de familia actual
+  3. Por cada hija: LLAMADA RECURSIVA (paso 1-3)
+  4. Acumula TODAS las patentes (directas + heredadas)
+  5. Elimina duplicados con GroupBy(IdComponent)
+
+  **UNIT OF WORK - ATOMICIDAD:**
+  1. BEGIN TRANSACTION
+  2. Múltiples DELETE (patentes removidas)
+  3. Múltiples INSERT (patentes agregadas)
+  4. Si TODO es exitoso: COMMIT
+  5. Si ALGO falla: ROLLBACK automático
+  → Garantiza que la BD nunca queda en estado inconsistente
+
+  **VENTAJAS:**
+  - Todo o nada (atomicidad)
+  - No deja relaciones huérfanas
+  - Rollback automático en errores
+  - Auditoría completa en Bitácora
+end note
+
+' ============================================================================
+' METADATOS
+' ============================================================================
+
+legend bottom
+  **ARCHIVOS INVOLUCRADOS:**
+  - UI: UI/WinUi/Administración/gestionPermisos.cs (líneas 376-449)
+  - BLL: ServicesSeguridad/BLL/FamiliaBLL.cs (líneas 13-101, 103-192)
+  - DAL: ServicesSeguridad/DAL/Implementations/FamiliaRepository.cs
+  - DAL: ServicesSeguridad/DAL/Implementations/FamiliaPatenteRepository.cs
+  - DAL: ServicesSeguridad/DAL/Implementations/PatenteRepository.cs
+  - Unit of Work: ServicesSeguridad/DAL/Implementations/SecurityUnitOfWork.cs
+
+  **STORED PROCEDURES:**
+  - Familia_SelectOne
+  - FamiliaPatente_GetChildrenRelations
+  - FamiliaPatente_DeleteRelacion
+  - FamiliaPatente_Insert
+  - FamiliaFamilia_GetChildrenRelations
+  - Patente_SelectOne
+  - Bitacora_Insert
+
+  **MÉTODOS CLAVE:**
+  - FamiliaBLL.ActualizarPatentesDeRol() - Unit of Work principal
+  - FamiliaBLL.ObtenerTodasLasPatentesDeRol() - Entrada a recursión
+  - FamiliaBLL.ObtenerPatentesRecursivo() - Recursión Composite
+  - FamiliaBLL.ObtenerPatentesDirectasDeFamilia() - No recursivo
+  - SecurityUnitOfWork.BeginTransaction(), Commit(), Rollback()
+
+  **ÚLTIMA ACTUALIZACIÓN:** 2025-01-16
+  **VERSIÓN:** 1.0
+  **RELACIONADO CON:** CU-A003_GESTIONAR_PERMISOS.txt
+endlegend
+
+@enduml

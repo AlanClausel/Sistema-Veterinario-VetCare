@@ -11,24 +11,66 @@ using BitacoraService = ServicesSecurity.Services.Bitacora;
 namespace BLL
 {
     /// <summary>
-    /// Capa de lógica de negocio para Mascotas
-    /// Implementa casos de uso y validaciones de negocio
+    /// Capa de lógica de negocio para la gestión de Mascotas.
+    /// Implementa casos de uso, reglas de negocio, validaciones y orquesta operaciones
+    /// entre repositorios relacionados (Mascota, Cliente, Cita).
+    /// Utiliza el patrón Singleton para garantizar una única instancia.
     /// </summary>
+    /// <remarks>
+    /// RESPONSABILIDADES:
+    /// - Validar reglas de negocio antes de persistir datos
+    /// - Orquestar operaciones entre múltiples repositorios (Mascota, Cliente, Cita)
+    /// - Verificar integridad referencial (cliente existe y está activo)
+    /// - Registrar operaciones en bitácora de auditoría
+    /// - Gestionar transacciones y manejo de excepciones
+    ///
+    /// REGLAS DE NEGOCIO:
+    /// - Una mascota debe pertenecer a un cliente existente y activo
+    /// - El nombre de la mascota debe tener al menos 2 caracteres
+    /// - La especie es obligatoria
+    /// - El peso debe ser mayor a 0 si se especifica
+    /// - Al eliminar una mascota, se eliminan también sus citas asociadas (cascade)
+    ///
+    /// AUDITORÍA:
+    /// Todas las operaciones CRUD se registran automáticamente en la bitácora del sistema.
+    /// </remarks>
     public class MascotaBLL
     {
+        /// <summary>
+        /// Repositorio de acceso a datos para mascotas
+        /// </summary>
         private readonly IMascotaRepository _mascotaRepository;
+
+        /// <summary>
+        /// Repositorio de acceso a datos para clientes (usado para validaciones)
+        /// </summary>
         private readonly IClienteRepository _clienteRepository;
+
+        /// <summary>
+        /// Repositorio de acceso a datos para citas (usado para verificar dependencias)
+        /// </summary>
         private readonly ICitaRepository _citaRepository;
 
         #region Singleton
 
+        /// <summary>
+        /// Instancia única de MascotaBLL (patrón Singleton thread-safe)
+        /// </summary>
         private static readonly MascotaBLL _instance = new MascotaBLL();
 
+        /// <summary>
+        /// Obtiene la instancia global de MascotaBLL.
+        /// Acceso thread-safe garantizado por el compilador de C#.
+        /// </summary>
         public static MascotaBLL Current
         {
             get { return _instance; }
         }
 
+        /// <summary>
+        /// Constructor privado para prevenir instanciación externa (patrón Singleton).
+        /// Inicializa las dependencias de repositorios.
+        /// </summary>
         private MascotaBLL()
         {
             _mascotaRepository = MascotaRepository.Current;
@@ -41,8 +83,28 @@ namespace BLL
         #region Casos de Uso - Crear Mascota
 
         /// <summary>
-        /// Caso de uso: Registrar una nueva mascota en el sistema
+        /// Caso de uso: Registrar una nueva mascota en el sistema.
+        /// Valida las reglas de negocio, verifica que el cliente existe y está activo,
+        /// persiste la mascota y registra la operación en bitácora.
         /// </summary>
+        /// <param name="mascota">Entidad Mascota con los datos a registrar</param>
+        /// <returns>Mascota creada con datos actualizados desde la base de datos</returns>
+        /// <exception cref="ArgumentNullException">Si mascota es null</exception>
+        /// <exception cref="ArgumentException">Si los datos de la mascota no cumplen las validaciones</exception>
+        /// <exception cref="InvalidOperationException">Si el cliente no existe o está inactivo</exception>
+        /// <example>
+        /// var nuevaMascota = new Mascota
+        /// {
+        ///     IdCliente = idCliente,
+        ///     Nombre = "Firulais",
+        ///     Especie = "Perro",
+        ///     Raza = "Labrador",
+        ///     FechaNacimiento = new DateTime(2020, 5, 15),
+        ///     Sexo = "Macho",
+        ///     Peso = 25.5m
+        /// };
+        /// var mascotaCreada = MascotaBLL.Current.RegistrarMascota(nuevaMascota);
+        /// </example>
         public Mascota RegistrarMascota(Mascota mascota)
         {
             try

@@ -1,0 +1,868 @@
+===============================================================================
+    CASO DE USO: CU-N011 - GENERAR REPORTES
+===============================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+ID:             CU-N011
+Nombre:         Generar Reportes
+Actor(es):      Administrador, Recepcionista, Veterinario
+Descripción:    Generación de reporte de citas con filtros por rango de fechas y
+                veterinario. Muestra listado cronológico de citas con código de
+                colores según estado, estadísticas agregadas (contador por estado),
+                y exportación a CSV. Filtros rápidos: "Semana Actual" y "Mes Actual"
+                configuran fechas automáticamente. ComboBox veterinarios con opción
+                "Todos" (sin filtro) o veterinario específico. Grid ordenado por
+                FechaCita ascendente. Validación: fecha desde <= fecha hasta.
+                Exportación genera archivo CSV con todas las columnas del grid,
+                formato UTF-8, nombre automático con timestamp.
+
+Precondiciones:
+  - Usuario autenticado
+
+Postcondiciones:
+  - Reporte visualizado con filtros aplicados
+  - Estadísticas calculadas y mostradas
+  - (Opcional) Archivo CSV exportado
+
+Frecuencia de Uso: Media (consultas periódicas)
+Criticidad:        Media (análisis de gestión)
+
+
+===============================================================================
+    FLUJO PRINCIPAL
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            OPERACIÓN 1: CARGAR REPORTE INICIAL (Semana Actual)             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Administrador/Recepcionista/     SISTEMA
+       Veterinario)
+────────────────────────────────────────┼────────────────────────────────────────
+1. Accede a "Reportes" desde menú       │
+Negocio                                 │
+                                        │ 2. Abre FormReportes
+                                        │ 3. Ejecuta FormReportes_Load()
+                                        │ 4. Ejecuta ConfigurarControles()
+                                        │ 5. Llama CargarVeterinarios():
+                                        │    - VeterinarioBLL.Current
+                                        │      .ListarVeterinariosActivos()
+                                        │    - Ordena por Nombre
+                                        │    - cmbVeterinario.Items.Clear()
+                                        │    - cmbVeterinario.Items.Add("Todos")
+                                        │    - Para cada veterinario:
+                                        │        cmbVeterinario.Items.Add(nombre)
+                                        │    - cmbVeterinario.SelectedIndex = 0
+                                        │      (selecciona "Todos")
+                                        │ 6. Configura DataGridView:
+                                        │    Columnas: Fecha, Hora, Cliente, Mascota,
+                                        │    Veterinario, TipoConsulta, Estado
+                                        │ 7. Calcula fechas semana actual:
+                                        │    hoy = DateTime.Today
+                                        │    inicioSemana = hoy.AddDays(-(int)hoy.DayOfWeek)
+                                        │    (Domingo de la semana actual)
+                                        │    finSemana = inicioSemana.AddDays(6)
+                                        │    (Sábado de la semana actual)
+                                        │ 8. Asigna valores a DateTimePickers:
+                                        │    dtpDesde.Value = inicioSemana
+                                        │    dtpHasta.Value = finSemana
+                                        │ 9. Ejecuta CargarReporteSemana()
+                                        │ 10. btnCargar.Enabled = false
+                                        │ 11. Cursor = Cursors.WaitCursor
+                                        │ 12. Obtiene fechaDesde = dtpDesde.Value.Date
+                                        │     fechaHasta = dtpHasta.Value.Date
+                                        │ 13. Valida fechaDesde <= fechaHasta
+                                        │ 14. Obtiene veterinario seleccionado:
+                                        │     IF cmbVeterinario.SelectedIndex == 0:
+                                        │       veterinarioSeleccionado = null (Todos)
+                                        │     ELSE:
+                                        │       veterinarioSeleccionado = nombre seleccionado
+                                        │ 15. Llama CitaBLL.Current
+                                        │     .ObtenerCitasPorRangoYVeterinario(
+                                        │       fechaDesde, fechaHasta,
+                                        │       veterinarioSeleccionado)
+                                        │ 16. BLL ejecuta SP:
+                                        │     EXEC Cita_SelectByRangoYVeterinario
+                                        │       @FechaDesde, @FechaHasta, @Veterinario
+                                        │ 17. SP retorna citas:
+                                        │     SELECT c.*, m.Nombre AS MascotaNombre,
+                                        │       cl.Nombre AS ClienteNombre, ...
+                                        │     FROM Cita c
+                                        │     INNER JOIN Mascota m ON ...
+                                        │     INNER JOIN Cliente cl ON ...
+                                        │     WHERE c.FechaCita >= @FechaDesde
+                                        │       AND c.FechaCita <= @FechaHasta
+                                        │       AND (@Veterinario IS NULL OR
+                                        │            c.Veterinario = @Veterinario)
+                                        │     ORDER BY c.FechaCita ASC
+                                        │ 18. Ordena en memoria:
+                                        │     citas.OrderBy(c => c.FechaCita)
+                                        │ 19. dgvCitasSemana.DataSource = citas
+                                        │ 20. Para cada fila en grid:
+                                        │     row.Cells["Hora"].Value = cita.HoraCita
+                                        │     row.Cells["Cliente"].Value =
+                                        │       "{ClienteNombre} {ClienteApellido}"
+                                        │ 21. Aplica código de colores según estado:
+                                        │     - Agendada: LightYellow (amarillo)
+                                        │     - Confirmada: LightGreen (verde)
+                                        │     - Completada: LightGray (gris)
+                                        │     - Cancelada: LightCoral (rojo coral)
+                                        │     - NoAsistio: LightSalmon (salmón)
+                                        │ 22. Ejecuta ActualizarEstadisticas(citas):
+                                        │     agendadas = citas.Count(c =>
+                                        │       c.Estado == Agendada)
+                                        │     confirmadas = citas.Count(c =>
+                                        │       c.Estado == Confirmada)
+                                        │     completadas = citas.Count(c =>
+                                        │       c.Estado == Completada)
+                                        │     canceladas = citas.Count(c =>
+                                        │       c.Estado == Cancelada)
+                                        │     noAsistio = citas.Count(c =>
+                                        │       c.Estado == NoAsistio)
+                                        │ 23. Actualiza labels estadísticas:
+                                        │     lblAgendadas.Text = "Agendadas: {agendadas}"
+                                        │     lblConfirmadas.Text = "Confirmadas: {confirmadas}"
+                                        │     lblCompletadas.Text = "Completadas: {completadas}"
+                                        │     lblCanceladas.Text = "Canceladas: {canceladas}
+                                        │       | No asistió: {noAsistio}"
+                                        │ 24. lblTotal.Text = "Total de citas: {count}"
+                                        │ 25. btnCargar.Enabled = true
+                                        │ 26. Cursor = Cursors.Default
+────────────────────────────────────────┼────────────────────────────────────────
+27. Visualiza reporte semana actual con │
+    grid de citas ordenadas, colores por│
+    estado, y estadísticas agregadas    │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            OPERACIÓN 2: FILTRAR POR RANGO DE FECHAS PERSONALIZADO          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Cambia dtpDesde: 01/01/2025          │
+2. Cambia dtpHasta: 31/01/2025          │
+────────────────────────────────────────┼────────────────────────────────────────
+3. Clic en "Cargar"                     │
+                                        │ 4. Ejecuta btnCargar_Click()
+                                        │ 5. Llama CargarReporteSemana()
+                                        │ 6. Obtiene fechas seleccionadas
+                                        │ 7. Valida fechaDesde <= fechaHasta
+                                        │ 8. Obtiene veterinario ("Todos" por defecto)
+                                        │ 9. Llama CitaBLL.ObtenerCitasPorRangoYVeterinario()
+                                        │ 10. Recarga grid con citas del mes enero
+                                        │ 11. Recalcula estadísticas
+                                        │ 12. Actualiza lblTotal
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 3: FILTRAR POR VETERINARIO ESPECÍFICO               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona en cmbVeterinario:        │
+   "Dr. Martínez"                       │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Cargar"                     │
+                                        │ 3. Ejecuta btnCargar_Click()
+                                        │ 4. Llama CargarReporteSemana()
+                                        │ 5. Obtiene veterinarioSeleccionado:
+                                        │    IF cmbVeterinario.SelectedIndex > 0:
+                                        │      veterinarioSeleccionado = "Dr. Martínez"
+                                        │ 6. Llama CitaBLL.ObtenerCitasPorRangoYVeterinario(
+                                        │    fechaDesde, fechaHasta, "Dr. Martínez")
+                                        │ 7. SP filtra WHERE Veterinario = "Dr. Martínez"
+                                        │ 8. Retorna SOLO citas de ese veterinario
+                                        │ 9. Recarga grid con citas filtradas
+                                        │ 10. Recalcula estadísticas (solo de ese vet)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 4: ATAJO "SEMANA ACTUAL"                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Clic en "Semana Actual"              │
+                                        │ 2. Ejecuta btnSemanaActual_Click()
+                                        │ 3. Calcula fechas:
+                                        │    hoy = DateTime.Today
+                                        │    inicioSemana = hoy.AddDays(-(int)hoy.DayOfWeek)
+                                        │    finSemana = inicioSemana.AddDays(6)
+                                        │ 4. Asigna valores:
+                                        │    dtpDesde.Value = inicioSemana (Domingo)
+                                        │    dtpHasta.Value = finSemana (Sábado)
+                                        │ 5. Llama CargarReporteSemana()
+                                        │    automáticamente
+                                        │ 6. Recarga grid con semana actual
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 5: ATAJO "MES ACTUAL"                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Clic en "Mes Actual"                 │
+                                        │ 2. Ejecuta btnMesActual_Click()
+                                        │ 3. Calcula fechas:
+                                        │    hoy = DateTime.Today
+                                        │    inicioMes = new DateTime(hoy.Year,
+                                        │      hoy.Month, 1)
+                                        │    finMes = inicioMes.AddMonths(1).AddDays(-1)
+                                        │    EJEMPLO: si hoy = 16/01/2025
+                                        │      inicioMes = 01/01/2025
+                                        │      finMes = 31/01/2025
+                                        │ 4. Asigna valores:
+                                        │    dtpDesde.Value = inicioMes
+                                        │    dtpHasta.Value = finMes
+                                        │ 5. Llama CargarReporteSemana()
+                                        │    automáticamente
+                                        │ 6. Recarga grid con mes completo
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 6: EXPORTAR REPORTE A CSV                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Tiene citas cargadas en grid         │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Exportar"                   │
+                                        │ 3. Ejecuta btnExportar_Click()
+                                        │ 4. Valida dgvCitasSemana.Rows.Count > 0
+                                        │ 5. Crea SaveFileDialog:
+                                        │    Filter = "Archivos CSV (*.csv)|*.csv"
+                                        │    FileName = "Reporte_Citas_20250116_143022.csv"
+                                        │    (formato: yyyyMMdd_HHmmss)
+                                        │ 6. saveDialog.ShowDialog()
+────────────────────────────────────────┼────────────────────────────────────────
+7. Selecciona ubicación y nombre:       │
+   C:\Reportes\Citas_Enero.csv          │
+────────────────────────────────────────┼────────────────────────────────────────
+8. Clic en "Guardar"                    │
+                                        │ 9. DialogResult == OK
+                                        │ 10. Llama ExportarACSV(rutaArchivo)
+                                        │ 11. Crea StreamWriter con encoding UTF-8:
+                                        │     using (var writer = new StreamWriter(
+                                        │       rutaArchivo, false, Encoding.UTF8))
+                                        │ 12. Escribe encabezados (primera línea):
+                                        │     writer.WriteLine(
+                                        │       "Fecha,Hora,Cliente,Mascota,
+                                        │        Veterinario,TipoConsulta,Estado")
+                                        │ 13. Para cada fila en dgvCitasSemana:
+                                        │     IF row.DataBoundItem is Cita cita:
+                                        │       fecha = cita.FechaCita.ToString("dd/MM/yyyy")
+                                        │       hora = cita.HoraCita
+                                        │       cliente = "{ClienteNombre} {ClienteApellido}"
+                                        │       mascota = cita.MascotaNombre
+                                        │       veterinario = cita.Veterinario
+                                        │       tipoConsulta = cita.TipoConsulta
+                                        │       estado = cita.EstadoDescripcion
+                                        │       writer.WriteLine(
+                                        │         "{fecha},{hora},{cliente},{mascota},
+                                        │          {veterinario},{tipoConsulta},{estado}")
+                                        │ 14. Cierra StreamWriter (using)
+                                        │ 15. Muestra MessageBox:
+                                        │     "Reporte exportado exitosamente"
+                                        │     Tipo: Information
+────────────────────────────────────────┼────────────────────────────────────────
+16. Archivo CSV generado en ubicación   │
+    seleccionada                        │
+                                        │
+17. Abre archivo CSV con Excel:         │
+    Fecha      | Hora  | Cliente        │
+    15/01/2025 | 10:00 | Juan Pérez     │
+    15/01/2025 | 11:30 | María González │
+    ...                                 │
+
+
+===============================================================================
+    FLUJOS ALTERNATIVOS
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            FA-1: FECHA DESDE MAYOR QUE FECHA HASTA (Validación)            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 2, paso 7:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Configura fechas:                    │
+   dtpDesde: 31/01/2025                 │
+   dtpHasta: 01/01/2025                 │
+   (desde > hasta)                      │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Cargar"                     │
+                                        │ 3. Ejecuta CargarReporteSemana()
+                                        │ 4. Valida fechaDesde > fechaHasta:
+                                        │    (31/01 > 01/01: TRUE)
+                                        │ 5. Muestra MessageBox:
+                                        │    "La fecha desde no puede ser mayor
+                                        │     que la fecha hasta"
+                                        │    Tipo: Warning
+                                        │ 6. return → NO continúa con consulta
+                                        │ 7. Grid queda sin cambios
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-2: SIN CITAS EN RANGO SELECCIONADO                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 2, paso 17:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona rango futuro sin citas:   │
+   01/12/2025 - 31/12/2025              │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Cargar"                     │
+                                        │ 3. Ejecuta consulta
+                                        │ 4. SP retorna lista vacía (0 citas)
+                                        │ 5. dgvCitasSemana.DataSource = lista vacía
+                                        │ 6. Grid muestra 0 filas
+                                        │ 7. ActualizarEstadisticas(citas):
+                                        │    IF citas.Count == 0:
+                                        │      lblAgendadas.Text = "Agendadas: 0"
+                                        │      lblConfirmadas.Text = "Confirmadas: 0"
+                                        │      lblCompletadas.Text = "Completadas: 0"
+                                        │      lblCanceladas.Text = "Canceladas: 0
+                                        │        | No asistió: 0"
+                                        │ 8. lblTotal.Text = "Total de citas: 0"
+────────────────────────────────────────┼────────────────────────────────────────
+9. Visualiza grid vacío con estadísticas│
+   en 0 (resultado válido, no error)    │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-3: SIN DATOS PARA EXPORTAR                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6, paso 4:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Grid vacío (0 citas cargadas)        │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Exportar"                   │
+                                        │ 3. Ejecuta btnExportar_Click()
+                                        │ 4. Valida dgvCitasSemana.Rows.Count == 0:
+                                        │    (TRUE - grid vacío)
+                                        │ 5. Muestra MessageBox:
+                                        │    "No hay datos para exportar"
+                                        │    Tipo: Information
+                                        │ 6. return → NO abre SaveFileDialog
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-4: CANCELAR EXPORTACIÓN EN SAVEDIALOG                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6, paso 8:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. SaveFileDialog abierto               │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Cancelar" (o cierra ventana)│
+                                        │ 3. DialogResult == Cancel
+                                        │ 4. IF (saveDialog.ShowDialog() == OK):
+                                        │    (FALSE - no entra al bloque)
+                                        │ 5. NO ejecuta ExportarACSV()
+                                        │ 6. NO genera archivo
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-5: ERROR AL CARGAR VETERINARIOS                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1, paso 5:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Abre FormReportes                    │
+                                        │ 2. Ejecuta CargarVeterinarios()
+                                        │ 3. Llama VeterinarioBLL.ListarVeterinariosActivos()
+                                        │ 4. Excepción (ej: BD no disponible)
+                                        │ 5. Catch:
+                                        │    Muestra MessageBox:
+                                        │      "Error al cargar veterinarios:
+                                        │       {ex.Message}"
+                                        │    Tipo: Error
+                                        │ 6. cmbVeterinario queda vacío
+                                        │ 7. Formulario continúa cargando
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-6: ERROR AL EXPORTAR (Archivo en Uso)                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6, paso 10:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona archivo CSV que está      │
+   abierto en Excel                     │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Guardar"                    │
+                                        │ 3. Llama ExportarACSV(rutaArchivo)
+                                        │ 4. Intenta crear StreamWriter
+                                        │ 5. Excepción: IOException (archivo en uso)
+                                        │ 6. Catch en btnExportar_Click():
+                                        │    Muestra MessageBox:
+                                        │      "Error al exportar: El proceso no
+                                        │       puede obtener acceso al archivo..."
+                                        │    Tipo: Error
+                                        │ 7. NO genera archivo
+
+
+===============================================================================
+    REGLAS DE NEGOCIO
+===============================================================================
+
+RN-N011-01: FECHA DESDE <= FECHA HASTA
+  - Validación obligatoria antes de consultar BD
+  - Si fechaDesde > fechaHasta: muestra advertencia y NO consulta
+  - Previene consultas inválidas
+  - Implementado en: FormReportes.CargarReporteSemana() líneas 151-156
+
+RN-N011-02: SEMANA INICIA DOMINGO
+  - Cálculo de semana actual: DayOfWeek.Sunday = 0
+  - inicioSemana = hoy.AddDays(-(int)hoy.DayOfWeek)
+  - Convención: domingo inicio, sábado fin
+  - Implementado en: FormReportes.ConfigurarControles() líneas 104-109
+
+RN-N011-03: ORDENAMIENTO CRONOLÓGICO ASCENDENTE
+  - Citas ordenadas por FechaCita ascendente (más antigua primero)
+  - .OrderBy(c => c.FechaCita)
+  - Facilita lectura secuencial de agenda
+  - Implementado en: FormReportes.CargarReporteSemana() línea 168
+
+RN-N011-04: CÓDIGO DE COLORES SEGÚN ESTADO
+  - Agendada: LightYellow (amarillo)
+  - Confirmada: LightGreen (verde)
+  - Completada: LightGray (gris)
+  - Cancelada: LightCoral (rojo coral)
+  - NoAsistio: LightSalmon (salmón)
+  - Mismo código de colores que gestionCitas (consistencia)
+  - Implementado en: FormReportes.CargarReporteSemana() líneas 179-196
+
+RN-N011-05: FILTRO VETERINARIO OPCIONAL
+  - "Todos" (SelectedIndex = 0): veterinarioSeleccionado = null → NO filtra
+  - Veterinario específico: WHERE Veterinario = @Veterinario
+  - Filtro en SP (eficiente)
+  - Implementado en: FormReportes.CargarReporteSemana() líneas 159-163
+
+RN-N011-06: ESTADÍSTICAS AGREGADAS
+  - Contador por cada estado: Agendadas, Confirmadas, Completadas, Canceladas, No Asistió
+  - Calculadas con LINQ .Count(c => c.Estado == ...)
+  - Total de citas: citas.Count
+  - Actualizadas automáticamente al recargar
+  - Implementado en: FormReportes.ActualizarEstadisticas() líneas 217-238
+
+RN-N011-07: EXPORTACIÓN CSV UTF-8
+  - Formato CSV (Comma-Separated Values)
+  - Encoding UTF-8 para caracteres especiales (ñ, á, etc.)
+  - Primera línea: encabezados
+  - Filas siguientes: datos de citas
+  - Compatible con Excel
+  - Implementado en: FormReportes.ExportarACSV() líneas 305-329
+
+RN-N011-08: NOMBRE ARCHIVO CON TIMESTAMP
+  - FileName = "Reporte_Citas_{yyyyMMdd_HHmmss}.csv"
+  - Timestamp evita sobrescribir reportes anteriores
+  - Usuario puede renombrar en SaveFileDialog
+  - Implementado en: FormReportes.btnExportar_Click() línea 288
+
+RN-N011-09: CURSOR WAIT DURANTE CARGA
+  - Cursor = Cursors.WaitCursor mientras consulta BD
+  - Cursor = Cursors.Default al terminar (finally)
+  - Feedback visual de operación en progreso
+  - Implementado en: FormReportes.CargarReporteSemana() líneas 146, 213
+
+RN-N011-10: BOTÓN CARGAR DESHABILITADO DURANTE CONSULTA
+  - btnCargar.Enabled = false antes de consultar
+  - btnCargar.Enabled = true al terminar (finally)
+  - Previene múltiples clics simultáneos
+  - Implementado en: FormReportes.CargarReporteSemana() líneas 145, 212
+
+
+===============================================================================
+    EXCEPCIONES Y MANEJO DE ERRORES
+===============================================================================
+
+EX-N011-01: ERROR AL CARGAR FORMULARIO
+  Condición:    Excepción en FormReportes_Load()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar formulario: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormReportes.cs (líneas 33-37)
+
+EX-N011-02: ERROR AL CARGAR VETERINARIOS
+  Condición:    Excepción en CargarVeterinarios()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar veterinarios: {ex.Message}"
+  Acción:       Muestra error, cmbVeterinario vacío, continúa
+  Código:       FormReportes.cs (líneas 134-138)
+
+EX-N011-03: FECHA DESDE MAYOR QUE FECHA HASTA
+  Condición:    fechaDesde > fechaHasta
+  Validación:   CargarReporteSemana()
+  Mensaje:      "La fecha desde no puede ser mayor que la fecha hasta"
+  Acción:       Muestra advertencia, NO consulta BD
+  Código:       FormReportes.cs (líneas 151-156)
+
+EX-N011-04: ERROR AL CARGAR REPORTE
+  Condición:    Excepción en CargarReporteSemana()
+  Manejo:       Catch
+  Mensaje:      "Error al cargar reporte: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormReportes.cs (líneas 205-209)
+
+EX-N011-05: SIN DATOS PARA EXPORTAR
+  Condición:    dgvCitasSemana.Rows.Count == 0
+  Validación:   btnExportar_Click()
+  Mensaje:      "No hay datos para exportar"
+  Acción:       Muestra información, NO abre SaveFileDialog
+  Código:       FormReportes.cs (líneas 278-283)
+
+EX-N011-06: ERROR AL EXPORTAR
+  Condición:    Excepción en btnExportar_Click() o ExportarACSV()
+  Manejo:       Catch
+  Mensaje:      "Error al exportar: {ex.Message}"
+  Acción:       Muestra error (ej: archivo en uso)
+  Código:       FormReportes.cs (líneas 298-302)
+
+
+===============================================================================
+    VALIDACIONES
+===============================================================================
+
+VALIDACIONES DE FECHAS:
+------------------------
+V-N011-01: Fecha desde <= fecha hasta
+  - Regla: fechaDesde <= fechaHasta
+  - Momento: Al ejecutar CargarReporteSemana()
+  - Acción si falla: Muestra advertencia, NO continúa
+  - Código: FormReportes.cs (líneas 151-156)
+
+VALIDACIONES DE DATOS:
+-----------------------
+V-N011-02: Grid con datos para exportar
+  - Regla: dgvCitasSemana.Rows.Count > 0
+  - Momento: Al hacer clic en "Exportar"
+  - Acción si falla: Muestra información, NO abre SaveFileDialog
+  - Código: FormReportes.cs (líneas 278-283)
+
+
+===============================================================================
+    REQUERIMIENTOS NO FUNCIONALES
+===============================================================================
+
+RNF-N011-01: USABILIDAD - ATAJOS FECHAS RÁPIDAS
+  - Botones "Semana Actual" y "Mes Actual" configuran fechas automáticamente
+  - Evita selección manual de fechas para casos comunes
+  - Mejora eficiencia en consultas frecuentes
+
+RNF-N011-02: USABILIDAD - CURSOR WAIT
+  - Cursor reloj de arena durante consulta a BD
+  - Feedback visual inmediato de operación en progreso
+  - Usuario sabe que sistema está procesando
+
+RNF-N011-03: USABILIDAD - BOTÓN DESHABILITADO
+  - btnCargar deshabilitado durante consulta
+  - Previene doble clic accidental
+  - Evita múltiples consultas simultáneas
+
+RNF-N011-04: RENDIMIENTO - FILTRO EN STORED PROCEDURE
+  - Filtro por veterinario en SP (WHERE en SQL)
+  - Más eficiente que traer todas y filtrar en memoria
+  - Reduce tráfico de red
+
+RNF-N011-05: LEGIBILIDAD - CÓDIGO DE COLORES
+  - Colores consistentes con gestionCitas
+  - Identificación visual rápida de estados
+  - Verde = confirmada, Gris = completada, etc.
+
+RNF-N011-06: COMPATIBILIDAD - CSV UTF-8
+  - Encoding UTF-8 soporta caracteres especiales (ñ, á, etc.)
+  - Compatible con Excel (abre directamente)
+  - Compatible con LibreOffice, Google Sheets, etc.
+
+RNF-N011-07: USABILIDAD - NOMBRE ARCHIVO CON TIMESTAMP
+  - Evita sobrescribir reportes anteriores
+  - Facilita organización de reportes históricos
+  - Usuario puede renombrar en SaveFileDialog
+
+RNF-N011-08: EXTENSIBILIDAD - ESTADÍSTICAS AGREGADAS
+  - Contadores por estado útiles para análisis
+  - Fácil agregar más estadísticas (ej: promedio por veterinario)
+  - Base para futuros reportes analíticos
+
+RNF-N011-09: MANTENIBILIDAD - SEPARACIÓN CSV EXPORT
+  - Método ExportarACSV() separado de btnExportar_Click()
+  - Reutilizable para otros formatos/exportaciones
+  - Código limpio y modular
+
+RNF-N011-10: TRADUCCIÓN - MULTI-IDIOMA
+  - TODOS los textos traducidos (labels, mensajes, headers CSV)
+  - LanguageManager.Translate() para cada string
+  - Soporta es-AR / en-GB
+
+
+===============================================================================
+    ARCHIVOS INVOLUCRADOS
+===============================================================================
+
+CAPA UI (Presentación):
+-----------------------
+FormReportes.cs
+  Ruta: UI/WinUi/Negocio/FormReportes.cs
+  Líneas: 332
+  Responsabilidad:
+    - Generación de reporte de citas con filtros
+    - Visualización con código de colores
+    - Cálculo de estadísticas agregadas
+    - Exportación a CSV
+  Métodos clave:
+    - FormReportes_Load() → Línea 26
+    - ConfigurarControles() → Línea 40
+    - CargarVeterinarios() → Línea 112
+    - CargarReporteSemana() → Línea 141
+    - ActualizarEstadisticas(List<Cita>) → Línea 217
+    - btnCargar_Click() → Línea 240
+    - btnSemanaActual_Click() → Línea 245
+    - btnMesActual_Click() → Línea 257
+    - btnExportar_Click() → Línea 274
+    - ExportarACSV(string) → Línea 305
+
+CAPA BLL (Lógica de Negocio):
+------------------------------
+CitaBLL.cs
+  Métodos usados:
+    - ObtenerCitasPorRangoYVeterinario(DateTime, DateTime, string)
+
+VeterinarioBLL.cs
+  Métodos usados:
+    - ListarVeterinariosActivos()
+
+CAPA DOMINIO:
+-------------
+Cita.cs
+  Propiedades usadas:
+    - FechaCita, HoraCita, Estado, EstadoDescripcion
+    - ClienteNombre, ClienteApellido, MascotaNombre
+    - Veterinario, TipoConsulta
+
+EstadoCita.cs (enum)
+  Valores:
+    - Agendada, Confirmada, Completada, Cancelada, NoAsistio
+
+BASE DE DATOS:
+--------------
+Stored Procedures (VetCareDB):
+  Cita_SelectByRangoYVeterinario
+    Parámetros:
+      - @FechaDesde : datetime
+      - @FechaHasta : datetime
+      - @Veterinario : nvarchar(200) (nullable)
+    Retorna:
+      SELECT c.*, m.Nombre AS MascotaNombre,
+        cl.Nombre AS ClienteNombre,
+        cl.Apellido AS ClienteApellido
+      FROM Cita c
+      INNER JOIN Mascota m ON c.IdMascota = m.IdMascota
+      INNER JOIN Cliente cl ON m.IdCliente = cl.IdCliente
+      WHERE c.FechaCita >= @FechaDesde
+        AND c.FechaCita <= @FechaHasta
+        AND (@Veterinario IS NULL OR c.Veterinario = @Veterinario)
+      ORDER BY c.FechaCita ASC
+
+  Veterinario_SelectAll
+    Retorna: Todos los veterinarios activos
+
+SERVICIOS:
+----------
+LanguageManager.cs
+  Método usado: Translate(key)
+
+FORMATO EXPORTACIÓN:
+--------------------
+Archivo CSV:
+  - Nombre: Reporte_Citas_{timestamp}.csv
+  - Encoding: UTF-8
+  - Separador: coma (,)
+  - Estructura:
+    Línea 1: Fecha,Hora,Cliente,Mascota,Veterinario,TipoConsulta,Estado
+    Línea 2+: {datos de cada cita}
+  - Ejemplo:
+    15/01/2025,10:00,Juan Pérez,Rex,Dr. Martínez,Consulta General,Completada
+    15/01/2025,11:30,María López,Michi,Dr. González,Vacunación,Confirmada
+
+
+===============================================================================
+    PATRONES DE DISEÑO APLICADOS
+===============================================================================
+
+PATRÓN 1: SINGLETON
+-------------------
+Aplicado en:
+  - CitaBLL.Current
+  - VeterinarioBLL.Current
+
+Justificación:
+  - Servicios sin estado compartidos
+  - Instancia única en aplicación
+
+PATRÓN 2: REPOSITORY
+--------------------
+Aplicado en:
+  - CitaRepository (acceso a datos de citas)
+
+Justificación:
+  - Abstracción de acceso a datos
+  - SP ObtenerCitasPorRangoYVeterinario encapsula consulta compleja
+
+PATRÓN 3: ADAPTER
+-----------------
+Aplicado en:
+  - CitaAdapter (DataRow → Cita entity)
+
+Justificación:
+  - Conversión entre estructura BD y modelo dominio
+
+PATRÓN 4: TEMPLATE METHOD (Atajos Fechas)
+------------------------------------------
+Aplicado en:
+  - btnSemanaActual_Click() y btnMesActual_Click()
+
+Justificación:
+  - Estructura común: calcular fechas → asignar DateTimePickers → llamar CargarReporteSemana()
+  - Solo varía el cálculo de fechas (semana vs mes)
+
+Implementación:
+  1. Calcular fechas específicas
+  2. dtpDesde.Value = inicio
+  3. dtpHasta.Value = fin
+  4. CargarReporteSemana()
+
+
+===============================================================================
+    TRAZABILIDAD
+===============================================================================
+
+RELACIONADO CON:
+----------------
+CU-N003: Gestionar Citas
+  - Reporte usa mismas citas que gestionCitas
+  - Código de colores idéntico (consistencia UX)
+  - Estados: Agendada, Confirmada, Completada, Cancelada, NoAsistió
+
+CU-N005: Ver Mis Citas
+  - Reporte muestra TODAS las citas (no filtradas por veterinario logueado)
+  - Filtro veterinario opcional (puede seleccionar veterinario específico)
+
+CU-A004: Consultar Bitácora
+  - Reporte NO registra en bitácora (solo lectura)
+  - No modifica datos
+
+PATENTES REQUERIDAS:
+--------------------
+NO REQUIERE PATENTE ESPECÍFICA
+  - Acceso abierto para Administrador, Recepcionista, Veterinario
+  - Funcionalidad de consulta y análisis
+
+TABLAS RELACIONADAS:
+--------------------
+Cita → Mascota → Cliente
+Cita → Veterinario (relación por nombre, no FK)
+
+Flujo de datos:
+  1. Filtros: Rango de fechas + Veterinario (opcional)
+  2. SP retorna citas con JOINs a Mascota y Cliente
+  3. UI muestra y calcula estadísticas
+  4. Exportación genera CSV con datos del grid
+
+
+===============================================================================
+    NOTAS DE IMPLEMENTACIÓN
+===============================================================================
+
+NOTA 1: SEMANA DOMINGO A SÁBADO
+  - DayOfWeek.Sunday = 0, Monday = 1, ..., Saturday = 6
+  - hoy.AddDays(-(int)hoy.DayOfWeek) calcula domingo de semana actual
+  - Convención estadounidense (domingo inicio)
+  - Alternativa: semana lunes-domingo requiere ajuste
+
+NOTA 2: FILTRO NULL EN SP
+  - @Veterinario IS NULL OR Veterinario = @Veterinario
+  - Si @Veterinario es NULL: retorna todas las citas
+  - Si @Veterinario tiene valor: filtra por ese veterinario
+  - Patrón común para filtros opcionales en SQL
+
+NOTA 3: LINQ COUNT CON PREDICADO
+  - citas.Count(c => c.Estado == EstadoCita.Agendada)
+  - Más eficiente que citas.Where(...).Count()
+  - Calcula directamente en una pasada
+
+NOTA 4: CSV SIN COMILLAS EN CAMPOS
+  - writer.WriteLine($"{fecha},{hora},...")
+  - NO usa comillas alrededor de campos
+  - Funciona si valores NO contienen comas
+  - Si valores pueden tener comas: agregar comillas y escape
+
+NOTA 5: USING PARA STREAMWRITER
+  - using (var writer = new StreamWriter(...))
+  - Garantiza cierre automático de archivo
+  - Libera recursos incluso si hay excepción
+
+NOTA 6: ENCODING UTF-8
+  - StreamWriter(..., false, Encoding.UTF8)
+  - Segundo parámetro false: NO append (sobrescribir)
+  - UTF-8 soporta caracteres latinos (ñ, á, ü, etc.)
+
+NOTA 7: TIMESTAMP EN NOMBRE ARCHIVO
+  - DateTime.Now.ToString("yyyyMMdd_HHmmss")
+  - Ejemplo: 20250116_143022
+  - Ordenamiento cronológico natural en explorador
+
+NOTA 8: FINALLY PARA CLEANUP
+  - finally { btnCargar.Enabled = true; Cursor = Default; }
+  - Se ejecuta SIEMPRE (incluso si hay return en try)
+  - Garantiza restauración de estado UI
+
+NOTA 9: ESTADÍSTICAS EN 0 SI VACÍO
+  - IF (citas == null || citas.Count == 0): labels en 0
+  - Evita NullReferenceException
+  - Muestra información coherente con grid vacío
+
+NOTA 10: ORDERBYDESCENDING VS ORDERBY
+  - SP usa ORDER BY FechaConsulta DESC en consultas médicas
+  - Reporte usa OrderBy(c => c.FechaCita) ASC
+  - Criterio: historial médico más reciente primero, agenda cronológica
+
+
+===============================================================================
+    METADATOS
+===============================================================================
+
+Autor:              Sistema VetCare
+Versión:            1.0
+Fecha Creación:     2025-01-16
+Última Actualización: 2025-01-16
+Revisado por:       Claude Code
+Estado:             ✅ COMPLETO
+
+Archivos relacionados:
+  - CU-N003_Template_EA.txt (Gestionar Citas)
+  - CU-N005_Template_EA.txt (Ver Mis Citas)
+
+Casos de Uso relacionados:
+  - Reporte basado en datos de CU-N003 (Gestionar Citas)
+  - Filtro veterinario similar a CU-N005 (Ver Mis Citas)
+
+===============================================================================

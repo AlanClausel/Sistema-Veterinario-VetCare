@@ -1,0 +1,274 @@
+@startuml CU-N001_DiagramaClases
+title CU-N001: Gestionar Clientes - Diagrama de Clases (Resumido)
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA PRESENTACIÓN
+' ═══════════════════════════════════════════════════════════════
+
+package "UI - Presentación" {
+    class FormGestionClientes {
+        - _clienteSeleccionado : Cliente
+        - _modoEdicion : bool
+        + FormGestionClientes()
+        + FormGestionClientes_Load()
+        + CargarClientes()
+        + LimpiarCampos()
+        + btnNuevo_Click()
+        + btnGuardar_Click()
+        + btnModificar_Click()
+        + btnEliminar_Click()
+        + btnBuscar_Click()
+        + dgvClientes_SelectionChanged()
+        - ValidarCampos() : bool
+        - MostrarClienteEnFormulario(cliente)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA LÓGICA DE NEGOCIO (BLL)
+' ═══════════════════════════════════════════════════════════════
+
+package "BLL - Lógica de Negocio" {
+    class ClienteBLL <<Singleton>> {
+        {static} + Current : ClienteBLL
+        {static} - _instance : ClienteBLL
+        + ListarClientesActivos() : List<Cliente>
+        + RegistrarCliente(cliente) : Cliente
+        + ModificarCliente(cliente) : void
+        + EliminarCliente(idCliente) : void
+        + BuscarClientePorDNI(dni) : Cliente
+        + ObtenerClientePorId(idCliente) : Cliente
+        + ExisteDNI(dni) : bool
+        + ExisteDNI(dni, idClienteExcluido) : bool
+        - ValidarCliente(cliente) : void
+    }
+
+    class MascotaBLL <<Singleton>> {
+        {static} + Current : MascotaBLL
+        + ListarMascotasPorCliente(idCliente) : List<Mascota>
+        + EliminarMascotasPorCliente(idCliente) : void
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA ACCESO A DATOS (REPOSITORY)
+' ═══════════════════════════════════════════════════════════════
+
+package "DAL - Acceso a Datos" {
+    interface IClienteRepository {
+        + ObtenerTodos() : List<Cliente>
+        + ObtenerPorId(idCliente) : Cliente
+        + BuscarPorDNI(dni) : Cliente
+        + Crear(cliente) : void
+        + Actualizar(cliente) : void
+        + Eliminar(idCliente) : void
+        + ExisteDNI(dni) : bool
+        + ExisteDNI(dni, idClienteExcluido) : bool
+    }
+
+    class ClienteRepository <<Singleton>> {
+        {static} + Current : ClienteRepository
+        {static} - _instance : ClienteRepository
+        + ObtenerTodos() : List<Cliente>
+        + ObtenerPorId(idCliente) : Cliente
+        + BuscarPorDNI(dni) : Cliente
+        + Crear(cliente) : void
+        + Actualizar(cliente) : void
+        + Eliminar(idCliente) : void
+        + ExisteDNI(dni) : bool
+        + ExisteDNI(dni, idClienteExcluido) : bool
+        - ExecuteStoredProcedure()
+    }
+
+    class ClienteAdapter {
+        {static} + AdaptarDesdeDataRow(row) : Cliente
+        {static} + AdaptarListaDesdeDataTable(dt) : List<Cliente>
+    }
+
+    class SqlHelper {
+        {static} + ExecuteNonQuery(sp, params)
+        {static} + ExecuteScalar(sp, params)
+        {static} + ExecuteDataTable(sp, params)
+        {static} + ExecuteReader(sp, params)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  CAPA DOMINIO (ENTIDADES)
+' ═══════════════════════════════════════════════════════════════
+
+package "Domain - Entidades" {
+    class Cliente {
+        + IdCliente : Guid
+        + Nombre : string
+        + Apellido : string
+        + DNI : string
+        + Telefono : string
+        + Email : string
+        + Direccion : string
+        + FechaRegistro : DateTime
+        + Activo : bool
+        + NombreCompleto : string <<get>>
+        + Validar() : void
+    }
+
+    class Mascota {
+        + IdMascota : Guid
+        + IdCliente : Guid
+        + Nombre : string
+        + Especie : string
+        + Raza : string
+        + FechaNacimiento : DateTime
+        + Activo : bool
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  STORED PROCEDURES (BASE DE DATOS)
+' ═══════════════════════════════════════════════════════════════
+
+package "Database - Stored Procedures" {
+    class "SP: Cliente_SelectAll" as SPSelectAll <<Stored Procedure>> {
+        + Retorna: clientes activos (Activo = 1)
+        + Ordenado por: Apellido, Nombre
+    }
+
+    class "SP: Cliente_SelectOne" as SPSelectOne <<Stored Procedure>> {
+        + @IdCliente : Guid
+        + Retorna: cliente por ID
+    }
+
+    class "SP: Cliente_SelectByDNI" as SPSelectByDNI <<Stored Procedure>> {
+        + @DNI : string
+        + Retorna: cliente por DNI único
+    }
+
+    class "SP: Cliente_Insert" as SPInsert <<Stored Procedure>> {
+        + @IdCliente : Guid
+        + @Nombre, @Apellido, @DNI, @Telefono
+        + @Email, @Direccion, @FechaRegistro
+        + INSERT INTO Cliente (...)
+        + Validación: DNI único
+    }
+
+    class "SP: Cliente_Update" as SPUpdate <<Stored Procedure>> {
+        + @IdCliente : Guid
+        + @Nombre, @Apellido, @DNI, ...
+        + UPDATE Cliente SET ...
+        + Validación: DNI único (excluye mismo cliente)
+    }
+
+    class "SP: Cliente_Delete" as SPDelete <<Stored Procedure>> {
+        + @IdCliente : Guid
+        + Soft delete: UPDATE Cliente SET Activo = 0
+        + Cascada: UPDATE Mascota SET Activo = 0
+    }
+
+    class "SP: Cliente_ExisteDNI" as SPExisteDNI <<Stored Procedure>> {
+        + @DNI : string
+        + @IdClienteExcluido : Guid (opcional)
+        + Retorna: 1 si existe, 0 si no existe
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  SERVICIOS
+' ═══════════════════════════════════════════════════════════════
+
+package "Services" {
+    class Bitacora <<Singleton>> {
+        {static} + Current : Bitacora
+        + RegistrarAlta(usuario, modulo, entidad, id, detalle)
+        + RegistrarModificacion(usuario, modulo, entidad, id, detalle)
+        + RegistrarBaja(usuario, modulo, entidad, id, detalle)
+    }
+
+    class LoginService {
+        {static} + GetUsuarioLogueado() : Usuario
+    }
+
+    class ExceptionManager {
+        {static} + GetInstance() : ExceptionManager
+        + HandleException(exception)
+    }
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+' UI → BLL
+FormGestionClientes ..> ClienteBLL : usa
+FormGestionClientes ..> MascotaBLL : usa (para verificar mascotas)
+
+' BLL → Repository
+ClienteBLL ..> IClienteRepository : usa
+ClienteBLL ..> ClienteRepository : Current
+MascotaBLL ..> ClienteBLL : usa
+
+' BLL → Servicios
+ClienteBLL ..> Bitacora : registra operaciones
+ClienteBLL ..> LoginService : obtiene usuario
+ClienteBLL ..> ExceptionManager : maneja errores
+
+' Repository → Adapter y SqlHelper
+ClienteRepository ..|> IClienteRepository : implementa
+ClienteRepository ..> ClienteAdapter : usa
+ClienteRepository ..> SqlHelper : usa
+
+' Repository → Stored Procedures
+ClienteRepository ..> SPSelectAll : ejecuta
+ClienteRepository ..> SPSelectOne : ejecuta
+ClienteRepository ..> SPSelectByDNI : ejecuta
+ClienteRepository ..> SPInsert : ejecuta
+ClienteRepository ..> SPUpdate : ejecuta
+ClienteRepository ..> SPDelete : ejecuta
+ClienteRepository ..> SPExisteDNI : ejecuta
+
+' Adapter → Entidad
+ClienteAdapter ..> Cliente : crea instancias
+
+' BLL → Entidades
+ClienteBLL ..> Cliente : gestiona
+
+' Dominio - Relaciones
+Cliente "1" o-- "0..*" Mascota : tiene
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS
+' ═══════════════════════════════════════════════════════════════
+
+note top of Cliente
+    **Validaciones:**
+    - Nombre: requerido, 2-50 caracteres
+    - Apellido: requerido, 2-50 caracteres
+    - DNI: requerido, 7-8 dígitos, único
+    - Telefono: requerido, formato válido
+    - Email: formato válido (opcional)
+end note
+
+note bottom of SPDelete
+    **Soft Delete:**
+    No elimina físicamente.
+    Marca Activo = 0 en Cliente
+    y todas sus Mascotas.
+    Preserva integridad referencial.
+end note
+
+note right of ClienteBLL
+    **Patrón Singleton**
+    Instancia única en toda
+    la aplicación.
+    Thread-safe.
+end note
+
+note left of FormGestionClientes
+    **Operaciones CRUD:**
+    - Crear: Nuevo + Guardar
+    - Leer: Cargar lista + Seleccionar
+    - Actualizar: Modificar + Guardar
+    - Eliminar: Soft delete
+    - Buscar: Por DNI
+end note
+
+@enduml

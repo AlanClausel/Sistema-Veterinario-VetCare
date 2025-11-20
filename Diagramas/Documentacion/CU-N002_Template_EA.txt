@@ -1,0 +1,541 @@
+================================================================================
+CASO DE USO: CU-N002 - GESTIONAR MASCOTAS
+================================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+Código:             CU-N002
+Nombre:             Gestionar Mascotas
+Tipo:               NEGOCIO - CRUD Completo
+Actor Principal:    Veterinario, Recepcionista, Administrador
+Módulo:             Mascotas
+Formulario:         gestionMascotas.cs (440 líneas)
+Patente Requerida:  FormGestionMascotas
+Complejidad:        Media-Alta
+Estado:             ✅ IMPLEMENTADO
+
+DESCRIPCIÓN
+-----------
+CRUD completo de mascotas (pacientes veterinarios). Incluye creación con
+validación de dueño activo, modificación, eliminación con verificación de
+citas activas, búsqueda por nombre/especie/raza, y listado completo. REQUIERE
+cliente previo (no puede crear mascota sin dueño). Calcula edad automáticamente
+desde fecha de nacimiento.
+
+VALIDACIONES: Nombre mínimo 2 chars, especie mínimo 2 chars, sexo "Macho" o
+"Hembra", fecha nacimiento no futura, peso 0-1000 kg, dueño existente y activo.
+
+RELACIÓN: N Mascotas → 1 Cliente (FK IdCliente obligatoria).
+
+REGLA DE NEGOCIO CRÍTICA: NO puede eliminar mascota con citas activas
+(Agendada/Confirmada). Debe cancelar/completar citas primero.
+
+AUDITORÍA: TODAS las operaciones (Alta, Modificación, Baja, Transferencia) en
+Bitácora.
+
+================================================================================
+OPERACIONES DEL CASO DE USO
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 1: CREAR NUEVA MASCOTA                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, al menos 1 cliente activo en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Clic en "Nuevo"                 │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Verificar clientes activos:          │
+│                                    │    ClienteBLL.ListarClientesActivos()   │
+│                                    │ 3. SI sin clientes activos:             │
+│                                    │    → Advertencia: "Debe crear cliente   │
+│                                    │      antes de agregar mascota"          │
+│                                    │    → CANCELAR operación                 │
+│                                    │ 4. Limpiar campos                       │
+│                                    │ 5. Habilitar campos edición             │
+│                                    │ 6. Cargar ComboBox dueños (clientes     │
+│                                    │    activos ordenados por apellido)      │
+│                                    │ 7. Habilitar botón "Guardar"            │
+│                                    │ 8. Foco en Nombre                       │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 9. Ingresar datos:                 │                                         │
+│    - Nombre                        │                                         │
+│    - Especie (ej: Perro, Gato)     │                                         │
+│    - Raza                          │                                         │
+│    - Fecha Nacimiento (DatePicker) │                                         │
+│    - Sexo (ComboBox: Macho/Hembra) │                                         │
+│    - Peso (NumericUpDown en kg)    │                                         │
+│    - Color                         │                                         │
+│    - Observaciones (opcional)      │                                         │
+│    - Seleccionar Dueño (ComboBox)  │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 10. Clic en "Guardar"              │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 11. Validar dueño seleccionado != null  │
+│                                    │ 12. Validar campos obligatorios:        │
+│                                    │     - Nombre: no vacío, >= 2 chars      │
+│                                    │     - Especie: no vacía, >= 2 chars     │
+│                                    │     - Sexo: "Macho" o "Hembra"          │
+│                                    │ 13. Validar FechaNacimiento:            │
+│                                    │     - No futura (>= DateTime.Now)       │
+│                                    │     - No anterior a 1900                │
+│                                    │ 14. Validar peso: 0 <= peso <= 1000 kg  │
+│                                    │ 15. Verificar cliente existe y activo:  │
+│                                    │     ClienteRepository.ObtenerPorId()    │
+│                                    │ 16. Generar IdMascota GUID              │
+│                                    │ 17. Establecer Activo = true            │
+│                                    │ 18. Ejecutar SP: Mascota_Insert         │
+│                                    │ 19. Registrar en Bitácora (Alta):       │
+│                                    │     "Mascota registrada: [Nombre]       │
+│                                    │     ([Especie]), dueño: [NombreCliente]"│
+│                                    │ 20. Mensaje: "Mascota registrada"       │
+│                                    │ 21. Recargar grid mascotas              │
+│                                    │ 22. Limpiar y bloquear campos           │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Mascota creada en BD, visible en grid, registro en Bitácora
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin clientes activos (paso 3) → Advertencia, no permite crear mascota
+[FA-2] Sin dueño seleccionado (paso 11) → "Debe seleccionar un dueño"
+[FA-3] Nombre/Especie vacíos (paso 12) → "El [campo] es obligatorio"
+[FA-4] Sexo inválido (paso 12) → "El sexo debe ser 'Macho' o 'Hembra'"
+[FA-5] Fecha futura (paso 13) → "La fecha de nacimiento no puede ser futura"
+[FA-6] Peso fuera rango (paso 14) → "El peso debe estar entre 0 y 1000 kg"
+[FA-7] Cliente inactivo (paso 15) → "No se puede registrar mascota para
+                                      cliente inactivo"
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 2: MODIFICAR MASCOTA EXISTENTE                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, al menos una mascota en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar mascota en grid     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Cargar _mascotaSeleccionada          │
+│                                    │ 3. Mostrar datos en campos (bloqueados):│
+│                                    │    - Nombre, Especie, Raza              │
+│                                    │    - FechaNacimiento, Sexo, Peso, Color │
+│                                    │    - Observaciones, Activo              │
+│                                    │ 4. Seleccionar dueño en ComboBox        │
+│                                    │    (por IdCliente)                      │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 5. Clic en "Modificar"             │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 6. Verificar mascota seleccionada       │
+│                                    │ 7. _modoEdicion = true                  │
+│                                    │ 8. Habilitar todos los campos           │
+│                                    │ 9. Habilitar botón "Guardar"            │
+│                                    │ 10. Foco en Nombre                      │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 11. Modificar datos deseados       │                                         │
+│     (puede cambiar dueño)          │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 12. Clic en "Guardar"              │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 13. Validar campos (igual crear)        │
+│                                    │ 14. Verificar mascota existe:           │
+│                                    │     MascotaRepository.ObtenerPorId()    │
+│                                    │ 15. Verificar nuevo dueño existe        │
+│                                    │     y está activo                       │
+│                                    │ 16. Ejecutar SP: Mascota_Update         │
+│                                    │ 17. Registrar en Bitácora (Modificación)│
+│                                    │ 18. Mensaje: "Mascota actualizada"      │
+│                                    │ 19. Recargar grid                       │
+│                                    │ 20. Limpiar y bloquear campos           │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Mascota actualizada en BD, cambios en grid, registro Bitácora
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin mascota seleccionada (paso 6) → "Debe seleccionar una mascota"
+[FA-2] Mascota no existe (paso 14) → "No existe una mascota con ID [id]"
+
+NOTA: Si cambia dueño, es una modificación normal (NO es transferencia).
+      Para transferencia explícita, existe método TransferirMascota() en BLL
+      (no implementado en UI actual).
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 3: ELIMINAR MASCOTA (CON VERIFICACIÓN DE CITAS ACTIVAS)            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, al menos una mascota en sistema
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Seleccionar mascota en grid     │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Cargar datos de mascota              │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 3. Clic en "Eliminar"              │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 4. Verificar mascota seleccionada       │
+│                                    │ 5. Mensaje confirmación:                │
+│                                    │    "¿Eliminar mascota [Nombre]?"        │
+│                                    │    (Sí/No)                              │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 6. Confirmar "Sí"                  │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 7. Verificar mascota existe             │
+│                                    │ 8. Guardar nombre y especie para        │
+│                                    │    bitácora                             │
+│                                    │ 9. **VALIDACIÓN CRÍTICA**:              │
+│                                    │    Buscar citas activas de mascota:     │
+│                                    │    CitaRepository.SelectByMascota(id)   │
+│                                    │    WHERE Estado = 'Agendada' OR         │
+│                                    │          Estado = 'Confirmada'          │
+│                                    │ 10. SI hay citas activas:               │
+│                                    │     → InvalidOperationException:        │
+│                                    │       "No se puede eliminar '[Nombre]'  │
+│                                    │       porque tiene [N] cita(s) activa(s)│
+│                                    │       Primero debe cancelar/completar:  │
+│                                    │       - [Fecha] ([Estado])              │
+│                                    │       - ..."                            │
+│                                    │     → CANCELAR eliminación              │
+│                                    │ 11. Ejecutar SP: Mascota_Delete         │
+│                                    │     (SET Activo = 0, soft delete)       │
+│                                    │ 12. Registrar en Bitácora (Baja)        │
+│                                    │ 13. Mensaje: "Mascota eliminada"        │
+│                                    │ 14. Recargar grid (sin eliminada)       │
+│                                    │ 15. Limpiar campos y selección          │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Mascota Activo=0 (soft delete), NO visible en grid, registro
+                 en Bitácora. DATOS PRESERVADOS en BD.
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Sin mascota seleccionada (paso 4) → "Debe seleccionar una mascota"
+[FA-2] Usuario cancela (paso 6) → No ejecuta eliminación
+[FA-3] Mascota con citas activas (paso 10) → Error detallado con lista de
+       citas, NO permite eliminar. Usuario debe ir a Gestión de Citas para
+       cancelar/completar primero.
+
+REGLA DE NEGOCIO CRÍTICA:
+Sistema PROTEGE integridad referencial. NO permite eliminar mascota si tiene
+citas pendientes. Usuario debe:
+1. Ir a Gestión de Citas
+2. Cancelar o Completar las citas activas
+3. Volver a Gestión de Mascotas
+4. Intentar eliminar nuevamente
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 4: BUSCAR MASCOTAS POR CRITERIO                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado, formulario abierto
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Ingresar texto en "Buscar       │                                         │
+│    Mascota" (nombre/especie/raza)  │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 2. Clic en "Buscar"                │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 3. Capturar texto búsqueda (Trim)       │
+│                                    │ 4. SI vacío: cargar todas las mascotas  │
+│                                    │    SI con texto: buscar por criterio    │
+│                                    │ 5. Ejecutar SP: Mascota_SelectByCriterio│
+│                                    │    WHERE Nombre LIKE '%criterio%' OR    │
+│                                    │          Especie LIKE '%criterio%' OR   │
+│                                    │          Raza LIKE '%criterio%'         │
+│                                    │    AND Activo = 1                       │
+│                                    │ 6. Cargar resultados en grid            │
+│                                    │ 7. Ordenar por Nombre                   │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Grid muestra solo mascotas que coinciden. Si sin resultados,
+                 grid vacío (NO error).
+
+FLUJOS ALTERNATIVOS:
+[FA-1] Campo vacío → Cargar todas las mascotas activas
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN 5: LISTAR TODAS LAS MASCOTAS                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+PRECONDICIONES: Usuario autenticado con patente correcta
+
+┌────────────────────────────────────┬─────────────────────────────────────────┐
+│ ACTOR (Usuario)                    │ SISTEMA                                 │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│ 1. Abrir formulario Gestión        │                                         │
+│    Mascotas                        │                                         │
+├────────────────────────────────────┼─────────────────────────────────────────┤
+│                                    │ 2. Evento GestionMascotas_Load          │
+│                                    │ 3. Aplicar traducciones multi-idioma    │
+│                                    │ 4. Configurar DataGridView mascotas:    │
+│                                    │    - Columnas: Nombre, Especie, Raza,   │
+│                                    │      EdadEnAnios, Sexo, Peso, Activo    │
+│                                    │ 5. Cargar ComboBox dueños:              │
+│                                    │    ClienteBLL.ListarClientesActivos()   │
+│                                    │    DisplayMember = "NombreCompleto"     │
+│                                    │    ValueMember = "IdCliente"            │
+│                                    │    Ordenados por Apellido               │
+│                                    │ 6. Ejecutar MascotaBLL.ListarTodas()    │
+│                                    │ 7. Ejecutar SP: Mascota_SelectAll       │
+│                                    │    WHERE Activo = 1                     │
+│                                    │ 8. Adaptar DataRows a List<Mascota>     │
+│                                    │ 9. Cargar en grid principal             │
+│                                    │ 10. Ordenar por Nombre ASC              │
+└────────────────────────────────────┴─────────────────────────────────────────┘
+
+POSTCONDICIONES: Grid con todas las mascotas activas, ComboBox dueños cargado,
+                 campos bloqueados vacíos, botón Guardar deshabilitado.
+
+NOTA: EdadEnAnios se calcula automáticamente en propiedad de dominio desde
+      FechaNacimiento (no se almacena en BD).
+
+================================================================================
+ARQUITECTURA Y PATRONES
+================================================================================
+
+CAPAS (N-Tier):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ UI          → gestionMascotas.cs (WinForm)                                  │
+│ BLL         → MascotaBLL.cs (validaciones, reglas de negocio)              │
+│ DAL         → MascotaRepository.cs + MascotaAdapter.cs                      │
+│ Database    → VetCareDB (tabla Mascota, 8 SPs)                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PATRONES APLICADOS:
+1. SINGLETON: MascotaBLL.Current, MascotaRepository.Current
+2. REPOSITORY: IMascotaRepository (contrato) + implementación
+3. ADAPTER: MascotaAdapter.Adaptar(DataRow) → Mascota
+4. EXCEPTION MANAGER: Bitacora.Current.RegistrarExcepcion()
+
+VALIDACIONES (MascotaBLL.ValidarMascota - líneas 478-521):
+┌──────────────┬────────────────────────────────────────────────────────────┐
+│ Campo        │ Validación                                                 │
+├──────────────┼────────────────────────────────────────────────────────────┤
+│ IdCliente    │ Obligatorio (Guid != Empty), debe existir y estar activo   │
+│ Nombre       │ Obligatorio, no vacío, mínimo 2 caracteres                 │
+│ Especie      │ Obligatoria, no vacía, mínimo 2 caracteres                 │
+│ Sexo         │ Obligatorio, SOLO "Macho" o "Hembra" (exacto)              │
+│ Fecha        │ No puede ser futura (> DateTime.Now)                       │
+│ Nacimiento   │ No anterior a 1900 (year >= 1900)                          │
+│ Peso         │ Debe ser >= 0 (no negativo)                                │
+│              │ Debe ser <= 1000 kg (validación lógica)                    │
+│ Raza         │ OPCIONAL (sin validaciones)                                │
+│ Color        │ OPCIONAL (sin validaciones)                                │
+│ Observaciones│ OPCIONAL (sin validaciones)                                │
+└──────────────┴────────────────────────────────────────────────────────────┘
+
+REGLAS DE NEGOCIO ESPECIALES:
+1. **Dependencia de Cliente**: NO puede crear mascota sin dueño. UI verifica
+   clientes activos ANTES de permitir modo nuevo.
+
+2. **Protección de Citas**: NO puede eliminar mascota con citas activas
+   (Agendada/Confirmada). MascotaBLL.EliminarMascota() verifica:
+   - CitaRepository.SelectByMascota(id)
+   - Filtra por Estado = Agendada OR Confirmada
+   - Si existe alguna: lanza InvalidOperationException con detalle de citas
+   - Lista fecha y estado de cada cita activa
+
+3. **Soft Delete**: Eliminación siempre es Activo=0 (no delete físico).
+   Preserva historial médico completo.
+
+4. **Cálculo de Edad**: EdadEnAnios calculado automáticamente desde
+   FechaNacimiento. Considera año bisiesto y cumpleaños pendiente.
+
+AUDITORÍA (Bitácora):
+┌──────────────────┬────────────┬──────────┬──────────────┬─────────────────┐
+│ Operación        │ Criticidad │ Módulo   │ Acción       │ Descripción     │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Crear Mascota    │ Info       │ Mascotas │ Alta         │ Mascota         │
+│                  │            │          │              │ registrada:     │
+│                  │            │          │              │ [Nombre]        │
+│                  │            │          │              │ ([Especie]),    │
+│                  │            │          │              │ dueño: [Cliente]│
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Modificar Mascota│ Info       │ Mascotas │ Modificacion │ Mascota         │
+│                  │            │          │              │ modificada      │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Eliminar Mascota │ Advertencia│ Mascotas │ Baja         │ Mascota         │
+│                  │            │          │              │ eliminada       │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Transferir       │ Info       │ Mascotas │ Modificacion │ Mascota         │
+│ Mascota          │            │          │              │ transferida:    │
+│ (método BLL)     │            │          │              │ de [Cliente1]   │
+│                  │            │          │              │ a [Cliente2]    │
+├──────────────────┼────────────┼──────────┼──────────────┼─────────────────┤
+│ Excepción        │ Error      │ Mascotas │ Excepcion    │ Mensaje error   │
+└──────────────────┴────────────┴──────────┴──────────────┴─────────────────┘
+
+================================================================================
+STORED PROCEDURES
+================================================================================
+
+Base de datos: VetCareDB | Tabla: Mascota
+
+┌──────────────────────────┬────────────────────────────────────────────────┐
+│ SP Name                  │ Propósito                                      │
+├──────────────────────────┼────────────────────────────────────────────────┤
+│ Mascota_Insert           │ Crear nueva mascota                            │
+│ Mascota_Update           │ Modificar mascota existente                    │
+│ Mascota_Delete           │ Soft delete (Activo=0)                         │
+│ Mascota_SelectOne        │ Obtener mascota por ID                         │
+│ Mascota_SelectAll        │ Listar todas WHERE Activo=1                    │
+│ Mascota_SelectByCliente  │ Obtener mascotas de un cliente                 │
+│ Mascota_SelectByCriterio │ Buscar por nombre/especie/raza (LIKE)          │
+│ Mascota_ContarByCliente  │ Contar mascotas de un cliente (para cascada)   │
+└──────────────────────────┴────────────────────────────────────────────────┘
+
+RELACIÓN CON OTRAS TABLAS:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Mascota.IdCliente → Cliente.IdCliente (FK obligatoria)                      │
+│ Cita.IdMascota → Mascota.IdMascota (FK, verifica en eliminación)            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+MODELO DE DOMINIO
+================================================================================
+
+ENTIDAD: Mascota (DomainModel/Mascota.cs - 49 líneas)
+
+Propiedades:
+┌────────────────┬──────────┬────────────────────────────────────────────────┐
+│ Propiedad      │ Tipo     │ Descripción                                    │
+├────────────────┼──────────┼────────────────────────────────────────────────┤
+│ IdMascota      │ Guid     │ PK, generado con NEWID() o Guid.NewGuid()      │
+│ IdCliente      │ Guid     │ FK a Cliente, obligatoria                      │
+│ Nombre         │ string   │ Nombre de la mascota                           │
+│ Especie        │ string   │ Perro, Gato, Ave, Reptil, etc.                 │
+│ Raza           │ string   │ Raza específica (opcional)                     │
+│ FechaNacimiento│ DateTime │ Fecha de nacimiento (para calcular edad)       │
+│ Sexo           │ string   │ "Macho" o "Hembra" (exacto)                    │
+│ Peso           │ decimal  │ Peso en kilogramos                             │
+│ Color          │ string   │ Color del pelaje/plumas (opcional)             │
+│ Observaciones  │ string   │ Notas adicionales (opcional)                   │
+│ Activo         │ bool     │ Soft delete flag (true=activo)                 │
+└────────────────┴──────────┴────────────────────────────────────────────────┘
+
+Propiedad Calculada:
+- EdadEnAnios (int) → Calcula edad desde FechaNacimiento hasta DateTime.Now
+  Considera si cumpleaños ya pasó en año actual.
+
+Métodos:
+- ToString() → "[Nombre] ([Especie] - [Raza])"
+
+RELACIONES:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Cliente (1) ──────► (N) Mascota                                             │
+│   IdCliente (PK)       IdCliente (FK)                                       │
+│                                                                             │
+│ Mascota (1) ──────► (N) Cita                                                │
+│   IdMascota (PK)       IdMascota (FK)                                       │
+│                                                                             │
+│ Flujo: Cliente → Mascota → Cita → ConsultaMedica → MedicamentoRecetado      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+FUNCIONALIDADES AVANZADAS DEL BLL (NO EN UI ACTUAL)
+================================================================================
+
+MascotaBLL incluye métodos adicionales no implementados en UI:
+
+1. **TransferirMascota(idMascota, idNuevoDueno)** - líneas 160-212
+   - Cambia dueño de mascota
+   - Valida nuevo dueño existe y está activo
+   - Registra en Bitácora: "Transferida de [Cliente1] a [Cliente2]"
+
+2. **ObtenerEstadisticasPorEspecie()** - líneas 424-431
+   - Retorna Dictionary<string, int> con conteo por especie
+   - Útil para dashboard/reportes
+
+3. **ObtenerMascotasProximoCumpleanos()** - líneas 436-450
+   - Retorna mascotas que cumplen años en próximos 30 días
+   - Útil para recordatorios/marketing
+
+4. **ObtenerDetalleMascota(idMascota)** - líneas 455-469
+   - Retorna MascotaDetalle DTO con mascota + dueño completo
+   - Útil para formularios de consulta médica
+
+================================================================================
+INTERFAZ DE USUARIO
+================================================================================
+
+FORMULARIO: gestionMascotas.cs (440 líneas)
+UBICACIÓN: UI/WinUi/Negocio/gestionMascotas.cs
+
+CONTROLES PRINCIPALES:
+- txtBuscar: Campo de búsqueda por criterio
+- btnBuscar: Ejecuta búsqueda
+- dgvMascotas: Grid principal con todas las mascotas
+- txtNombre, txtEspecie, txtRaza, txtColor, txtObservaciones: Campos texto
+- dtpFechaNacimiento: DateTimePicker para fecha de nacimiento
+- cmbSexo: ComboBox con "Macho" y "Hembra"
+- numPeso: NumericUpDown para peso en kg
+- cmbDueno: ComboBox con clientes activos (ValueMember=IdCliente)
+- chkActivo: Checkbox de estado
+- btnNuevo, btnGuardar, btnModificar, btnEliminar, btnVolver: Botones acción
+
+ESTADOS DEL FORMULARIO:
+1. INICIAL (carga): Campos bloqueados vacíos, grid cargado, ComboBox dueños
+   cargado, botón Guardar deshabilitado
+
+2. NUEVO (después "Nuevo"): Si hay clientes activos → campos habilitados vacíos
+   Si NO hay clientes → advertencia y cancela
+
+3. MODIFICAR (después "Modificar"): Campos habilitados con datos de mascota
+   seleccionada
+
+4. VISUALIZAR (seleccionar mascota): Campos bloqueados con datos
+
+MULTI-IDIOMA:
+Formulario usa LanguageManager.Translate() para todos los textos.
+Método: AplicarTraducciones() - líneas 54-88
+
+================================================================================
+CASOS DE USO RELACIONADOS
+================================================================================
+
+REQUIERE (Dependencias):
+- CU-N001: Gestionar Clientes (debe existir al menos 1 cliente activo)
+
+UTILIZADO POR:
+- CU-N005: Agendar Nueva Cita (selecciona mascota del cliente)
+- CU-N009: Registrar Consulta Médica (identifica paciente)
+- CU-N014: Consultar Historial Clínico (busca por mascota)
+
+FLUJO TÍPICO DE USUARIO:
+1. CU-N001: Crear Cliente
+2. CU-N002: Agregar Mascota al cliente (este CU)
+3. CU-N005: Agendar Cita para la mascota
+4. CU-N009: Registrar Consulta Médica
+
+================================================================================
+ARCHIVOS RELACIONADOS
+================================================================================
+
+CÓDIGO FUENTE:
+- UI/WinUi/Negocio/gestionMascotas.cs (440 líneas)
+- VetCareNegocio/BLL/MascotaBLL.cs (536 líneas)
+- VetCareNegocio/DAL/Contracts/IMascotaRepository.cs
+- VetCareNegocio/DAL/Implementations/MascotaRepository.cs
+- VetCareNegocio/DAL/Implementations/Adapter/MascotaAdapter.cs
+- VetCareNegocio/DomainModel/Mascota.cs (49 líneas)
+
+STORED PROCEDURES:
+- Database/XX_CreateSP_Mascota.sql (8 SPs)
+- Database/XX_CreateTable_Mascota.sql
+
+RECURSOS:
+- UI/Resources/I18n/idioma.es-AR
+- UI/Resources/I18n/idioma.en-GB
+
+DIAGRAMAS (a crear):
+- CU-N002_GestionarMascotas.puml
+- CU-N002_CrearMascota_Secuencia.puml
+
+================================================================================
+ÚLTIMA ACTUALIZACIÓN: 2025-01-16 | VERSIÓN: 1.0 | ESTADO: ✅ COMPLETO
+================================================================================

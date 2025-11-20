@@ -535,3 +535,6 @@ backup_confirmar_restore=Confirm that you want to restore the {0} database?\n\nA
 backup_restore_exito=Restore completed successfully.\n\nIt is recommended to restart the application.
 error_restore=Error performing restore
 advertencia=Warning
+backup_realizar_completo=Perform Complete Backup
+abrir_carpeta=Open Backup Folder
+backup_info=The complete backup includes both databases (SecurityVet and VetCareDB).\nRestore automatically detects which database to restore.

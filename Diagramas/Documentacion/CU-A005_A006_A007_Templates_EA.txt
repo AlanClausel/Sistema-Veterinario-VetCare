@@ -1,0 +1,657 @@
+================================================================================
+CU-A005, CU-A006, CU-A007: CASOS DE USO DE ARQUITECTURA RESUMIDOS
+Templates para Enterprise Architect
+================================================================================
+
+################################################################################
+CU-A005: REALIZAR BACKUP/RESTORE
+################################################################################
+
+ID:			CU-A005
+Nombre:			Realizar Backup/Restore
+Actor Principal:	Administrador
+Tipo:			Arquitectura / Mantenimiento
+
+Propósito:
+	Realizar copias de seguridad de las bases de datos (SecurityVet y VetCareDB).
+	Restaurar bases de datos desde archivos de backup (.bak).
+	Garantizar continuidad del negocio y recuperación ante desastres.
+
+================================================================================
+PRECONDICIONES
+================================================================================
+
+1. Usuario autenticado con ROL_Administrador
+2. Usuario tiene patente "frmBackup" asignada
+3. SQL Server accesible
+4. Permisos de escritura en carpeta de destino (Backup)
+5. Archivo .bak válido disponible (Restore)
+
+================================================================================
+POSTCONDICIONES
+================================================================================
+
+ÉXITO BACKUP:
+	- Archivo(s) .bak generado(s) en carpeta seleccionada
+	- Nombre: {BaseDatos}_{yyyyMMdd_HHmmss}.bak
+	- Registro en log del formulario
+	- Mensaje de confirmación
+
+ÉXITO RESTORE:
+	- Base de datos restaurada desde archivo .bak
+	- TODOS los datos actuales reemplazados por el backup
+	- Registro en log del formulario
+	- Recomendación de reiniciar aplicación
+
+FALLO:
+	- Mensaje de error mostrado
+	- Log con detalles del error
+	- Base de datos queda intacta (no se modifica)
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 1: REALIZAR BACKUP
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Abre formulario Backup/Restore
+
+					2. Crea carpeta por defecto:
+					   Mis Documentos\VetCare_Backups
+
+					3. Muestra ruta en textbox
+
+					4. Agrega log:
+					   "Sistema iniciado"
+					   "Usuario: {nombre}"
+					   "Ruta por defecto: {ruta}"
+
+5. (Opcional) Hace clic en
+   "Examinar" para cambiar carpeta
+
+6. Selecciona carpeta destino
+
+					7. Actualiza textbox con nueva ruta
+
+					8. Agrega log:
+					   "Directorio seleccionado: {ruta}"
+
+9. Marca checkbox(es):
+   - SecurityVet
+   - VetCareDB
+   (uno o ambos)
+
+10. Hace clic en "Realizar Backup"
+
+					11. Valida ruta no vacía
+
+					12. Valida al menos 1 BD seleccionada
+
+					13. Valida directorio existe
+					    (BackupRestoreService.
+					    ValidarDirectorioDestino)
+
+					14. Muestra confirmación:
+					    "¿Está seguro de realizar
+					    el backup?"
+
+15. Confirma (Sí)
+
+					16. Bloquea controles de Backup
+
+					17. Muestra ProgressBar (marquee)
+
+					18. Para cada BD seleccionada:
+
+					    a. Genera timestamp:
+					       yyyyMMdd_HHmmss
+
+					    b. Construye ruta archivo:
+					       {carpeta}\{BD}_{timestamp}.bak
+
+					    c. Agrega log:
+					       "=== Iniciando backup de {BD} ==="
+
+					    d. Llama BackupRestoreService:
+					       - RealizarBackupSecurity(ruta)
+					       - RealizarBackupNegocio(ruta)
+
+					    e. Ejecuta comando SQL:
+					       BACKUP DATABASE [{BD}]
+					       TO DISK = N'{ruta}'
+					       WITH NOFORMAT, NOINIT,
+					       NAME = N'{BD}-Full',
+					       SKIP, NOREWIND, NOUNLOAD
+
+					    f. Si éxito:
+					       Agrega log:
+					       "✓ Backup completado: {ruta}"
+					       backupsRealizados++
+
+					    g. Si error:
+					       Agrega log:
+					       "✗ ERROR: {mensaje}"
+					       exito = false
+
+					19. Oculta ProgressBar
+
+					20. Desbloquea controles
+
+					21. Si todos exitosos:
+					    MessageBox:
+					    "Backups completados
+					    exitosamente ({cantidad})"
+					    Log: "=== BACKUPS COMPLETADOS ==="
+
+					22. Si errores parciales:
+					    MessageBox:
+					    "Algunos backups fallaron.
+					    Ver log para detalles"
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 2: RESTAURAR BACKUP
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Selecciona BD en ComboBox:
+   - SecurityVet
+   - VetCareDB
+
+2. Hace clic en "Examinar"
+   (sección Restore)
+
+					3. Muestra OpenFileDialog:
+					   - Filtro: "*.bak"
+					   - Carpeta inicial: carpeta backup
+
+4. Selecciona archivo .bak
+
+					5. Actualiza textbox con ruta
+
+					6. Agrega log:
+					   "Archivo seleccionado: {ruta}"
+
+7. Hace clic en "Restaurar Backup"
+
+					8. Valida ruta archivo no vacía
+
+					9. Valida BD seleccionada
+
+					10. Valida archivo existe
+					    (BackupRestoreService.
+					    ValidarArchivoBackup)
+
+					11. Muestra ADVERTENCIA CRÍTICA:
+					    "Esta operación ELIMINARÁ
+					    todos los datos actuales
+					    de la base de datos.
+					    ¿Continuar?"
+
+12. Confirma primera advertencia (Sí)
+
+					13. Muestra segunda confirmación:
+					    "¿Confirma restaurar {BD}
+					    desde {archivo}?"
+
+14. Confirma (Sí)
+
+					15. Bloquea controles de Restore
+
+					16. Muestra ProgressBar (marquee)
+
+					17. Agrega log:
+					    "=== Iniciando RESTORE de {BD} ==="
+					    "Archivo origen: {ruta}"
+					    "ADVERTENCIA: Sobrescribirá datos"
+
+					18. Llama BackupRestoreService:
+					    - RealizarRestoreSecurity(ruta)
+					    - RealizarRestoreNegocio(ruta)
+
+					19. Ejecuta comandos SQL:
+					    ALTER DATABASE [{BD}]
+					    SET SINGLE_USER
+					    WITH ROLLBACK IMMEDIATE;
+
+					    RESTORE DATABASE [{BD}]
+					    FROM DISK = N'{ruta}'
+					    WITH FILE = 1, NOUNLOAD,
+					    REPLACE, STATS = 5;
+
+					    ALTER DATABASE [{BD}]
+					    SET MULTI_USER;
+
+					20. Si éxito:
+					    Agrega log:
+					    "✓ RESTORE completado"
+					    "IMPORTANTE: Reiniciar aplicación"
+
+					    MessageBox:
+					    "Restore completado exitosamente"
+
+					21. Si error:
+					    Agrega log:
+					    "✗ ERROR: {mensaje}"
+
+					    MessageBox:
+					    "Error al restaurar: {mensaje}"
+
+					22. Oculta ProgressBar
+
+					23. Desbloquea controles
+
+================================================================================
+FLUJOS ALTERNATIVOS
+================================================================================
+
+FA-1: Ruta de backup vacía
+En Operación 1, paso 11:
+	SISTEMA: MessageBox "Debe especificar directorio destino"
+	→ Retorna al formulario
+
+FA-2: Ninguna BD seleccionada para backup
+En Operación 1, paso 12:
+	SISTEMA: MessageBox "Debe seleccionar al menos una base de datos"
+	→ Retorna al formulario
+
+FA-3: Directorio inválido o sin permisos
+En Operación 1, paso 13:
+	SISTEMA: MessageBox "Directorio inválido o sin permisos de escritura"
+	→ Retorna al formulario
+
+FA-4: Usuario cancela confirmación de backup
+En Operación 1, paso 15:
+	ACTOR: Hace clic en "No"
+	→ NO ejecuta backup, retorna al formulario
+
+FA-5: Error durante backup (SQLException)
+En Operación 1, paso 18d-18g:
+	SISTEMA: Captura excepción, agrega log con "✗ ERROR"
+	→ Marca exito = false
+	→ Continúa con siguiente BD si hay más
+	→ Al final muestra "Algunos backups fallaron"
+
+FA-6: Archivo .bak no existe o inválido
+En Operación 2, paso 10:
+	SISTEMA: MessageBox "Archivo de backup no existe o es inválido"
+	→ Retorna al formulario
+
+FA-7: Usuario cancela primera advertencia de restore
+En Operación 2, paso 12:
+	ACTOR: Hace clic en "No"
+	→ NO ejecuta restore, retorna al formulario
+
+FA-8: Error durante restore (SQLException)
+En Operación 2, paso 19:
+	SISTEMA: Captura excepción, agrega log "✗ ERROR"
+	→ Base de datos puede quedar inconsistente
+	→ MessageBox con error
+	→ Recomienda contactar soporte técnico
+
+================================================================================
+ARCHIVOS PRINCIPALES
+================================================================================
+
+UI:
+	- UI/WinUi/Administración/frmBackup.cs (503 líneas)
+
+SERVICES:
+	- ServicesSeguridad/Services/BackupRestoreService.cs
+	- Métodos:
+	  * RealizarBackupSecurity(rutaArchivo)
+	  * RealizarBackupNegocio(rutaArchivo)
+	  * RealizarRestoreSecurity(rutaArchivo)
+	  * RealizarRestoreNegocio(rutaArchivo)
+	  * ValidarDirectorioDestino(ruta)
+	  * ValidarArchivoBackup(ruta)
+
+NOTAS:
+	- Hereda de BaseObservableForm (patrón Observer para idioma)
+	- Progress bar estilo Marquee (indeterminado)
+	- Log en tiempo real con timestamp [HH:mm:ss]
+	- Backup permite seleccionar 1 o ambas BD
+	- Restore requiere 2 confirmaciones (crítico)
+
+
+################################################################################
+CU-A006: GESTIONAR MI CUENTA
+################################################################################
+
+ID:			CU-A006
+Nombre:			Gestionar Mi Cuenta
+Actor Principal:	Usuario Autenticado (cualquier rol)
+Tipo:			Arquitectura / Autogestión
+
+Propósito:
+	Permitir a cualquier usuario gestionar su propia cuenta.
+	Cambiar contraseña personal.
+	Cambiar idioma de la interfaz (activa patrón Observer).
+	Ver información de usuario y rol asignado.
+
+================================================================================
+PRECONDICIONES
+================================================================================
+
+1. Usuario autenticado en el sistema
+2. Usuario tiene patente "FormMiCuenta" asignada
+3. Base de datos SecurityVet accesible
+
+================================================================================
+POSTCONDICIONES
+================================================================================
+
+ÉXITO CAMBIO CONTRASEÑA:
+	- Contraseña actualizada en BD (hash SHA256)
+	- DVH recalculado automáticamente
+	- Campos de contraseña limpiados
+	- Mensaje de confirmación
+
+ÉXITO CAMBIO IDIOMA:
+	- Idioma actualizado en Usuario.IdiomaPreferido
+	- LanguageManager.CambiarIdioma() invocado
+	- Patrón Observer: TODOS los formularios abiertos se actualizan automáticamente
+	- Mensaje de confirmación
+
+FALLO:
+	- Mensaje de error mostrado
+	- Datos sin modificar
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 1: CAMBIAR CONTRASEÑA
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Abre formulario Mi Cuenta
+
+					2. Carga información usuario:
+					   - Nombre (solo lectura)
+					   - Email (solo lectura)
+					   - Rol actual (solo lectura)
+
+					3. Carga idiomas disponibles:
+					   - Español (Argentina)
+					   - English (United Kingdom)
+
+					4. Selecciona idioma actual
+
+2. Ingresa contraseña actual
+
+3. Ingresa nueva contraseña
+
+4. Confirma nueva contraseña
+
+5. (Opcional) Marca checkbox
+   "Mostrar contraseñas"
+
+					6. Cambia UseSystemPasswordChar
+					   de los 3 textbox
+
+7. Hace clic en "Cambiar Contraseña"
+
+					8. Valida contraseña actual no vacía
+
+					9. Valida nueva contraseña no vacía
+
+					10. Valida confirmación no vacía
+
+					11. Valida nueva == confirmación
+
+					12. Valida longitud >= 6 caracteres
+
+					13. Llama UsuarioBLL.CambiarContraseña(
+					    idUsuario, actual, nueva)
+
+					14. Verifica contraseña actual:
+					    - Hash con SHA256 + Unicode
+					    - Compara con BD
+
+					15. Si actual incorrecta:
+					    Lanza ContraseñaInvalidaException
+					    MessageBox: "Contraseña actual
+					    incorrecta"
+					    → FIN
+
+					16. Si actual correcta:
+					    - Hashea nueva contraseña
+					    - UPDATE Usuario SET Clave = hash
+					    - Recalcula DVH
+					    - Registra en Bitácora
+
+					17. MessageBox:
+					    "Contraseña cambiada exitosamente"
+
+					18. Limpia los 3 campos de contraseña
+
+================================================================================
+FLUJO BÁSICO - OPERACIÓN 2: CAMBIAR IDIOMA
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Selecciona idioma en ComboBox:
+   - es-AR (Español Argentina)
+   - en-GB (English UK)
+
+2. Hace clic en "Guardar Idioma"
+
+					3. Valida idioma seleccionado
+
+					4. Compara con idioma actual
+
+					5. Si es igual al actual:
+					   MessageBox: "El idioma
+					   seleccionado ya está activo"
+					   → FIN
+
+					6. Si es diferente:
+					   - UPDATE Usuario
+					     SET IdiomaPreferido = 'xx-XX'
+					   - WHERE IdUsuario = @Id
+
+					7. Actualiza objeto en memoria:
+					   _usuarioLogueado.IdiomaPreferido
+					   = nuevoIdioma
+
+					8. **PATRÓN OBSERVER:**
+					   Llama LanguageManager.
+					   CambiarIdioma(nuevoIdioma)
+
+					9. LanguageManager notifica a TODOS
+					   los formularios abiertos que
+					   heredan de BaseObservableForm
+
+					10. Cada formulario ejecuta su
+					    método ActualizarTextos()
+					    automáticamente
+
+					11. TODOS los textos de TODOS los
+					    formularios abiertos cambian
+					    INMEDIATAMENTE al nuevo idioma
+
+					12. NO requiere reiniciar aplicación
+
+					13. Cambio es instantáneo y visible
+
+================================================================================
+FLUJOS ALTERNATIVOS
+================================================================================
+
+FA-1: Contraseña actual vacía
+En Operación 1, paso 8:
+	SISTEMA: MessageBox "Debe ingresar contraseña actual"
+	→ Focus en campo
+
+FA-2: Nueva contraseña vacía
+En Operación 1, paso 9:
+	SISTEMA: MessageBox "Debe ingresar nueva contraseña"
+	→ Focus en campo
+
+FA-3: Confirmación vacía
+En Operación 1, paso 10:
+	SISTEMA: MessageBox "Debe confirmar contraseña"
+	→ Focus en campo
+
+FA-4: Contraseñas no coinciden
+En Operación 1, paso 11:
+	SISTEMA: MessageBox "Las contraseñas no coinciden"
+	→ Focus y SelectAll en confirmación
+
+FA-5: Contraseña muy corta (< 6 caracteres)
+En Operación 1, paso 12:
+	SISTEMA: MessageBox "La contraseña debe tener mínimo 6 caracteres"
+	→ Focus en nueva contraseña
+
+FA-6: Contraseña actual incorrecta
+En Operación 1, paso 15:
+	SISTEMA: Lanza ContraseñaInvalidaException
+	→ MessageBox "Contraseña actual incorrecta"
+	→ Focus y SelectAll en contraseña actual
+
+FA-7: Idioma no seleccionado
+En Operación 2, paso 3:
+	SISTEMA: MessageBox "Seleccione un idioma"
+	→ Retorna
+
+================================================================================
+ARCHIVOS PRINCIPALES
+================================================================================
+
+UI:
+	- UI/WinUi/Administración/FormMiCuenta.cs (255 líneas)
+	- Hereda de: BaseObservableForm (patrón Observer)
+
+BLL:
+	- ServicesSeguridad/BLL/UsuarioBLL.cs
+	- Métodos:
+	  * CambiarContraseña(idUsuario, actual, nueva)
+	  * ActualizarIdioma(idUsuario, codigoIdioma)
+
+SERVICES:
+	- ServicesSeguridad/Services/LanguageManager.cs
+	- Método: CambiarIdioma(codigoIdioma)
+	- Notifica a todos los observers (formularios abiertos)
+
+PATRÓN OBSERVER:
+	- Subject: LanguageManager
+	- Observers: Todos los formularios que heredan de BaseObservableForm
+	- Método update: ActualizarTextos()
+
+VALIDACIONES:
+	- Contraseña actual: Debe coincidir con hash en BD
+	- Nueva contraseña: Mínimo 6 caracteres
+	- Confirmación: Debe coincidir con nueva
+	- Idioma: Debe ser diferente al actual
+
+
+################################################################################
+CU-A007: CERRAR SESIÓN
+################################################################################
+
+ID:			CU-A007
+Nombre:			Cerrar Sesión (Logout)
+Actor Principal:	Usuario Autenticado (cualquier rol)
+Tipo:			Arquitectura / Seguridad
+
+Propósito:
+	Cerrar la sesión del usuario actual de forma segura.
+	Registrar el logout en bitácora para auditoría.
+	Volver a la pantalla de login.
+
+================================================================================
+PRECONDICIONES
+================================================================================
+
+1. Usuario autenticado en el sistema
+2. Formulario menu principal abierto
+
+================================================================================
+POSTCONDICIONES
+================================================================================
+
+ÉXITO:
+	- Logout registrado en Bitácora
+	- Formulario menu cerrado
+	- Control retorna a Login.cs
+	- Variable _usuarioLogueado limpiada
+	- Pantalla de login mostrada
+
+CANCELADO:
+	- Usuario permanece en menu principal
+	- Sin cambios en sesión
+
+================================================================================
+FLUJO BÁSICO: CERRAR SESIÓN
+================================================================================
+
+ACTOR					SISTEMA
+----------------------------------------------------------------------
+1. Hace clic en menú
+   "Cerrar Sesión"
+
+					2. Muestra MessageBox:
+					   "¿Está seguro de que desea
+					   cerrar sesión?"
+					   [Sí] [No]
+
+3. Hace clic en "Sí"
+
+					4. Si _usuarioLogueado != null:
+
+					   Llama Bitacora.Current.
+					   RegistrarLogout(
+					     idUsuario,
+					     nombreUsuario)
+
+					5. Ejecuta SP Bitacora_Insert:
+					   - Modulo: "Login"
+					   - Accion: "Logout"
+					   - Descripcion: "Usuario '{nombre}'
+					     cerró sesión"
+					   - Criticidad: "Info"
+					   - Fecha: GETDATE()
+
+					6. Cierra formulario menu:
+					   this.Close()
+
+					7. Control retorna a Login.cs
+					   (en método RedirigirPorRol)
+
+					8. Limpia variable:
+					   _usuarioLogueado = null
+
+					9. Muestra pantalla de Login
+
+================================================================================
+FLUJO ALTERNATIVO
+================================================================================
+
+FA-1: Usuario cancela cierre de sesión
+En paso 3:
+	ACTOR: Hace clic en "No"
+	SISTEMA: NO ejecuta logout
+	→ Permanece en menu principal
+
+================================================================================
+ARCHIVOS PRINCIPALES
+================================================================================
+
+UI:
+	- UI/WinUi/Administración/menu.cs
+	- Método: cerrarSesionToolStripMenuItem_Click()
+	- Líneas: 374-394
+
+SERVICES:
+	- ServicesSeguridad/Services/Bitacora.cs
+	- Método: RegistrarLogout(idUsuario, nombreUsuario)
+
+FLUJO COMPLETO:
+	Login.cs → (autenticación) → menu.cs → (logout) → Login.cs
+
+NOTA:
+	- Es el único caso de uso que NO requiere patente específica
+	- Cualquier usuario autenticado puede cerrar sesión
+	- Crítico para seguridad: registrar logout en auditoría
+
+================================================================================

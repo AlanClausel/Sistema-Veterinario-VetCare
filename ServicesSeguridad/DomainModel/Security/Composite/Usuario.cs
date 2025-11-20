@@ -7,24 +7,62 @@ using System.Threading.Tasks;
 
 namespace ServicesSecurity.DomainModel.Security.Composite
 {
+    /// <summary>
+    /// Representa un usuario del sistema con autenticación y autorización basada en permisos.
+    /// Integra el patrón Composite para gestionar permisos mediante Familias (roles) y Patentes (permisos individuales).
+    /// Incluye verificación de integridad de datos mediante DVH (Dígito Verificador Horizontal).
+    /// </summary>
     public class Usuario
     {
+        /// <summary>
+        /// Identificador único del usuario (GUID)
+        /// </summary>
         public Guid IdUsuario { get; set; }
 
+        /// <summary>
+        /// Nombre de usuario para autenticación (login)
+        /// </summary>
         public string Nombre { get; set; }
 
+        /// <summary>
+        /// Dirección de correo electrónico del usuario
+        /// </summary>
         public string Email { get; set; }
 
+        /// <summary>
+        /// Contraseña del usuario (uso interno, no se persiste directamente).
+        /// Se utiliza para generar el hash almacenado en Clave.
+        /// </summary>
         public string Password { get; set; }
 
-        public string Clave { get; set; } // Alias para compatibilidad con BD
+        /// <summary>
+        /// Contraseña hasheada almacenada en la base de datos.
+        /// Alias para compatibilidad con el esquema de BD (campo Clave en tabla Usuario).
+        /// </summary>
+        public string Clave { get; set; }
 
+        /// <summary>
+        /// Indica si el usuario está activo en el sistema (para baja lógica)
+        /// </summary>
         public bool Activo { get; set; }
 
-        public string IdiomaPreferido { get; set; } // Idioma preferido del usuario (ej: "es-AR", "en-GB")
+        /// <summary>
+        /// Código de idioma preferido del usuario para la interfaz (ej: "es-AR", "en-GB").
+        /// Se utiliza para cargar los recursos de idioma correspondientes.
+        /// </summary>
+        public string IdiomaPreferido { get; set; }
 
-        public string DVH { get; set; } // Dígito Verificador Horizontal
+        /// <summary>
+        /// Dígito Verificador Horizontal - Hash para verificar integridad de los datos del usuario.
+        /// Se calcula con todos los campos del usuario para detectar modificaciones no autorizadas.
+        /// </summary>
+        public string DVH { get; set; }
 
+        /// <summary>
+        /// Calcula el hash de integridad combinando Nombre + Password.
+        /// Se utiliza para verificar la integridad del registro del usuario (DVH).
+        /// </summary>
+        /// <returns>Hash SHA256 de Nombre + Password</returns>
         public string HashDH
         {
             get
@@ -33,6 +71,11 @@ namespace ServicesSecurity.DomainModel.Security.Composite
             }
         }
 
+        /// <summary>
+        /// Calcula el hash de la contraseña actual.
+        /// Utilizado para comparar con la contraseña almacenada (Clave) durante la autenticación.
+        /// </summary>
+        /// <returns>Hash SHA256 de Password</returns>
         public string HashPassword
         {
             get
@@ -41,18 +84,32 @@ namespace ServicesSecurity.DomainModel.Security.Composite
             }
         }
 
+        /// <summary>
+        /// Lista de permisos del usuario (Familias y Patentes).
+        /// Se carga dinámicamente desde la BD al autenticarse mediante LoginService.
+        /// Incluye roles (Familias con "ROL_"), familias de permisos y patentes individuales.
+        /// </summary>
         public List<Component> Permisos { get; set; }
 
+        /// <summary>
+        /// Constructor por defecto. Inicializa la lista de permisos vacía.
+        /// </summary>
         public Usuario()
         {
             Permisos = new List<Component>();
         }
 
         /// <summary>
-        /// Obtiene la Familia que representa el Rol del usuario
-        /// Busca en los permisos la primera Familia con nombre "ROL_*"
+        /// Obtiene la Familia que representa el Rol del usuario.
+        /// Busca en la lista de permisos la primera Familia cuyo nombre comienza con "ROL_".
+        /// En el sistema, cada usuario debe tener asignado exactamente un rol.
         /// </summary>
-        /// <returns>Familia de rol o null si no tiene rol asignado</returns>
+        /// <returns>Familia que representa el rol del usuario, o null si no tiene rol asignado</returns>
+        /// <example>
+        /// var rol = usuario.ObtenerFamiliaRol();
+        /// if (rol != null)
+        ///     Console.WriteLine($"Rol: {rol.NombreRol}");
+        /// </example>
         public Familia ObtenerFamiliaRol()
         {
             foreach (var permiso in Permisos)
@@ -66,10 +123,14 @@ namespace ServicesSecurity.DomainModel.Security.Composite
         }
 
         /// <summary>
-        /// Obtiene el nombre del rol del usuario (sin prefijo "ROL_")
-        /// Ejemplo: retorna "Administrador", "Veterinario", etc.
+        /// Obtiene el nombre del rol del usuario sin el prefijo "ROL_".
+        /// Retorna un nombre amigable del rol para mostrar en la interfaz.
         /// </summary>
-        /// <returns>Nombre del rol o null si no tiene rol</returns>
+        /// <returns>Nombre del rol sin prefijo (ej: "Administrador", "Veterinario"), o null si no tiene rol</returns>
+        /// <example>
+        /// string rol = usuario.ObtenerNombreRol();
+        /// // Si el usuario tiene ROL_Administrador, retorna "Administrador"
+        /// </example>
         public string ObtenerNombreRol()
         {
             var familiaRol = ObtenerFamiliaRol();
@@ -77,10 +138,17 @@ namespace ServicesSecurity.DomainModel.Security.Composite
         }
 
         /// <summary>
-        /// Verifica si el usuario tiene un rol específico
+        /// Verifica si el usuario tiene asignado un rol específico.
+        /// La comparación es case-insensitive.
         /// </summary>
-        /// <param name="nombreRol">Nombre del rol sin prefijo (ej: "Administrador")</param>
-        /// <returns>True si tiene ese rol</returns>
+        /// <param name="nombreRol">Nombre del rol sin prefijo "ROL_" (ej: "Administrador", "Veterinario")</param>
+        /// <returns>True si el usuario tiene ese rol, false en caso contrario</returns>
+        /// <example>
+        /// if (usuario.TieneRol("Administrador"))
+        /// {
+        ///     // Código para administradores
+        /// }
+        /// </example>
         public bool TieneRol(string nombreRol)
         {
             var rolActual = ObtenerNombreRol();
@@ -88,10 +156,18 @@ namespace ServicesSecurity.DomainModel.Security.Composite
         }
 
         /// <summary>
-        /// Retornar las patentes únicas de acuerdo a mi modelo
-        /// (Para el armado del menú)
+        /// Retorna todas las patentes (permisos) únicas del usuario.
+        /// Recorre recursivamente la jerarquía de permisos (Familias y Patentes) y extrae todas las patentes sin duplicados.
+        /// Se utiliza principalmente para construir el menú dinámico de la aplicación según los permisos del usuario.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>Lista de patentes únicas que el usuario puede acceder</returns>
+        /// <example>
+        /// var patentes = usuario.GetPatentesAll();
+        /// foreach (var patente in patentes)
+        /// {
+        ///     // Construir menú con patente.MenuItemName y patente.FormName
+        /// }
+        /// </example>
         public List<Patente> GetPatentesAll()
         {
             List<Patente> patentesDistinct = new List<Patente>();
@@ -101,6 +177,14 @@ namespace ServicesSecurity.DomainModel.Security.Composite
             return patentesDistinct;
         }
 
+        /// <summary>
+        /// Método auxiliar recursivo que recorre la estructura Composite de permisos.
+        /// Extrae todas las patentes de la jerarquía evitando duplicados.
+        /// Imprime información de depuración en consola durante el recorrido.
+        /// </summary>
+        /// <param name="patentes">Lista acumuladora donde se agregan las patentes encontradas (sin duplicados)</param>
+        /// <param name="components">Lista de componentes a recorrer en este nivel</param>
+        /// <param name="tab">Tabulación para el formato de salida de depuración (aumenta en cada nivel de recursión)</param>
         private static void RecorrerComposite(List<Patente> patentes, List<Component> components, string tab)
         {
             foreach (var item in components)

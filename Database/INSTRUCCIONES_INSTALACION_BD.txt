@@ -1,0 +1,118 @@
+═══════════════════════════════════════════════════════════════════
+  INSTALACIÓN DE BASES DE DATOS - VETCARE
+═══════════════════════════════════════════════════════════════════
+
+IMPORTANTE: Antes de ejecutar VetCare, debe instalar las bases de
+datos siguiendo estos pasos:
+
+═══════════════════════════════════════════════════════════════════
+  REQUISITOS PREVIOS
+═══════════════════════════════════════════════════════════════════
+
+✓ SQL Server 2019 o superior instalado
+✓ Permisos de administrador en SQL Server
+✓ SQL Server ejecutándose (servicios activos)
+
+═══════════════════════════════════════════════════════════════════
+  OPCIÓN 1: INSTALACIÓN AUTOMÁTICA (RECOMENDADA)
+═══════════════════════════════════════════════════════════════════
+
+Ejecute los scripts en este ORDEN desde la línea de comandos:
+
+1. Abrir CMD o PowerShell como Administrador
+
+2. Navegar a la carpeta de instalación:
+   cd "C:\Program Files\VetCare\Database"
+
+3. Ejecutar los scripts EN ORDEN:
+
+   sqlcmd -S localhost -i "00_EJECUTAR_TODO.sql"
+
+   sqlcmd -S localhost -i "00_EJECUTAR_TODO_NEGOCIO.sql"
+
+   sqlcmd -S localhost -i "40_EJECUTAR_TODO_BITACORA.sql"
+
+4. Verificar que se crearon las bases de datos:
+   - SecurityVet
+   - VetCareDB
+
+═══════════════════════════════════════════════════════════════════
+  OPCIÓN 2: INSTALACIÓN MANUAL CON SSMS
+═══════════════════════════════════════════════════════════════════
+
+1. Abrir SQL Server Management Studio (SSMS)
+
+2. Conectarse a su servidor SQL Server
+
+3. Ejecutar los scripts EN ORDEN:
+
+   Archivo → Abrir → Archivo
+   Seleccionar: 00_EJECUTAR_TODO.sql
+   Click en [Ejecutar] o presionar F5
+
+   Repetir para:
+   - 00_EJECUTAR_TODO_NEGOCIO.sql
+   - 40_EJECUTAR_TODO_BITACORA.sql
+
+4. Verificar las bases de datos en el Object Explorer
+
+═══════════════════════════════════════════════════════════════════
+  CONFIGURACIÓN DE CONEXIÓN
+═══════════════════════════════════════════════════════════════════
+
+Después de instalar las bases de datos, verifique la configuración
+de conexión en:
+
+C:\Program Files\VetCare\UI.exe.config
+
+Asegúrese de que los connection strings apunten a su servidor SQL:
+
+<connectionStrings>
+  <add name="VetCareConString"
+       connectionString="Data Source=localhost;
+                        Initial Catalog=VetCareDB;
+                        Integrated Security=True;
+                        TrustServerCertificate=True" />
+
+  <add name="ServicesConString"
+       connectionString="Data Source=localhost;
+                        Initial Catalog=SecurityVet;
+                        Integrated Security=True;
+                        TrustServerCertificate=True" />
+</connectionStrings>
+
+═══════════════════════════════════════════════════════════════════
+  CREDENCIALES POR DEFECTO
+═══════════════════════════════════════════════════════════════════
+
+Después de la instalación, use estas credenciales para acceder:
+
+Usuario: admin
+Contraseña: admin123
+
+IMPORTANTE: Cambie la contraseña del administrador después del
+primer inicio de sesión.
+
+═══════════════════════════════════════════════════════════════════
+  SOLUCIÓN DE PROBLEMAS
+═══════════════════════════════════════════════════════════════════
+
+Error: "sqlcmd no se reconoce como comando"
+Solución: Instale SQL Server Command Line Utilities
+https://aka.ms/sqlcmd
+
+Error: "No se puede conectar al servidor"
+Solución: Verifique que SQL Server esté ejecutándose
+Servicios → SQL Server (MSSQLSERVER) → Estado: Ejecutándose
+
+Error: "Permiso denegado"
+Solución: Ejecute CMD como Administrador
+
+═══════════════════════════════════════════════════════════════════
+  CONTACTO Y SOPORTE
+═══════════════════════════════════════════════════════════════════
+
+Para más información o soporte técnico, consulte la documentación
+completa en la carpeta de instalación.
+
+═══════════════════════════════════════════════════════════════════

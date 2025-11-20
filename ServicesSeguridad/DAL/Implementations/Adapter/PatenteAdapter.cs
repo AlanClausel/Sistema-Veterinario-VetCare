@@ -8,12 +8,18 @@ using System.Threading.Tasks;
 
 namespace ServicesSecurity.DAL.Implementations.Adapter
 {
-
+    /// <summary>
+    /// Adaptador para transformar filas de base de datos en objetos Patente.
+    /// Implementa el patrón Adapter y Singleton.
+    /// </summary>
     public sealed class PatenteAdapter : IAdapter<Patente>
     {
         #region Singleton
         private readonly static PatenteAdapter _instance = new PatenteAdapter();
 
+        /// <summary>
+        /// Obtiene la instancia única del adaptador (patrón Singleton).
+        /// </summary>
         public static PatenteAdapter Current
         {
             get
@@ -22,12 +28,20 @@ namespace ServicesSecurity.DAL.Implementations.Adapter
             }
         }
 
+        /// <summary>
+        /// Constructor privado para patrón Singleton.
+        /// </summary>
         private PatenteAdapter()
         {
             //Implement here the initialization code
         }
         #endregion
 
+        /// <summary>
+        /// Adapta un array de valores de base de datos a un objeto Patente.
+        /// </summary>
+        /// <param name="values">Array con valores: [0]=IdPatente(Guid), [1]=FormName, [2]=MenuItemName, [3]=Orden, [4]=Descripcion</param>
+        /// <returns>Objeto Patente hidratado con los valores proporcionados</returns>
         public Patente Adapt(object[] values)
         {
             //Hidratar el objeto patente

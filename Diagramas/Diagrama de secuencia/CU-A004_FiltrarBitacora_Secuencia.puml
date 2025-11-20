@@ -1,0 +1,338 @@
+@startuml CU-A004_FiltrarBitacora_Secuencia
+
+' ============================================================================
+' DIAGRAMA DE SECUENCIA: CU-A004 - FILTRAR REGISTROS DE BITÁCORA
+' Operación: Filtrar y Consultar Registros de Auditoría
+' Sistema: VetCare - Veterinaria
+' Módulo: Auditoría
+' ============================================================================
+
+title Diagrama de Secuencia - CU-A004: Filtrar Registros de Bitácora
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+
+' ============================================================================
+' PARTICIPANTES (LIFELINES)
+' ============================================================================
+
+actor "Administrador" as Admin #LightBlue
+participant "FormBitacora.cs\n(WinForm)" as UI #LightYellow
+participant "BitacoraBLL\n(Static)" as BLL #LightGreen
+participant "BitacoraRepository\n(Singleton)" as Repo #LightCoral
+database "BD SecurityVet" as DB #LightGray
+participant "BitacoraAdapter" as Adapter #Orchid
+
+' ============================================================================
+' FLUJO: CARGA INICIAL CON FILTROS POR DEFECTO
+' ============================================================================
+
+== 1. APERTURA DEL FORMULARIO ==
+
+Admin -> UI: Abre formulario Bitácora
+activate UI
+
+UI -> UI: FormBitacora_Load()
+activate UI #DarkSalmon
+
+UI -> UI: Configurar filtros por defecto:\n- FechaDesde: Hoy - 7 días\n- FechaHasta: Hoy\n- Módulo: "Todos"\n- Acción: "Todos"\n- Criticidad: "Todos"
+
+UI -> UI: CargarRegistros()
+
+note right of UI
+  **FILTROS POR DEFECTO**
+  =======================
+  Siempre carga últimos 7 días
+  al abrir el formulario.
+
+  Permite al administrador ver
+  actividad reciente del sistema.
+end note
+
+== 2. OBTENER VALORES DE FILTROS ==
+
+UI -> UI: fechaDesde = dtpFechaDesde.Value\nfechaHasta = dtpFechaHasta.Value\nmodulo = null (Todos)\naccion = null (Todos)\ncriticidad = null (Todos)
+
+UI -> UI: Cursor = Cursors.WaitCursor
+
+== 3. LLAMAR A BLL CON FILTROS ==
+
+UI -> BLL: ObtenerPorFiltros(\nfechaDesde, fechaHasta,\nnull, null, null, null, 1000)
+activate BLL
+
+note over BLL
+  **PARÁMETROS:**
+  - fechaDesde: DateTime? (opcional)
+  - fechaHasta: DateTime? (opcional)
+  - idUsuario: Guid? (opcional)
+  - modulo: string (opcional)
+  - accion: string (opcional)
+  - criticidad: string (opcional)
+  - top: int (límite 1000)
+
+  Todos los filtros son opcionales.
+  NULL = no aplica ese filtro.
+end note
+
+== 4. LLAMAR A REPOSITORY ==
+
+BLL -> Repo: ObtenerPorFiltros(\nfechaDesde, fechaHasta,\nnull, null, null, null, 1000)
+activate Repo
+
+== 5. EJECUTAR STORED PROCEDURE ==
+
+Repo -> DB: EXEC Bitacora_SelectPorFiltros\n@FechaDesde, @FechaHasta,\n@IdUsuario, @Modulo,\n@Accion, @Criticidad,\n@Top = 1000
+activate DB
+
+note over DB
+  **WHERE DINÁMICO EN SP**
+  ========================
+  WHERE 1=1
+  AND (@FechaDesde IS NULL
+       OR FechaHora >= @FechaDesde)
+  AND (@FechaHasta IS NULL
+       OR FechaHora <= @FechaHasta)
+  AND (@Modulo IS NULL
+       OR Modulo = @Modulo)
+  AND (@Accion IS NULL
+       OR Accion = @Accion)
+  AND (@Criticidad IS NULL
+       OR Criticidad = @Criticidad)
+  ORDER BY FechaHora DESC
+  TOP(@Top)
+
+  Construye WHERE según parámetros
+  NO NULL proporcionados.
+end note
+
+DB --> Repo: DataTable con registros
+deactivate DB
+
+== 6. ADAPTAR DATAROWS A ENTIDADES ==
+
+loop Para cada DataRow en DataTable
+    Repo -> Adapter: Adaptar(DataRow)
+    activate Adapter
+
+    Adapter -> Adapter: bitacora = new Bitacora() {\n  IdBitacora = row["IdBitacora"],\n  FechaHora = row["FechaHora"],\n  NombreUsuario = row["NombreUsuario"],\n  Modulo = row["Modulo"],\n  ... etc\n}
+
+    Adapter --> Repo: Bitacora entity
+    deactivate Adapter
+end
+
+Repo --> BLL: List<Bitacora>
+deactivate Repo
+
+BLL --> UI: IEnumerable<Bitacora>
+deactivate BLL
+
+== 7. ACTUALIZAR INTERFAZ ==
+
+UI -> UI: _registros = resultado.ToList()
+
+UI -> UI: dgvBitacora.DataSource = null\ndgvBitacora.DataSource = _registros
+
+== 8. APLICAR COLORES POR CRITICIDAD ==
+
+loop Para cada fila en DataGridView
+    UI -> UI: DgvBitacora_CellFormatting()
+    activate UI #DarkGreen
+
+    alt Criticidad == "Critico"
+        UI -> UI: BackColor = LightCoral\nForeColor = DarkRed
+    else Criticidad == "Error"
+        UI -> UI: BackColor = LightSalmon
+    else Criticidad == "Advertencia"
+        UI -> UI: BackColor = LightYellow
+    else Criticidad == "Info"
+        UI -> UI: BackColor = White
+    end
+
+    deactivate UI
+end
+
+== 9. ACTUALIZAR COMBOS DINÁMICOS ==
+
+UI -> UI: ActualizarOpcionesDinamicas()
+activate UI #DarkGreen
+
+' Actualizar módulos
+UI -> UI: modulosDistintos = _registros\n.Select(r => r.Modulo)\n.Distinct()\n.OrderBy(m => m)
+
+UI -> UI: cmbModulo.Items.Clear()\ncmbModulo.Items.Add("Todos")
+
+loop Para cada módulo distinto
+    UI -> UI: cmbModulo.Items.Add(modulo)
+end
+
+' Actualizar acciones
+UI -> UI: accionesDistintas = _registros\n.Select(r => r.Accion)\n.Distinct()\n.OrderBy(a => a)
+
+UI -> UI: cmbAccion.Items.Clear()\ncmbAccion.Items.Add("Todos")
+
+loop Para cada acción distinta
+    UI -> UI: cmbAccion.Items.Add(accion)
+end
+
+deactivate UI
+
+== 10. MOSTRAR CONTADOR ==
+
+UI -> UI: lblTotalRegistros.Text =\n"Total de registros: " + _registros.Count
+
+UI -> UI: Cursor = Cursors.Default
+
+deactivate UI
+
+[<-- Admin: Registros visibles en grid\ncon colores por criticidad
+
+' ============================================================================
+' FLUJO: FILTRAR CON CRITERIOS ESPECÍFICOS
+' ============================================================================
+
+== 11. MODIFICAR FILTROS Y BUSCAR ==
+
+Admin -> UI: Modifica filtros:\n- Selecciona Módulo: "Login"\n- Selecciona Criticidad: "Error"
+Admin -> UI: Clic en "Buscar"
+
+UI -> UI: BtnBuscar_Click()
+activate UI
+
+UI -> UI: CargarRegistros()
+activate UI #DarkSalmon
+
+== 12. OBTENER NUEVOS FILTROS ==
+
+UI -> UI: fechaDesde = dtpFechaDesde.Value\nfechaHasta = dtpFechaHasta.Value\nmodulo = "Login"\naccion = null (Todos)\ncriticidad = "Error"
+
+note right
+  Ahora los filtros específicos
+  tienen valores NO NULL:
+  - modulo = "Login"
+  - criticidad = "Error"
+
+  El SP aplicará esos filtros
+  en el WHERE.
+end note
+
+== 13. EJECUTAR CONSULTA FILTRADA ==
+
+UI -> BLL: ObtenerPorFiltros(\nfechaDesde, fechaHasta,\nnull, "Login", null, "Error", 1000)
+activate BLL
+
+BLL -> Repo: ObtenerPorFiltros(...)
+activate Repo
+
+Repo -> DB: EXEC Bitacora_SelectPorFiltros\n... @Modulo = 'Login',\n... @Criticidad = 'Error'
+activate DB
+
+note over DB
+  WHERE construido:
+  WHERE FechaHora >= @FechaDesde
+  AND FechaHora <= @FechaHasta
+  AND Modulo = 'Login'
+  AND Criticidad = 'Error'
+  ORDER BY FechaHora DESC
+  TOP 1000
+
+  Retorna SOLO registros de Login
+  con criticidad Error (logins fallidos).
+end note
+
+alt Hay registros que coinciden con filtros
+    DB --> Repo: DataTable con registros filtrados
+    deactivate DB
+
+    Repo -> Repo: Adaptar DataRows a List<Bitacora>
+
+    Repo --> BLL: List<Bitacora> filtrada
+    deactivate Repo
+
+    BLL --> UI: IEnumerable<Bitacora> filtrada
+    deactivate BLL
+
+    UI -> UI: Actualizar grid, colores, combos, contador
+
+    deactivate UI
+
+    [<-- Admin: SOLO logins fallidos visibles\nen color naranja (Error)
+
+else Sin registros que coincidan
+    DB --> Repo: DataTable vacío (0 filas)
+    deactivate DB
+
+    Repo --> BLL: List<Bitacora> vacía
+    deactivate Repo
+
+    BLL --> UI: IEnumerable<Bitacora> vacía
+    deactivate BLL
+
+    UI -> UI: dgvBitacora.DataSource = lista vacía
+
+    UI -> UI: lblTotalRegistros.Text =\n"Total de registros: 0"
+
+    UI -> UI: cmbModulo.Items = ["Todos"]\ncmbAccion.Items = ["Todos"]
+
+    deactivate UI
+
+    [<-- Admin: Grid vacío, contador en 0\n(resultado válido, no error)
+end
+
+deactivate UI
+
+' ============================================================================
+' NOTAS TÉCNICAS
+' ============================================================================
+
+note over Admin, DB
+  **CARACTERÍSTICAS CLAVE:**
+  - Todos los filtros son opcionales (nullable)
+  - WHERE dinámico construido en SP
+  - Límite de 1000 registros por performance
+  - Colores aplicados automáticamente al renderizar grid
+  - ComboBoxes dinámicos basados en resultados
+  - Solo lectura (no modifica bitácora)
+
+  **VENTAJAS:**
+  - Rápido (índices en FechaHora, Modulo, Criticidad)
+  - Flexible (cualquier combinación de filtros)
+  - Intuitivo (colores visuales por severidad)
+
+  **CASOS DE USO:**
+  - Auditoría de seguridad (logins fallidos)
+  - Monitoreo de errores (criticidad Error/Crítico)
+  - Seguimiento de cambios administrativos (módulo Permisos)
+  - Análisis de actividad por usuario
+  - Detección de anomalías o patrones
+end note
+
+' ============================================================================
+' METADATOS
+' ============================================================================
+
+legend bottom
+  **ARCHIVOS INVOLUCRADOS:**
+  - UI: UI/WinUi/Administración/FormBitacora.cs (líneas 213-252, 286-289)
+  - BLL: ServicesSeguridad/BLL/BitacoraBLL.cs (líneas 104-129)
+  - DAL: ServicesSeguridad/DAL/Implementations/BitacoraRepository.cs
+  - Adapter: ServicesSeguridad/DAL/Implementations/Adapter/BitacoraAdapter.cs
+
+  **STORED PROCEDURE:**
+  - Bitacora_SelectPorFiltros (@FechaDesde, @FechaHasta, @IdUsuario,
+                                @Modulo, @Accion, @Criticidad, @Top)
+
+  **MÉTODOS CLAVE:**
+  - FormBitacora.CargarRegistros() - Obtiene filtros y carga registros
+  - FormBitacora.ActualizarOpcionesDinamicas() - Llena ComboBoxes
+  - FormBitacora.DgvBitacora_CellFormatting() - Aplica colores
+  - BitacoraBLL.ObtenerPorFiltros() - Consulta con filtros opcionales
+  - BitacoraRepository.ObtenerPorFiltros() - Ejecuta SP
+  - BitacoraAdapter.Adaptar() - DataRow → Bitacora entity
+
+  **ÚLTIMA ACTUALIZACIÓN:** 2025-01-16
+  **VERSIÓN:** 1.0
+  **RELACIONADO CON:** CU-A004_Template_EA.txt
+endlegend
+
+@enduml

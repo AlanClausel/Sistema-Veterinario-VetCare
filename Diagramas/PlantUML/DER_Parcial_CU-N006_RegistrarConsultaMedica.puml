@@ -1,0 +1,254 @@
+@startuml DER_Parcial_CU-N006_RegistrarConsultaMedica
+title DER Parcial - CU-N006: Registrar Consulta Médica
+
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) <i>x</i>
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES PRINCIPALES
+' ═══════════════════════════════════════════════════════════════
+
+entity "ConsultaMedica" as ConsultaMedica {
+  primary_key(IdConsultaMedica) : Guid <<PK>>
+  --
+  foreign_key(IdCita) : Guid <<FK, UNIQUE>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  Diagnostico : string <<NOT NULL>>
+  Tratamiento : string
+  Sintomas : string
+  Observaciones : string
+  FechaConsulta : DateTime <<NOT NULL>>
+}
+
+entity "ConsultaMedicamento" as ConsultaMedicamento {
+  primary_key(IdConsultaMedicamento) : Guid <<PK>>
+  --
+  foreign_key(IdConsulta) : Guid <<FK>>
+  foreign_key(IdMedicamento) : Guid <<FK>>
+  Cantidad : int <<NOT NULL>>
+  Indicaciones : string
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES RELACIONADAS
+' ═══════════════════════════════════════════════════════════════
+
+entity "Cita" as Cita {
+  primary_key(IdCita) : Guid <<PK>>
+  --
+  foreign_key(IdMascota) : Guid <<FK>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  FechaHora : DateTime
+  Estado : string
+}
+
+entity "Veterinario" as Veterinario {
+  primary_key(IdVeterinario) : Guid <<PK>>
+  --
+  Nombre : string
+  Matricula : string <<UNIQUE>>
+}
+
+entity "Medicamento" as Medicamento {
+  primary_key(IdMedicamento) : Guid <<PK>>
+  --
+  Nombre : string <<NOT NULL>>
+  Presentacion : string
+  Stock : int <<NOT NULL>>
+  PrecioUnitario : decimal
+}
+
+entity "Mascota" as Mascota {
+  primary_key(IdMascota) : Guid <<PK>>
+  --
+  foreign_key(IdCliente) : Guid <<FK>>
+  Nombre : string
+  Especie : string
+  Peso : decimal
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+Cita ||--|| ConsultaMedica : "genera\n(1:1)"
+Veterinario ||--o{ ConsultaMedica : "realiza"
+ConsultaMedica ||--o{ ConsultaMedicamento : "prescribe\n(0..N)"
+Medicamento ||--o{ ConsultaMedicamento : "es recetado en"
+Cita }o--|| Mascota : "es para"
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of ConsultaMedica
+  **Operaciones del CU-N006:**
+
+  **CREATE (Registrar Consulta):**
+  - SP: ConsultaMedica_Finalizar (transaccional)
+
+  **Proceso completo (ATOMICO):**
+  1. INSERT ConsultaMedica
+  2. INSERT ConsultaMedicamento (N registros)
+  3. UPDATE Medicamento.Stock (reducir)
+  4. UPDATE Cita.Estado → "Completada"
+  5. COMMIT o ROLLBACK si falla
+
+  **Parámetros SP:**
+  - @IdCita
+  - @IdVeterinario
+  - @Diagnostico
+  - @Tratamiento
+  - @Sintomas
+  - @Observaciones
+  - @Medicamentos (Table-Valued Parameter)
+    • IdMedicamento
+    • Cantidad
+    • Indicaciones
+
+  **Validaciones en SP:**
+  ✓ Cita existe y está activa
+  ✓ Cita NO tiene consulta previa (IdCita UNIQUE)
+  ✓ Veterinario es el mismo de la cita
+  ✓ Stock suficiente para cada medicamento
+  ✓ Cantidad > 0 para cada medicamento
+
+  **Si falla alguna validación:**
+  - ROLLBACK completo
+  - Retorna error específico
+  - No se guarda nada
+end note
+
+note top of ConsultaMedicamento
+  **Tabla Intermedia (N:M):**
+
+  Relaciona ConsultaMedica con Medicamento
+
+  Representa medicamentos recetados:
+  - Qué medicamento (IdMedicamento)
+  - Cuánto (Cantidad)
+  - Cómo tomarlo (Indicaciones)
+
+  Ejemplos de Indicaciones:
+  - "1 comprimido cada 8 horas por 7 días"
+  - "5ml cada 12 horas después de comer"
+  - "Aplicar 1 vez al día en zona afectada"
+
+  **IMPORTANTE:**
+  Al insertar ConsultaMedicamento,
+  se reduce el Stock del Medicamento
+  en la misma transacción.
+end note
+
+note bottom of Medicamento
+  **Validación de Stock:**
+
+  Antes de crear ConsultaMedicamento:
+  1. Verificar Stock >= Cantidad
+  2. Si Stock insuficiente:
+     - ROLLBACK transacción
+     - Error: "Stock insuficiente para [Nombre]"
+     - Mostrar stock actual
+
+  Actualización de Stock:
+  UPDATE Medicamento
+  SET Stock = Stock - @Cantidad
+  WHERE IdMedicamento = @IdMedicamento
+    AND Stock >= @Cantidad
+
+  Si UPDATE afecta 0 filas:
+  - Stock insuficiente
+  - ROLLBACK
+end note
+
+note left of Cita
+  **Relación con Cita:**
+
+  Restricciones:
+  - IdCita es FK y UNIQUE
+  - Una Cita solo puede tener 1 ConsultaMedica
+  - Previene duplicación de consultas
+
+  Cambio de Estado:
+  - Antes: "Agendada" o "Confirmada"
+  - Después: "Completada"
+  - Automático en el SP
+
+  Validación:
+  - Solo se puede crear consulta si:
+    • Cita existe
+    • Cita NO está "Cancelada"
+    • Cita NO está "NoAsistio"
+    • Cita NO tiene consulta previa
+end note
+
+note bottom of Veterinario
+  **Rol del Veterinario:**
+
+  - SOLO Veterinarios pueden registrar consultas
+  - IdVeterinario debe coincidir con la Cita
+  - Validado en SP y en BLL
+
+  Esto garantiza:
+  - Trazabilidad
+  - Responsabilidad médica
+  - Auditoría completa
+
+  Se registra en Bitácora:
+  - Módulo: "Consultas Médicas"
+  - Entidad: "ConsultaMedica"
+  - Usuario: Veterinario que registró
+end note
+
+note top of Mascota
+  **Información del Paciente:**
+
+  A través de Cita → Mascota:
+  - Nombre de la mascota
+  - Especie, Raza
+  - Peso actual
+  - Cliente (dueño)
+
+  Esta info se muestra en:
+  - Formulario de consulta
+  - Receta médica (impresión)
+  - Historial clínico
+end note
+
+note bottom of ConsultaMedica
+  **Stored Procedure Crítico:**
+
+  SP: ConsultaMedica_Finalizar
+
+  BEGIN TRANSACTION
+
+  -- 1. Validaciones
+  IF NOT EXISTS (SELECT 1 FROM Cita WHERE IdCita = @IdCita)
+      ROLLBACK; RETURN ERROR
+
+  IF EXISTS (SELECT 1 FROM ConsultaMedica WHERE IdCita = @IdCita)
+      ROLLBACK; RETURN ERROR -- Ya tiene consulta
+
+  -- 2. Insertar ConsultaMedica
+  INSERT INTO ConsultaMedica (...)
+
+  -- 3. Insertar medicamentos recetados
+  INSERT INTO ConsultaMedicamento
+  SELECT ... FROM @Medicamentos
+
+  -- 4. Reducir stock
+  UPDATE Medicamento SET Stock = Stock - Cantidad
+  FROM @Medicamentos
+  WHERE Stock >= Cantidad
+
+  IF @@ROWCOUNT <> (SELECT COUNT(*) FROM @Medicamentos)
+      ROLLBACK; RETURN ERROR -- Stock insuficiente
+
+  -- 5. Actualizar estado de cita
+  UPDATE Cita SET Estado = 'Completada'
+  WHERE IdCita = @IdCita
+
+  COMMIT TRANSACTION
+end note
+
+@enduml

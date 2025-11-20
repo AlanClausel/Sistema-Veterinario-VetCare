@@ -1,0 +1,211 @@
+@startuml DER_Parcial_CU-N010_GestionarMedicamentos
+title DER Parcial - CU-N010: Gestionar Medicamentos
+
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) <i>x</i>
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES PRINCIPALES
+' ═══════════════════════════════════════════════════════════════
+
+entity "Medicamento" as Medicamento {
+  primary_key(IdMedicamento) : Guid <<PK>>
+  --
+  Nombre : string <<NOT NULL>>
+  Presentacion : string <<NOT NULL>>
+  Stock : int <<NOT NULL, DEFAULT 0>>
+  PrecioUnitario : decimal <<NOT NULL, DEFAULT 0>>
+  Observaciones : string
+  FechaRegistro : DateTime
+  Activo : bool
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  ENTIDADES RELACIONADAS
+' ═══════════════════════════════════════════════════════════════
+
+entity "ConsultaMedicamento" as ConsultaMedicamento {
+  primary_key(IdConsultaMedicamento) : Guid <<PK>>
+  --
+  foreign_key(IdConsulta) : Guid <<FK>>
+  foreign_key(IdMedicamento) : Guid <<FK>>
+  Cantidad : int <<NOT NULL>>
+  Indicaciones : string
+}
+
+entity "ConsultaMedica" as ConsultaMedica {
+  primary_key(IdConsultaMedica) : Guid <<PK>>
+  --
+  foreign_key(IdCita) : Guid <<FK>>
+  foreign_key(IdVeterinario) : Guid <<FK>>
+  Diagnostico : string
+  FechaConsulta : DateTime
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  RELACIONES
+' ═══════════════════════════════════════════════════════════════
+
+Medicamento ||--o{ ConsultaMedicamento : "es recetado en\n(0..N)"
+ConsultaMedica ||--o{ ConsultaMedicamento : "prescribe"
+
+' ═══════════════════════════════════════════════════════════════
+'  NOTAS EXPLICATIVAS
+' ═══════════════════════════════════════════════════════════════
+
+note right of Medicamento
+  **Operaciones del CU-N010:**
+
+  **CREATE (Registrar):**
+  - SP: Medicamento_Insert
+  - Stock inicial (default 0)
+  - Generar IdMedicamento (Guid)
+
+  **READ (Buscar/Listar):**
+  - SP: Medicamento_SelectAll
+  - SP: Medicamento_SelectOne
+  - SP: Medicamento_SelectActivos
+  - SP: Medicamento_SelectBajoStock
+
+  **UPDATE (Modificar):**
+  - SP: Medicamento_Update
+  - SP: Medicamento_UpdateStock
+  - Actualizar datos generales
+  - Actualizar stock (ingreso/egreso)
+
+  **DELETE (Dar de Baja):**
+  - SP: Medicamento_Delete
+  - Soft delete (Activo = 0)
+  - Mantiene historial de recetas
+
+  **Validaciones:**
+  ✓ Nombre obligatorio
+  ✓ Presentación obligatoria
+  ✓ Stock >= 0 (no negativo)
+  ✓ PrecioUnitario >= 0
+end note
+
+note top of Medicamento
+  **Gestión de Stock:**
+
+  **Operaciones de Ingreso (+):**
+  - Compra de medicamentos
+  - Devolución de cliente
+  - Ajuste de inventario
+  - Corrección de errores
+
+  **Operaciones de Egreso (-):**
+  - Uso en consulta (automático)
+  - Venta directa
+  - Descarte por vencimiento
+  - Pérdida o robo
+
+  **Validación crítica:**
+  Stock resultante SIEMPRE >= 0
+  No se permite stock negativo
+
+  **Auditoría:**
+  Cada cambio de stock se registra en Bitácora:
+  - Usuario que modificó
+  - Fecha y hora
+  - Stock anterior → Stock nuevo
+  - Motivo del cambio
+end note
+
+note left of Medicamento
+  **Alertas de Stock:**
+
+  Niveles de alerta:
+  - **Crítico:** Stock < 10
+    Color: Rojo
+    Acción: Orden urgente
+
+  - **Advertencia:** Stock < 20
+    Color: Amarillo
+    Acción: Planificar compra
+
+  - **Agotado:** Stock = 0
+    Color: Gris
+    Acción: No se puede recetar
+
+  **SP:** Medicamento_SelectBajoStock
+  Parámetro: @UmbralMinimo (default 20)
+
+  Se muestra en:
+  - Dashboard principal
+  - Lista de medicamentos (icono)
+  - Al intentar recetar
+end note
+
+note bottom of ConsultaMedicamento
+  **Reducción Automática de Stock:**
+
+  Proceso (dentro de ConsultaMedica_Finalizar):
+
+  1. Veterinario selecciona medicamentos
+  2. Especifica cantidades
+  3. Sistema valida stock disponible:
+     IF Stock >= Cantidad THEN OK
+     ELSE Error "Stock insuficiente"
+
+  4. Al confirmar consulta:
+     UPDATE Medicamento
+     SET Stock = Stock - @Cantidad
+     WHERE IdMedicamento = @IdMedicamento
+       AND Stock >= @Cantidad
+
+  5. Si UPDATE afecta 0 filas:
+     ROLLBACK transacción completa
+
+  **Esto garantiza:**
+  - Stock siempre actualizado
+  - No hay recetas sin stock
+  - Integridad transaccional
+end note
+
+note top of ConsultaMedica
+  **Reportes de Medicamentos:**
+
+  1. **Más Recetados:**
+     SELECT TOP 10 Medicamento, COUNT(*)
+     FROM ConsultaMedicamento
+     GROUP BY IdMedicamento
+     ORDER BY COUNT(*) DESC
+
+  2. **Por Período:**
+     Filtrar por FechaConsulta
+     Útil para planificación de compras
+
+  3. **Por Veterinario:**
+     Ver patrones de prescripción
+     Identificar preferencias
+
+  4. **Valor de Inventario:**
+     SELECT SUM(Stock * PrecioUnitario)
+     FROM Medicamento
+     WHERE Activo = 1
+
+  **Exportable a:**
+  - Excel
+  - PDF
+  - CSV
+end note
+
+note bottom of Medicamento
+  **Ejemplos de Presentación:**
+
+  - "Comprimidos 50mg x 30 unidades"
+  - "Jarabe 100ml"
+  - "Inyectable 10mg/ml x 5 ampollas"
+  - "Crema tópica 30g"
+  - "Tabletas masticables 25mg x 20"
+
+  **Importante:**
+  Presentación ayuda a:
+  - Identificar correctamente
+  - Calcular dosis
+  - Evitar confusiones
+  - Gestionar stock por unidad
+end note
+
+@enduml

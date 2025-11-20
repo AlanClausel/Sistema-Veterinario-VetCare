@@ -3,20 +3,55 @@ using System;
 namespace DomainModel
 {
     /// <summary>
-    /// Entidad Medicamento - Catálogo de medicamentos disponibles
+    /// Entidad Medicamento - Catálogo de medicamentos disponibles en la veterinaria.
+    /// Gestiona el inventario, precios y disponibilidad de medicamentos.
     /// </summary>
     public class Medicamento
     {
+        /// <summary>
+        /// Identificador único del medicamento (GUID)
+        /// </summary>
         public Guid IdMedicamento { get; set; }
+
+        /// <summary>
+        /// Nombre comercial o genérico del medicamento
+        /// </summary>
         public string Nombre { get; set; }
-        public string Presentacion { get; set; }  // Ej: "500mg", "Suspensión 250mg/5ml"
+
+        /// <summary>
+        /// Presentación del medicamento (Ej: "500mg", "Suspensión 250mg/5ml", "10ml inyectable")
+        /// </summary>
+        public string Presentacion { get; set; }
+
+        /// <summary>
+        /// Cantidad disponible en inventario
+        /// </summary>
         public int Stock { get; set; }
+
+        /// <summary>
+        /// Precio unitario del medicamento en la moneda local
+        /// </summary>
         public decimal PrecioUnitario { get; set; }
+
+        /// <summary>
+        /// Observaciones o notas adicionales sobre el medicamento
+        /// </summary>
         public string Observaciones { get; set; }
+
+        /// <summary>
+        /// Fecha y hora en que el medicamento fue registrado en el sistema
+        /// </summary>
         public DateTime FechaRegistro { get; set; }
+
+        /// <summary>
+        /// Indica si el medicamento está activo en el sistema (para baja lógica)
+        /// </summary>
         public bool Activo { get; set; }
 
-        // Constructor vacío
+        /// <summary>
+        /// Constructor por defecto. Inicializa un nuevo medicamento con valores predeterminados.
+        /// Genera un nuevo GUID, establece la fecha de registro actual y valores iniciales para stock y precio.
+        /// </summary>
         public Medicamento()
         {
             IdMedicamento = Guid.NewGuid();
@@ -26,13 +61,23 @@ namespace DomainModel
             PrecioUnitario = 0;
         }
 
-        // Propiedades calculadas
+        /// <summary>
+        /// Obtiene el nombre completo del medicamento combinando nombre y presentación
+        /// </summary>
+        /// <returns>Cadena con el formato "Nombre Presentacion"</returns>
         public string NombreCompleto => $"{Nombre} {Presentacion}";
+
+        /// <summary>
+        /// Indica si el medicamento tiene stock disponible
+        /// </summary>
+        /// <returns>True si el stock es mayor a 0, false en caso contrario</returns>
         public bool DisponibleEnStock => Stock > 0;
 
         /// <summary>
-        /// Valida la entidad Medicamento
+        /// Valida que los datos del medicamento cumplan con las reglas de negocio.
+        /// Verifica campos obligatorios, longitudes mínimas y valores válidos.
         /// </summary>
+        /// <returns>Array de mensajes de error. Si está vacío, el medicamento es válido</returns>
         public string[] Validar()
         {
             var errores = new System.Collections.Generic.List<string>();
@@ -53,8 +98,12 @@ namespace DomainModel
         }
 
         /// <summary>
-        /// Reduce el stock del medicamento
+        /// Reduce el stock del medicamento en la cantidad especificada.
+        /// Valida que haya suficiente stock disponible antes de realizar la operación.
         /// </summary>
+        /// <param name="cantidad">Cantidad a reducir del stock (debe ser positiva)</param>
+        /// <exception cref="ArgumentException">Si la cantidad es negativa</exception>
+        /// <exception cref="InvalidOperationException">Si no hay suficiente stock disponible</exception>
         public void ReducirStock(int cantidad)
         {
             if (cantidad < 0)
@@ -67,8 +116,11 @@ namespace DomainModel
         }
 
         /// <summary>
-        /// Aumenta el stock del medicamento
+        /// Aumenta el stock del medicamento en la cantidad especificada.
+        /// Útil al recibir nueva mercadería o al realizar devoluciones.
         /// </summary>
+        /// <param name="cantidad">Cantidad a agregar al stock (debe ser positiva)</param>
+        /// <exception cref="ArgumentException">Si la cantidad es negativa</exception>
         public void AumentarStock(int cantidad)
         {
             if (cantidad < 0)
@@ -77,6 +129,10 @@ namespace DomainModel
             Stock += cantidad;
         }
 
+        /// <summary>
+        /// Retorna una representación en cadena del medicamento con su nombre completo y stock
+        /// </summary>
+        /// <returns>Cadena con el formato "NombreCompleto - Stock: X"</returns>
         public override string ToString()
         {
             return $"{NombreCompleto} - Stock: {Stock}";

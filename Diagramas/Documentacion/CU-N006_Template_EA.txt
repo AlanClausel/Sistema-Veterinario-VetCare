@@ -1,0 +1,1443 @@
+===============================================================================
+    CASO DE USO: CU-N006 - REGISTRAR CONSULTA MÉDICA
+===============================================================================
+
+INFORMACIÓN GENERAL
+-------------------
+ID:             CU-N006
+Nombre:         Registrar Consulta Médica
+Actor(es):      Veterinario (con ROL_Veterinario)
+Descripción:    Registrar consulta médica después de atender una cita. Incluye
+                captura de síntomas, diagnóstico, tratamiento, observaciones, y
+                receta de medicamentos con indicaciones. Al finalizar: actualiza
+                estado de cita a Completada, reduce stock de medicamentos recetados,
+                y registra en bitácora. CRÍTICO: Operación transaccional con
+                ROLLBACK automático si stock insuficiente. Puede abrir en modo
+                creación (si cita no tiene consulta) o edición (si consulta ya
+                existe). Búsqueda de medicamentos en tiempo real, validación de
+                stock disponible, formulario auxiliar para cantidad/indicaciones.
+                Auditoría: IniciarConsulta (Alta), GuardarConsulta (Modificación),
+                FinalizarConsulta (Info), AgregarMedicamento (Info).
+
+Precondiciones:
+  - Usuario autenticado con ROL_Veterinario
+  - Cita en estado Agendada o Confirmada
+  - Cita asignada al veterinario (IdVeterinario = IdUsuario)
+
+Postcondiciones:
+  - ConsultaMedica creada/actualizada en BD
+  - Medicamentos agregados a ConsultaMedicamento
+  - Stock de medicamentos reducido (al finalizar)
+  - Estado de Cita actualizado a Completada (al finalizar)
+  - Operación registrada en Bitácora
+
+Frecuencia de Uso: Muy Alta (cada consulta veterinaria)
+Criticidad:        Muy Alta (core business, inventario crítico)
+
+
+===============================================================================
+    FLUJO PRINCIPAL
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│        OPERACIÓN 1: INICIAR CONSULTA MÉDICA (Modo Creación)                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Desde MisCitas, selecciona cita y    │
+hace clic en "Iniciar Consulta"         │
+                                        │ 2. Ejecuta FormConsultaMedica(idCita,
+                                        │    idVeterinario)
+                                        │ 3. Constructor asigna:
+                                        │    _idCita = idCita
+                                        │    _idVeterinario = idVeterinario
+                                        │    _medicamentosSeleccionados = new List()
+                                        │ 4. Ejecuta FormConsultaMedica_Load()
+                                        │ 5. Llama CitaBLL.Current.ObtenerCita(idCita)
+                                        │ 6. Valida cita != null
+                                        │ 7. Ejecuta CargarDatosCita():
+                                        │    txtFecha = cita.FechaCita
+                                        │    txtHora = cita.HoraCita
+                                        │    txtTipo = cita.TipoConsulta
+                                        │    txtCliente = cita.ClienteNombre
+                                        │    txtMascota = cita.MascotaNombre
+                                        │    (campos solo lectura)
+                                        │ 8. Llama ConsultaMedicaBLL.Current
+                                        │    .ObtenerConsultaPorCita(idCita)
+                                        │ 9. BLL ejecuta SP:
+                                        │    EXEC ConsultaMedica_SelectByCita
+                                        │      @IdCita
+                                        │ 10. SP retorna NULL (no existe consulta)
+                                        │ 11. Llama ConsultaMedicaBLL.Current
+                                        │     .IniciarConsulta(idCita, idVeterinario)
+                                        │ 12. BLL valida cita existe
+                                        │ 13. BLL valida cita NO tiene consulta previa
+                                        │ 14. BLL valida estado cita == Agendada ||
+                                        │     Confirmada
+                                        │ 15. BLL crea entidad ConsultaMedica:
+                                        │     {
+                                        │       IdConsulta: NEWID(),
+                                        │       IdCita: idCita,
+                                        │       IdVeterinario: idVeterinario,
+                                        │       Sintomas: "",
+                                        │       Diagnostico: "",
+                                        │       Tratamiento: "",
+                                        │       Observaciones: "",
+                                        │       FechaConsulta: GETDATE(),
+                                        │       Activo: 1
+                                        │     }
+                                        │ 16. BLL llama ConsultaMedicaRepository
+                                        │     .Current.Crear(consulta)
+                                        │ 17. Repository ejecuta SP:
+                                        │     EXEC ConsultaMedica_Insert
+                                        │       @IdConsulta, @IdCita, @IdVeterinario,
+                                        │       @Sintomas, @Diagnostico, @Tratamiento,
+                                        │       @Observaciones, @FechaConsulta
+                                        │ 18. SP inserta en tabla ConsultaMedica
+                                        │ 19. BLL registra en Bitácora:
+                                        │     - Módulo: "Consultas Médicas"
+                                        │     - Acción: "Alta"
+                                        │     - Criticidad: Info
+                                        │     - Detalle: "Consulta médica iniciada
+                                        │       para cita {idCita}"
+                                        │ 20. Asigna _consultaActual = nuevaConsulta
+                                        │ 21. Llama MedicamentoBLL.Current
+                                        │     .ListarMedicamentosDisponibles()
+                                        │ 22. BLL ejecuta SP:
+                                        │     EXEC Medicamento_SelectDisponibles
+                                        │ 23. SP retorna medicamentos con Stock > 0
+                                        │ 24. Asigna _medicamentosDisponibles
+                                        │ 25. Muestra primeros 20 medicamentos en
+                                        │     lstResultados con formato:
+                                        │     "{Nombre} {Presentacion} - Stock: {Stock}"
+────────────────────────────────────────┼────────────────────────────────────────
+26. Visualiza formulario con:          │
+    - Datos de cita (solo lectura)     │
+    - Campos Síntomas, Diagnóstico,    │
+      Tratamiento, Observaciones vacíos │
+    - Lista de medicamentos disponibles │
+    - Lista de seleccionados vacía     │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 2: CARGAR CONSULTA EXISTENTE (Modo Edición)         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Desde MisCitas, selecciona cita que  │
+YA tiene consulta, clic "Iniciar        │
+Consulta"                               │
+                                        │ 2. Ejecuta FormConsultaMedica(idCita,
+                                        │    idVeterinario)
+                                        │ 3. FormConsultaMedica_Load()
+                                        │ 4. Carga datos de cita (igual Op. 1)
+                                        │ 5. Llama ConsultaMedicaBLL.Current
+                                        │    .ObtenerConsultaPorCita(idCita)
+                                        │ 6. SP retorna consulta existente
+                                        │ 7. Asigna _consultaActual = consultaExistente
+                                        │ 8. Ejecuta CargarConsultaExistente():
+                                        │    txtSintomas.Text = consulta.Sintomas
+                                        │    txtDiagnostico.Text = consulta.Diagnostico
+                                        │ 9. Llama ConsultaMedicaBLL.Current
+                                        │    .ObtenerMedicamentosDeConsulta(idConsulta)
+                                        │ 10. BLL ejecuta SP:
+                                        │     EXEC ConsultaMedicamento_SelectByConsulta
+                                        │       @IdConsulta
+                                        │ 11. SP retorna medicamentos recetados:
+                                        │     SELECT cm.IdMedicamento, cm.Cantidad,
+                                        │       cm.Indicaciones, m.Nombre, m.Presentacion
+                                        │     FROM ConsultaMedicamento cm
+                                        │     INNER JOIN Medicamento m ON ...
+                                        │ 12. Adapter convierte a List<MedicamentoRecetado>
+                                        │ 13. Para cada medicamento recetado:
+                                        │     _medicamentosSeleccionados.Add(
+                                        │       new MedicamentoSeleccionado {
+                                        │         IdMedicamento = med.IdMedicamento,
+                                        │         Nombre = med.NombreCompleto,
+                                        │         Cantidad = med.Cantidad,
+                                        │         Indicaciones = med.Indicaciones
+                                        │       })
+                                        │ 14. Actualiza lstSeleccionados con
+                                        │     medicamentos recetados
+                                        │ 15. Carga medicamentos disponibles (igual Op. 1)
+────────────────────────────────────────┼────────────────────────────────────────
+16. Visualiza formulario con:          │
+    - Datos de cita (solo lectura)     │
+    - Síntomas y Diagnóstico cargados  │
+    - Medicamentos recetados en lista  │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            OPERACIÓN 3: BUSCAR MEDICAMENTOS EN TIEMPO REAL                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Escribe en txtBuscar: "amoxi"        │
+                                        │ 2. Ejecuta txtBuscar_TextChanged()
+                                        │ 3. Obtiene criterio: "amoxi"
+                                        │ 4. Filtra _medicamentosDisponibles en memoria:
+                                        │    var resultados = _medicamentosDisponibles
+                                        │      .Where(m =>
+                                        │        m.Nombre.ToLower().Contains("amoxi") ||
+                                        │        m.Presentacion.ToLower().Contains("amoxi"))
+                                        │      .ToList()
+                                        │    NOTA: Filtro en memoria, NO llama BLL
+                                        │ 5. Muestra primeros 20 resultados en
+                                        │    lstResultados:
+                                        │    - "Amoxicilina 500mg cápsulas - Stock: 50"
+                                        │    - "Amoxicilina inyectable 1g - Stock: 12"
+────────────────────────────────────────┼────────────────────────────────────────
+6. Borra txtBuscar (vacío)              │
+                                        │ 7. Detecta criterio vacío
+                                        │ 8. Muestra TODOS los medicamentos disponibles
+                                        │    (primeros 20)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 4: AGREGAR MEDICAMENTO A LA RECETA                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona medicamento en            │
+lstResultados:                          │
+"Amoxicilina 500mg - Stock: 50"         │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Añadir"                     │
+                                        │ 3. Ejecuta btnAñadir_Click()
+                                        │ 4. Valida lstResultados.SelectedItem != null
+                                        │ 5. Obtiene medicamento seleccionado
+                                        │ 6. Valida NO esté ya en
+                                        │    _medicamentosSeleccionados
+                                        │ 7. Crea FormCantidadMedicamento(medicamento)
+                                        │ 8. FormCantidadMedicamento:
+                                        │    - lblMedicamento: "Amoxicilina 500mg
+                                        │      cápsulas - Stock disponible: 50"
+                                        │    - numCantidad.Maximum = 50 (stock)
+                                        │    - numCantidad.Value = 1 (defecto)
+                                        │    - txtIndicaciones: "Tomar cada 8 horas"
+                                        │      (texto defecto traducido)
+                                        │ 9. formCantidad.ShowDialog()
+────────────────────────────────────────┼────────────────────────────────────────
+10. Ingresa cantidad: 14                │
+11. Modifica indicaciones: "Tomar cada  │
+    8 horas durante 7 días con          │
+    alimento"                           │
+────────────────────────────────────────┼────────────────────────────────────────
+12. Clic en "Aceptar"                   │
+                                        │ 13. FormCantidadMedicamento:
+                                        │     Cantidad = 14
+                                        │     Indicaciones = "Tomar cada 8 horas..."
+                                        │     DialogResult = OK
+                                        │ 14. Cierra FormCantidadMedicamento
+                                        │ 15. FormConsultaMedica:
+                                        │     IF DialogResult == OK:
+                                        │       _medicamentosSeleccionados.Add(
+                                        │         new MedicamentoSeleccionado {
+                                        │           IdMedicamento = guid,
+                                        │           Nombre = "Amoxicilina 500mg cápsulas",
+                                        │           Cantidad = 14,
+                                        │           Indicaciones = "Tomar cada 8 horas..."
+                                        │         })
+                                        │ 16. Ejecuta ActualizarListaSeleccionados():
+                                        │     lstSeleccionados.Items.Clear()
+                                        │     Agrega cada medicamento con formato:
+                                        │     "{Nombre} x {Cantidad} - {Indicaciones}"
+                                        │ 17. lstSeleccionados muestra:
+                                        │     "Amoxicilina 500mg cápsulas x 14 -
+                                        │      Tomar cada 8 horas durante 7 días..."
+────────────────────────────────────────┼────────────────────────────────────────
+18. Repite pasos 1-17 para agregar más  │
+medicamentos (ej: Ibuprofeno, etc.)     │
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              OPERACIÓN 5: QUITAR MEDICAMENTO DE LA RECETA                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona medicamento en            │
+lstSeleccionados:                       │
+"Ibuprofeno 400mg x 10 - ..."           │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Quitar"                     │
+                                        │ 3. Ejecuta btnQuitar_Click()
+                                        │ 4. Valida lstSeleccionados.SelectedItem
+                                        │    != null
+                                        │ 5. Obtiene medSeleccionado
+                                        │ 6. _medicamentosSeleccionados.Remove(
+                                        │    medSeleccionado)
+                                        │ 7. Ejecuta ActualizarListaSeleccionados()
+                                        │ 8. lstSeleccionados ya NO muestra Ibuprofeno
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│          OPERACIÓN 6: FINALIZAR CONSULTA (Transaccional CRÍTICO)           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ACTOR (Veterinario)                      SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Completa campos:                     │
+   - Síntomas: "Fiebre alta, decaimiento,│
+     inapetencia, vómitos ocasionales"  │
+   - Diagnóstico: "Gastroenteritis       │
+     bacteriana"                         │
+   - Tratamiento: (opcional)            │
+   - Observaciones: (opcional)          │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Finalizar Consulta"         │
+                                        │ 3. Ejecuta btnFinalizarConsulta_Click()
+                                        │ 4. Valida Síntomas NO vacío:
+                                        │    IF string.IsNullOrWhiteSpace(txtSintomas)
+                                        │      Muestra error: "Debe ingresar síntomas"
+                                        │      txtSintomas.Focus()
+                                        │      return
+                                        │ 5. Valida Diagnóstico NO vacío:
+                                        │    IF string.IsNullOrWhiteSpace(txtDiagnostico)
+                                        │      Muestra error: "Debe ingresar diagnóstico"
+                                        │      txtDiagnostico.Focus()
+                                        │      return
+                                        │ 6. Actualiza _consultaActual:
+                                        │    _consultaActual.Sintomas = txtSintomas.Text
+                                        │    _consultaActual.Diagnostico = txtDiagnostico.Text
+                                        │ 7. Llama ConsultaMedicaBLL.Current
+                                        │    .GuardarConsulta(_consultaActual)
+                                        │ 8. BLL valida consulta (Validar())
+                                        │ 9. BLL llama ConsultaMedicaRepository
+                                        │    .Current.Actualizar(consulta)
+                                        │ 10. Repository ejecuta SP:
+                                        │     EXEC ConsultaMedica_Update
+                                        │       @IdConsulta, @Sintomas, @Diagnostico,
+                                        │       @Tratamiento, @Observaciones
+                                        │ 11. SP actualiza ConsultaMedica
+                                        │ 12. BLL registra en Bitácora:
+                                        │     - Módulo: "Consultas Médicas"
+                                        │     - Acción: "Modificación"
+                                        │     - Criticidad: Info
+                                        │ 13. Llama ConsultaMedicaBLL.Current
+                                        │     .ObtenerMedicamentosDeConsulta(idConsulta)
+                                        │ 14. Para cada medicamento actual en BD:
+                                        │       ConsultaMedicaBLL.Current
+                                        │         .EliminarMedicamento(idConsulta, idMed)
+                                        │ 15. Repository ejecuta para cada uno:
+                                        │     EXEC ConsultaMedicamento_Delete
+                                        │       @IdConsulta, @IdMedicamento
+                                        │     DELETE FROM ConsultaMedicamento
+                                        │     WHERE IdConsulta = @IdConsulta
+                                        │       AND IdMedicamento = @IdMedicamento
+                                        │ 16. Para cada medicamento en
+                                        │     _medicamentosSeleccionados:
+                                        │       ConsultaMedicaBLL.Current
+                                        │         .AgregarMedicamento(idConsulta,
+                                        │           idMed, cantidad, indicaciones)
+                                        │ 17. BLL valida cantidad > 0
+                                        │ 18. BLL obtiene medicamento y valida stock:
+                                        │     IF medicamento.Stock < cantidad:
+                                        │       throw InvalidOperationException
+                                        │       "Stock insuficiente. Disponible: X,
+                                        │        Solicitado: Y"
+                                        │ 19. BLL llama Repository.AgregarMedicamento()
+                                        │ 20. Repository ejecuta SP:
+                                        │     EXEC ConsultaMedicamento_Insert
+                                        │       @IdConsulta, @IdMedicamento,
+                                        │       @Cantidad, @Indicaciones
+                                        │     INSERT INTO ConsultaMedicamento (...)
+                                        │     VALUES (...)
+                                        │ 21. BLL registra en Bitácora:
+                                        │     - Módulo: "Consultas Médicas"
+                                        │     - Acción: "AgregarMedicamento"
+                                        │     - Criticidad: Info
+                                        │ 22. Llama ConsultaMedicaBLL.Current
+                                        │     .FinalizarConsulta(idConsulta)
+                                        │ 23. BLL valida consulta existe
+                                        │ 24. BLL ejecuta consulta.Validar():
+                                        │     - Sintomas requerido >= 3 chars
+                                        │     - Diagnostico requerido >= 3 chars
+                                        │ 25. BLL llama ConsultaMedicaRepository
+                                        │     .Current.FinalizarConsulta(idConsulta, idCita)
+                                        │ 26. Repository ejecuta SP:
+                                        │     EXEC ConsultaMedica_Finalizar
+                                        │       @IdConsulta, @IdCita
+                                        │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                        │   STORED PROCEDURE TRANSACCIONAL
+                                        │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                        │ 27. SP inicia transacción:
+                                        │     BEGIN TRANSACTION
+                                        │ 28. SP verifica stock TODOS medicamentos:
+                                        │     IF EXISTS (
+                                        │       SELECT 1
+                                        │       FROM ConsultaMedicamento cm
+                                        │       INNER JOIN Medicamento m ON ...
+                                        │       WHERE cm.IdConsulta = @IdConsulta
+                                        │         AND m.Stock < cm.Cantidad
+                                        │     )
+                                        │ 29. IF stock insuficiente:
+                                        │       ROLLBACK TRANSACTION
+                                        │       RAISERROR('Stock insuficiente...')
+                                        │       RETURN
+                                        │     (NO continúa, retorna FALSE a Repository)
+                                        │ 30. ELSE (stock OK):
+                                        │     Actualiza estado cita:
+                                        │     UPDATE Cita
+                                        │     SET Estado = 'Completada'
+                                        │     WHERE IdCita = @IdCita
+                                        │ 31. Reduce stock de medicamentos:
+                                        │     UPDATE m
+                                        │     SET m.Stock = m.Stock - cm.Cantidad
+                                        │     FROM Medicamento m
+                                        │     INNER JOIN ConsultaMedicamento cm ON ...
+                                        │     WHERE cm.IdConsulta = @IdConsulta
+                                        │ 32. COMMIT TRANSACTION
+                                        │ 33. SELECT 1 AS Resultado (éxito)
+                                        │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                        │ 34. Repository retorna TRUE
+                                        │ 35. BLL registra en Bitácora:
+                                        │     - Módulo: "Consultas Médicas"
+                                        │     - Acción: "FinalizarConsulta"
+                                        │     - Criticidad: Info
+                                        │     - Detalle: "Consulta médica finalizada
+                                        │       - ID: {id}, Cita: {idCita}"
+                                        │ 36. Muestra mensaje: "Consulta finalizada
+                                        │     exitosamente"
+                                        │ 37. DialogResult = OK
+                                        │ 38. Cierra FormConsultaMedica
+────────────────────────────────────────┼────────────────────────────────────────
+39. Retorna a MisCitas                  │
+                                        │ 40. MisCitas recarga grid → Cita ahora
+                                        │     en estado Completada (gris)
+
+
+===============================================================================
+    FLUJOS ALTERNATIVOS
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                FA-1: CITA NO ENCONTRADA (Load)                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1, paso 5:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Intenta abrir FormConsultaMedica     │
+con idCita inválido                     │
+                                        │ 2. Llama CitaBLL.ObtenerCita(idCita)
+                                        │ 3. Retorna NULL (cita no existe)
+                                        │ 4. Muestra MessageBox:
+                                        │    "No se encontró la cita"
+                                        │    Tipo: Error
+                                        │ 5. this.Close() → Cierra formulario
+                                        │    inmediatamente
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│         FA-2: CITA CON ESTADO INVÁLIDO PARA CONSULTA (Iniciar)             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 1, paso 14:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Intenta iniciar consulta para cita   │
+en estado Completada o Cancelada        │
+                                        │ 2. ConsultaMedicaBLL.IniciarConsulta()
+                                        │ 3. Valida cita.Estado != Agendada &&
+                                        │    cita.Estado != Confirmada
+                                        │ 4. throw InvalidOperationException:
+                                        │    "No se puede iniciar consulta para
+                                        │    una cita en estado {estado}"
+                                        │ 5. Catch en FormConsultaMedica_Load()
+                                        │ 6. Muestra error y cierra formulario
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            FA-3: AGREGAR MEDICAMENTO YA EN LISTA                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 4, paso 6:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Selecciona "Amoxicilina 500mg"       │
+que YA está en lstSeleccionados         │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Añadir"                     │
+                                        │ 3. Ejecuta btnAñadir_Click()
+                                        │ 4. Valida:
+                                        │    IF _medicamentosSeleccionados.Any(m =>
+                                        │      m.IdMedicamento == item.IdMedicamento)
+                                        │    (TRUE - ya existe)
+                                        │ 5. Muestra MessageBox:
+                                        │    "El medicamento ya está en la lista"
+                                        │    Tipo: Warning
+                                        │ 6. return → NO abre FormCantidadMedicamento
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│          FA-4: CANCELAR INGRESO CANTIDAD EN FORMULARIO AUXILIAR             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 4, paso 12:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. FormCantidadMedicamento abierto      │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Cancelar" (o cierra ventana)│
+                                        │ 3. DialogResult = Cancel
+                                        │ 4. Cierra FormCantidadMedicamento
+                                        │ 5. FormConsultaMedica:
+                                        │    IF DialogResult != OK:
+                                        │      NO agrega medicamento a lista
+                                        │ 6. lstSeleccionados sin cambios
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              FA-5: VALIDACIÓN SÍNTOMAS VACÍO (Finalizar)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6, paso 4:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Deja txtSintomas vacío               │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Finalizar Consulta"         │
+                                        │ 3. Ejecuta btnFinalizarConsulta_Click()
+                                        │ 4. Valida string.IsNullOrWhiteSpace(
+                                        │    txtSintomas.Text)
+                                        │ 5. Condición TRUE (vacío)
+                                        │ 6. Muestra MessageBox:
+                                        │    "Debe ingresar síntomas"
+                                        │    Tipo: Warning
+                                        │ 7. txtSintomas.Focus()
+                                        │ 8. return → NO continúa con guardado
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            FA-6: VALIDACIÓN DIAGNÓSTICO VACÍO (Finalizar)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6, paso 5:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Completa Síntomas pero deja          │
+Diagnóstico vacío                       │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Finalizar Consulta"         │
+                                        │ 3. Pasa validación Síntomas
+                                        │ 4. Valida string.IsNullOrWhiteSpace(
+                                        │    txtDiagnostico.Text)
+                                        │ 5. Condición TRUE (vacío)
+                                        │ 6. Muestra MessageBox:
+                                        │    "Debe ingresar diagnóstico"
+                                        │    Tipo: Warning
+                                        │ 7. txtDiagnostico.Focus()
+                                        │ 8. return → NO continúa
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│          FA-7: STOCK INSUFICIENTE AL AGREGAR MEDICAMENTO                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6, paso 18:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Agregó medicamento: Amoxicilina      │
+   Cantidad: 100 (stock disponible: 50) │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Finalizar Consulta"         │
+                                        │ 3. Ejecuta proceso de guardar
+                                        │ 4. Llama ConsultaMedicaBLL.AgregarMedicamento(
+                                        │    idConsulta, idMed, 100, indicaciones)
+                                        │ 5. BLL obtiene medicamento (Stock: 50)
+                                        │ 6. Valida medicamento.Stock < cantidad:
+                                        │    (50 < 100: TRUE)
+                                        │ 7. throw InvalidOperationException:
+                                        │    "Stock insuficiente. Disponible: 50,
+                                        │    Solicitado: 100"
+                                        │ 8. Catch en btnFinalizarConsulta_Click()
+                                        │ 9. Muestra MessageBox:
+                                        │    "Error al finalizar consulta: Stock
+                                        │    insuficiente..."
+                                        │    Tipo: Error
+                                        │ 10. NO cierra formulario, permite corregir
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│    FA-8: STOCK INSUFICIENTE EN STORED PROCEDURE (Validación Final)         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En Operación 6, paso 29:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Medicamentos pasaron validación BLL  │
+pero DESPUÉS otro veterinario consumió  │
+stock (condición de carrera)            │
+────────────────────────────────────────┼────────────────────────────────────────
+2. Clic en "Finalizar Consulta"         │
+                                        │ 3. Proceso llega a SP
+                                        │    ConsultaMedica_Finalizar
+                                        │ 4. BEGIN TRANSACTION
+                                        │ 5. Verifica stock actual en BD:
+                                        │    IF EXISTS (
+                                        │      SELECT 1 WHERE m.Stock < cm.Cantidad
+                                        │    )
+                                        │    (TRUE - stock ya NO suficiente)
+                                        │ 6. ROLLBACK TRANSACTION
+                                        │ 7. RAISERROR('Stock insuficiente para
+                                        │    uno o más medicamentos')
+                                        │ 8. SP retorna error
+                                        │ 9. Repository retorna FALSE
+                                        │ 10. BLL throw InvalidOperationException:
+                                        │     "Error al finalizar la consulta.
+                                        │     Verifique que todos los medicamentos
+                                        │     tengan stock suficiente."
+                                        │ 11. Catch en FormConsultaMedica
+                                        │ 12. Muestra MessageBox:
+                                        │     "Error al finalizar consulta stock"
+                                        │     Tipo: Error
+                                        │ 13. NO cierra formulario
+                                        │ 14. IMPORTANTE: ROLLBACK garantiza:
+                                        │     - Cita NO cambió a Completada
+                                        │     - Stock NO se redujo
+                                        │     - BD en estado consistente
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            FA-9: CANCELAR SIN GUARDAR (Cerrar Formulario)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+En cualquier momento antes de finalizar:
+
+ACTOR                                    SISTEMA
+────────────────────────────────────────┼────────────────────────────────────────
+1. Clic en "Cancelar"                   │
+                                        │ 2. Ejecuta btnCancelar_Click()
+                                        │ 3. Muestra MessageBox confirmación:
+                                        │    "¿Está seguro de cancelar sin guardar?"
+                                        │    [Sí] [No]
+────────────────────────────────────────┼────────────────────────────────────────
+4. Selecciona "Sí"                      │
+                                        │ 5. DialogResult = Cancel
+                                        │ 6. Cierra FormConsultaMedica
+                                        │ 7. Retorna a MisCitas
+                                        │ 8. NOTA: ConsultaMedica queda en BD
+                                        │    (iniciada en Load), pero SIN medicamentos
+                                        │    ni diagnóstico completo
+
+
+===============================================================================
+    REGLAS DE NEGOCIO
+===============================================================================
+
+RN-N006-01: INICIAR CONSULTA SOLO SI NO EXISTE
+  - Al iniciar consulta, verifica que cita NO tenga consulta previa (línea 50 BLL)
+  - Si existe: throw InvalidOperationException "Esta cita ya tiene una consulta médica registrada"
+  - Garantiza relación 1:1 entre Cita y ConsultaMedica
+  - Implementado en: ConsultaMedicaBLL.IniciarConsulta()
+
+RN-N006-02: SOLO CITAS AGENDADAS O CONFIRMADAS
+  - Estado de cita DEBE ser Agendada OR Confirmada para iniciar consulta
+  - Citas Completadas, Canceladas, NoAsistió: NO permiten consulta
+  - Validación en: ConsultaMedicaBLL.IniciarConsulta() línea 54-55
+
+RN-N006-03: SÍNTOMAS Y DIAGNÓSTICO OBLIGATORIOS
+  - Campos Sintomas y Diagnostico NO pueden estar vacíos
+  - Longitud mínima: 3 caracteres
+  - Validación doble: UI (líneas 230-244) + entidad (líneas 69-79)
+  - Implementado en: FormConsultaMedica.btnFinalizarConsulta_Click(), ConsultaMedica.Validar()
+
+RN-N006-04: BÚSQUEDA MEDICAMENTOS EN MEMORIA
+  - Lista de medicamentos disponibles cargada UNA VEZ al inicio
+  - Búsqueda filtra _medicamentosDisponibles en memoria (NO llama BLL cada vez)
+  - Mejora rendimiento, reduce consultas a BD
+  - Implementado en: FormConsultaMedica.txtBuscar_TextChanged() líneas 134-137
+
+RN-N006-05: CANTIDAD MÁXIMA = STOCK DISPONIBLE
+  - FormCantidadMedicamento: numCantidad.Maximum = medicamento.Stock (línea 356)
+  - Previene ingreso de cantidad > stock en UI
+  - Validación adicional en BLL (líneas 168-169)
+  - Implementado en: FormCantidadMedicamento constructor
+
+RN-N006-06: LIMPIEZA Y RE-AGREGADO DE MEDICAMENTOS
+  - Al finalizar: PRIMERO elimina TODOS medicamentos actuales de BD (líneas 254-258)
+  - DESPUÉS agrega medicamentos de _medicamentosSeleccionados (líneas 261-268)
+  - Patrón "delete all + insert new" en lugar de "update"
+  - Simplifica lógica, garantiza sincronización exacta
+
+RN-N006-07: OPERACIÓN TRANSACCIONAL ATÓMICA
+  - SP ConsultaMedica_Finalizar usa BEGIN TRANSACTION / COMMIT / ROLLBACK
+  - TODO o NADA:
+    1. Verifica stock de TODOS medicamentos
+    2. Actualiza estado cita
+    3. Reduce stock medicamentos
+  - Si ANY falla: ROLLBACK completo (BD sin cambios)
+  - Implementado en: SP ConsultaMedica_Finalizar líneas 244-280
+
+RN-N006-08: VALIDACIÓN STOCK EN STORED PROCEDURE
+  - Validación FINAL de stock en SP (no solo en BLL)
+  - Previene condiciones de carrera (múltiples veterinarios simultáneos)
+  - IF EXISTS (stock < cantidad): ROLLBACK + RAISERROR
+  - Garantiza integridad incluso con concurrencia
+  - Implementado en: SP líneas 248-259
+
+RN-N006-09: DUPLICADOS NO PERMITIDOS EN RECETA
+  - NO puede agregar mismo medicamento 2 veces a _medicamentosSeleccionados
+  - Validación: _medicamentosSeleccionados.Any(m => m.IdMedicamento == item.IdMedicamento)
+  - Si ya existe: muestra advertencia "El medicamento ya está en la lista"
+  - Implementado en: FormConsultaMedica.btnAñadir_Click() líneas 158-163
+
+RN-N006-10: INDICACIONES CON TEXTO POR DEFECTO
+  - txtIndicaciones inicializado con texto traducido (línea 414)
+  - Usuario puede modificar o dejar defecto
+  - Mejora UX: sugerencia de formato
+  - Implementado en: FormCantidadMedicamento.InitializeComponent()
+
+RN-N006-11: AUDITORÍA COMPLETA EN BITÁCORA
+  - IniciarConsulta: Alta (Info)
+  - GuardarConsulta: Modificación (Info)
+  - AgregarMedicamento: Acción personalizada (Info)
+  - EliminarMedicamento: Acción personalizada (Advertencia)
+  - FinalizarConsulta: Acción personalizada (Info)
+  - TODAS las operaciones críticas registradas con detalle
+  - Implementado en: ConsultaMedicaBLL métodos
+
+
+===============================================================================
+    EXCEPCIONES Y MANEJO DE ERRORES
+===============================================================================
+
+EX-N006-01: CITA NO ENCONTRADA (Load)
+  Condición:    CitaBLL.ObtenerCita(idCita) retorna null
+  Validación:   FormConsultaMedica_Load()
+  Mensaje:      "No se encontró la cita"
+  Acción:       Cierra formulario inmediatamente
+  Código:       FormConsultaMedica.cs (líneas 34-40)
+
+EX-N006-02: ERROR AL CARGAR FORMULARIO
+  Condición:    Excepción en FormConsultaMedica_Load()
+  Manejo:       Catch general
+  Mensaje:      "Error al cargar formulario: {ex.Message}"
+  Acción:       Muestra error y cierra formulario
+  Código:       FormConsultaMedica.cs (líneas 61-66)
+
+EX-N006-03: CITA YA TIENE CONSULTA (Iniciar)
+  Condición:    _consultaRepository.ObtenerPorCita(idCita) != null al iniciar
+  Validación:   ConsultaMedicaBLL.IniciarConsulta()
+  Mensaje:      "Esta cita ya tiene una consulta médica registrada"
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 50-51)
+
+EX-N006-04: CITA CON ESTADO INVÁLIDO (Iniciar)
+  Condición:    cita.Estado != Agendada && cita.Estado != Confirmada
+  Validación:   ConsultaMedicaBLL.IniciarConsulta()
+  Mensaje:      "No se puede iniciar consulta para una cita en estado {estado}"
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 54-55)
+
+EX-N006-05: MEDICAMENTO NO SELECCIONADO (Añadir)
+  Condición:    lstResultados.SelectedItem == null
+  Validación:   btnAñadir_Click()
+  Mensaje:      "Debe seleccionar un medicamento de los resultados"
+  Acción:       Muestra advertencia, NO continúa
+  Código:       FormConsultaMedica.cs (líneas 146-151)
+
+EX-N006-06: MEDICAMENTO DUPLICADO EN RECETA (Añadir)
+  Condición:    _medicamentosSeleccionados.Any(m => m.IdMedicamento == item.IdMedicamento)
+  Validación:   btnAñadir_Click()
+  Mensaje:      "El medicamento ya está en la lista"
+  Acción:       Muestra advertencia, NO abre FormCantidadMedicamento
+  Código:       FormConsultaMedica.cs (líneas 158-163)
+
+EX-N006-07: ERROR AL AÑADIR MEDICAMENTO
+  Condición:    Excepción en btnAñadir_Click()
+  Manejo:       Catch
+  Mensaje:      "Error al añadir medicamento: {ex.Message}"
+  Acción:       Muestra error, NO cierra formulario
+  Código:       FormConsultaMedica.cs (líneas 182-186)
+
+EX-N006-08: MEDICAMENTO NO SELECCIONADO (Quitar)
+  Condición:    lstSeleccionados.SelectedItem == null
+  Validación:   btnQuitar_Click()
+  Mensaje:      "Debe seleccionar un medicamento de los seleccionados"
+  Acción:       Muestra advertencia, NO continúa
+  Código:       FormConsultaMedica.cs (líneas 193-198)
+
+EX-N006-09: ERROR AL QUITAR MEDICAMENTO
+  Condición:    Excepción en btnQuitar_Click()
+  Manejo:       Catch
+  Mensaje:      "Error al quitar medicamento: {ex.Message}"
+  Acción:       Muestra error
+  Código:       FormConsultaMedica.cs (líneas 207-211)
+
+EX-N006-10: SÍNTOMAS VACÍO (Finalizar)
+  Condición:    string.IsNullOrWhiteSpace(txtSintomas.Text)
+  Validación:   btnFinalizarConsulta_Click()
+  Mensaje:      "Debe ingresar síntomas"
+  Acción:       Focus en txtSintomas, NO continúa
+  Código:       FormConsultaMedica.cs (líneas 230-236)
+
+EX-N006-11: DIAGNÓSTICO VACÍO (Finalizar)
+  Condición:    string.IsNullOrWhiteSpace(txtDiagnostico.Text)
+  Validación:   btnFinalizarConsulta_Click()
+  Mensaje:      "Debe ingresar diagnóstico"
+  Acción:       Focus en txtDiagnostico, NO continúa
+  Código:       FormConsultaMedica.cs (líneas 238-244)
+
+EX-N006-12: CANTIDAD NEGATIVA O CERO (Agregar Medicamento)
+  Condición:    cantidad <= 0 al agregar medicamento
+  Validación:   ConsultaMedicaBLL.AgregarMedicamento()
+  Mensaje:      "La cantidad debe ser mayor a cero"
+  Excepción:    ArgumentException
+  Código:       ConsultaMedicaBLL.cs (líneas 157-158)
+
+EX-N006-13: CONSULTA NO EXISTE (Agregar Medicamento)
+  Condición:    _consultaRepository.ObtenerPorId(idConsulta) retorna null
+  Validación:   ConsultaMedicaBLL.AgregarMedicamento()
+  Mensaje:      "La consulta especificada no existe"
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 160-161)
+
+EX-N006-14: MEDICAMENTO NO EXISTE (Agregar Medicamento)
+  Condición:    MedicamentoBLL.ObtenerMedicamentoPorId(idMedicamento) retorna null
+  Validación:   ConsultaMedicaBLL.AgregarMedicamento()
+  Mensaje:      "El medicamento especificado no existe"
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 164-165)
+
+EX-N006-15: STOCK INSUFICIENTE BLL (Agregar Medicamento)
+  Condición:    medicamento.Stock < cantidad
+  Validación:   ConsultaMedicaBLL.AgregarMedicamento()
+  Mensaje:      "Stock insuficiente. Disponible: {Stock}, Solicitado: {cantidad}"
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 168-169)
+
+EX-N006-16: CONSULTA NO EXISTE (Finalizar)
+  Condición:    _consultaRepository.ObtenerPorId(idConsulta) retorna null
+  Validación:   ConsultaMedicaBLL.FinalizarConsulta()
+  Mensaje:      "La consulta especificada no existe"
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 115-116)
+
+EX-N006-17: CONSULTA INCOMPLETA (Finalizar)
+  Condición:    consulta.Validar() retorna errores
+  Validación:   ConsultaMedicaBLL.FinalizarConsulta()
+  Mensaje:      "No se puede finalizar la consulta:\n{lista de errores}"
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 119-121)
+
+EX-N006-18: STOCK INSUFICIENTE SP (Finalizar - Validación Final)
+  Condición:    EXISTS (m.Stock < cm.Cantidad) en SP
+  Validación:   SP ConsultaMedica_Finalizar
+  Mensaje:      "Stock insuficiente para uno o más medicamentos"
+  Acción:       ROLLBACK TRANSACTION, RAISERROR, retorna error
+  Código:       Database/27_CrearSP_ConsultaMedica.sql (líneas 248-259)
+
+EX-N006-19: ERROR TRANSACCIONAL EN SP (Finalizar)
+  Condición:    Cualquier error en BEGIN TRY del SP
+  Manejo:       BEGIN CATCH
+  Acción:       ROLLBACK TRANSACTION, RAISERROR con mensaje de error
+  Código:       Database/27_CrearSP_ConsultaMedica.sql (líneas 276-280)
+
+EX-N006-20: ERROR AL FINALIZAR CONSULTA
+  Condición:    _consultaRepository.FinalizarConsulta() retorna FALSE
+  Validación:   ConsultaMedicaBLL.FinalizarConsulta()
+  Mensaje:      "Error al finalizar la consulta. Verifique que todos los medicamentos tengan stock suficiente."
+  Excepción:    InvalidOperationException
+  Código:       ConsultaMedicaBLL.cs (líneas 126-127)
+
+EX-N006-21: ERROR AL FINALIZAR EN UI
+  Condición:    Excepción en btnFinalizarConsulta_Click()
+  Manejo:       Catch
+  Mensaje:      "Error al finalizar consulta: {ex.Message}"
+  Acción:       Muestra error, NO cierra formulario
+  Código:       FormConsultaMedica.cs (líneas 286-290)
+
+
+===============================================================================
+    VALIDACIONES
+===============================================================================
+
+VALIDACIONES DE ACCESO:
+------------------------
+V-N006-01: Cita existe
+  - Regla: CitaBLL.ObtenerCita(idCita) != null
+  - Momento: Al cargar formulario (Load)
+  - Acción si falla: Cierra formulario con mensaje de error
+  - Código: FormConsultaMedica.cs (líneas 34-40)
+
+V-N006-02: Cita NO tiene consulta previa (solo al iniciar nueva)
+  - Regla: _consultaRepository.ObtenerPorCita(idCita) == null
+  - Momento: Al ejecutar IniciarConsulta()
+  - Excepción si falla: InvalidOperationException
+  - Código: ConsultaMedicaBLL.cs (líneas 50-51)
+
+V-N006-03: Estado cita válido para consulta
+  - Regla: cita.Estado == Agendada OR cita.Estado == Confirmada
+  - Momento: Al ejecutar IniciarConsulta()
+  - Excepción si falla: InvalidOperationException
+  - Código: ConsultaMedicaBLL.cs (líneas 54-55)
+
+VALIDACIONES DE DATOS:
+-----------------------
+V-N006-04: Síntomas requerido
+  - Regla: !string.IsNullOrWhiteSpace(txtSintomas.Text)
+  - Momento: Al hacer clic en "Finalizar Consulta"
+  - Acción si falla: Focus en campo, NO continúa
+  - Código: FormConsultaMedica.cs (líneas 230-236)
+
+V-N006-05: Síntomas longitud mínima
+  - Regla: Sintomas.Trim().Length >= 3
+  - Momento: Al ejecutar consulta.Validar()
+  - Código: ConsultaMedica.cs (líneas 72-73)
+
+V-N006-06: Diagnóstico requerido
+  - Regla: !string.IsNullOrWhiteSpace(txtDiagnostico.Text)
+  - Momento: Al hacer clic en "Finalizar Consulta"
+  - Acción si falla: Focus en campo, NO continúa
+  - Código: FormConsultaMedica.cs (líneas 238-244)
+
+V-N006-07: Diagnóstico longitud mínima
+  - Regla: Diagnostico.Trim().Length >= 3
+  - Momento: Al ejecutar consulta.Validar()
+  - Código: ConsultaMedica.cs (líneas 78-79)
+
+V-N006-08: Medicamento seleccionado para añadir
+  - Regla: lstResultados.SelectedItem != null
+  - Momento: Al hacer clic en "Añadir"
+  - Código: FormConsultaMedica.cs (líneas 146-151)
+
+V-N006-09: Medicamento NO duplicado en receta
+  - Regla: !_medicamentosSeleccionados.Any(m => m.IdMedicamento == item.IdMedicamento)
+  - Momento: Al hacer clic en "Añadir"
+  - Código: FormConsultaMedica.cs (líneas 158-163)
+
+V-N006-10: Medicamento seleccionado para quitar
+  - Regla: lstSeleccionados.SelectedItem != null
+  - Momento: Al hacer clic en "Quitar"
+  - Código: FormConsultaMedica.cs (líneas 193-198)
+
+VALIDACIONES DE NEGOCIO:
+-------------------------
+V-N006-11: Cantidad medicamento positiva
+  - Regla: cantidad > 0
+  - Momento: Al ejecutar AgregarMedicamento()
+  - Excepción si falla: ArgumentException
+  - Código: ConsultaMedicaBLL.cs (líneas 157-158)
+
+V-N006-12: Consulta existe para agregar medicamento
+  - Regla: _consultaRepository.ObtenerPorId(idConsulta) != null
+  - Momento: Al ejecutar AgregarMedicamento()
+  - Excepción si falla: InvalidOperationException
+  - Código: ConsultaMedicaBLL.cs (líneas 160-161)
+
+V-N006-13: Medicamento existe
+  - Regla: MedicamentoBLL.ObtenerMedicamentoPorId(idMedicamento) != null
+  - Momento: Al ejecutar AgregarMedicamento()
+  - Excepción si falla: InvalidOperationException
+  - Código: ConsultaMedicaBLL.cs (líneas 164-165)
+
+V-N006-14: Stock disponible suficiente (BLL)
+  - Regla: medicamento.Stock >= cantidad
+  - Momento: Al ejecutar AgregarMedicamento()
+  - Excepción si falla: InvalidOperationException
+  - Código: ConsultaMedicaBLL.cs (líneas 168-169)
+
+V-N006-15: Consulta completa antes de finalizar
+  - Regla: consulta.Validar() retorna 0 errores
+  - Momento: Al ejecutar FinalizarConsulta()
+  - Excepción si falla: InvalidOperationException con lista de errores
+  - Código: ConsultaMedicaBLL.cs (líneas 119-121)
+
+VALIDACIONES TRANSACCIONALES (SP):
+-----------------------------------
+V-N006-16: Stock suficiente para TODOS medicamentos (SP)
+  - Regla: NOT EXISTS (SELECT 1 WHERE m.Stock < cm.Cantidad)
+  - Momento: Dentro de transacción en SP FinalizarConsulta
+  - Acción si falla: ROLLBACK TRANSACTION, RAISERROR
+  - Código: SP ConsultaMedica_Finalizar (líneas 248-259)
+
+
+===============================================================================
+    REQUERIMIENTOS NO FUNCIONALES
+===============================================================================
+
+RNF-N006-01: INTEGRIDAD TRANSACCIONAL (ACID)
+  - SP ConsultaMedica_Finalizar garantiza atomicidad
+  - TODO o NADA: actualizar cita + reducir stock SIMULTÁNEO
+  - ROLLBACK automático si ANY operación falla
+  - Previene inconsistencias (ej: stock reducido pero cita no completada)
+
+RNF-N006-02: CONCURRENCIA - PREVENCIÓN CONDICIONES DE CARRERA
+  - Validación stock en BLL (pre-check, rápido)
+  - Validación stock en SP dentro de transacción (check final, autoridad)
+  - Doble validación previene que 2 veterinarios consuman mismo stock simultáneamente
+
+RNF-N006-03: USABILIDAD - BÚSQUEDA EN TIEMPO REAL
+  - txtBuscar activa filtrado inmediato (evento TextChanged)
+  - Búsqueda en memoria (sin latencia de BD)
+  - Limit 20 resultados para performance de renderizado
+
+RNF-N006-04: USABILIDAD - FORMULARIO AUXILIAR MODAL
+  - FormCantidadMedicamento modal (ShowDialog)
+  - Focus automático en numCantidad
+  - Máximo limitado a stock disponible (prevención UI)
+  - Texto indicaciones por defecto como sugerencia
+
+RNF-N006-05: USABILIDAD - MODO CREACIÓN VS EDICIÓN
+  - Mismo formulario para ambos modos (DRY)
+  - Decisión automática según existencia de consulta
+  - Carga datos existentes transparente para usuario
+
+RNF-N006-06: AUDITABILIDAD - TRAZABILIDAD COMPLETA
+  - TODAS las operaciones registradas en Bitácora
+  - Nivel de detalle: IniciarConsulta, GuardarConsulta, AgregarMedicamento, FinalizarConsulta
+  - Criticidades diferenciadas: Info (normal), Advertencia (eliminar medicamento)
+
+RNF-N006-07: RENDIMIENTO - CARGA ÚNICA DE MEDICAMENTOS
+  - Medicamentos disponibles cargados UNA VEZ al inicio
+  - Filtrado en memoria (LINQ Where) muy rápido
+  - Evita múltiples consultas a BD por búsqueda
+
+RNF-N006-08: SEGURIDAD - VALIDACIÓN MULTI-CAPA
+  - UI: Validaciones básicas (campos requeridos, selección)
+  - BLL: Validaciones de negocio (stock, existencia)
+  - SP: Validaciones transaccionales (stock final, atomicidad)
+  - Defensa en profundidad
+
+RNF-N006-09: MANTENIBILIDAD - SEPARACIÓN DE RESPONSABILIDADES
+  - FormCantidadMedicamento clase independiente (cohesión alta)
+  - MedicamentoSeleccionado clase auxiliar para UI
+  - BLL orquesta, Repository ejecuta, Adapter convierte
+
+RNF-N006-10: DISPONIBILIDAD - RECUPERACIÓN ANTE ERRORES
+  - ROLLBACK en SP garantiza BD consistente ante fallo
+  - Formulario NO se cierra ante error (permite corregir)
+  - Mensajes de error descriptivos para usuario
+
+
+===============================================================================
+    ARCHIVOS INVOLUCRADOS
+===============================================================================
+
+CAPA UI (Presentación):
+-----------------------
+FormConsultaMedica.cs
+  Ruta: UI/WinUi/Negocio/FormConsultaMedica.cs
+  Líneas: 468
+  Responsabilidad:
+    - Interfaz para registrar consulta médica
+    - Gestión de medicamentos recetados
+    - Búsqueda de medicamentos en tiempo real
+    - Validaciones básicas de entrada
+    - Orquestación de finalización transaccional
+  Métodos clave:
+    - FormConsultaMedica_Load() → Línea 28
+    - CargarDatosCita() → Línea 69
+    - CargarConsultaExistente() → Línea 78
+    - CargarMedicamentosDisponibles() → Línea 99
+    - MostrarMedicamentos(IEnumerable) → Línea 108
+    - txtBuscar_TextChanged() → Línea 122
+    - btnAñadir_Click() → Línea 142
+    - btnQuitar_Click() → Línea 189
+    - ActualizarListaSeleccionados() → Línea 214
+    - btnFinalizarConsulta_Click() → Línea 225
+    - btnCancelar_Click() → Línea 293
+  Clases auxiliares:
+    - MedicamentoListItem (líneas 309-318)
+    - MedicamentoSeleccionado (líneas 321-334)
+
+FormCantidadMedicamento (clase anidada)
+  Ruta: UI/WinUi/Negocio/FormConsultaMedica.cs
+  Líneas: 338-466
+  Responsabilidad:
+    - Formulario modal para ingresar cantidad e indicaciones
+    - Limita cantidad máxima a stock disponible
+    - Texto indicaciones por defecto
+  Propiedades públicas:
+    - Cantidad : int
+    - Indicaciones : string
+  Métodos:
+    - Constructor(Medicamento) → Línea 351
+    - InitializeComponent() → Línea 359
+    - btnAceptar_Click() → Línea 459
+
+CAPA BLL (Lógica de Negocio):
+------------------------------
+ConsultaMedicaBLL.cs
+  Ruta: VetCareNegocio/BLL/ConsultaMedicaBLL.cs
+  Líneas: 323
+  Responsabilidad:
+    - Validaciones de negocio para consultas
+    - Orquestación de operaciones complejas
+    - Registro en Bitácora
+    - Gestión de medicamentos recetados
+  Patrón: Singleton
+  Métodos públicos:
+    - IniciarConsulta(Guid, Guid) → Línea 43
+    - GuardarConsulta(ConsultaMedica) → Línea 80
+    - FinalizarConsulta(Guid) → Línea 113
+    - AgregarMedicamento(Guid, Guid, int, string) → Línea 155
+    - EliminarMedicamento(Guid, Guid) → Línea 198
+    - ObtenerMedicamentosDeConsulta(Guid) → Línea 230
+    - ObtenerConsultaCompleta(Guid) → Línea 242
+    - ObtenerConsultaPorCita(Guid) → Línea 258
+    - CitaTieneConsulta(Guid) → Línea 274
+    - ObtenerConsultasPorVeterinario(...) → Línea 282
+    - ObtenerHistorialMascota(Guid) → Línea 290
+  Métodos privados:
+    - ValidarConsulta(ConsultaMedica) → Línea 311
+
+CitaBLL.cs
+  Métodos usados:
+    - ObtenerCita(Guid idCita)
+
+MedicamentoBLL.cs
+  Métodos usados:
+    - ListarMedicamentosDisponibles()
+    - ObtenerMedicamentoPorId(Guid idMedicamento)
+
+CAPA DAL (Acceso a Datos):
+---------------------------
+IConsultaMedicaRepository.cs
+  Ruta: VetCareNegocio/DAL/Contracts/IConsultaMedicaRepository.cs
+  Métodos:
+    - Crear(ConsultaMedica) : ConsultaMedica
+    - Actualizar(ConsultaMedica) : bool
+    - ObtenerPorId(Guid) : ConsultaMedica
+    - ObtenerPorCita(Guid) : ConsultaMedica
+    - ObtenerPorVeterinario(Guid, DateTime?, DateTime?) : IEnumerable<ConsultaMedica>
+    - ObtenerPorMascota(Guid) : IEnumerable<ConsultaMedica>
+    - AgregarMedicamento(Guid, Guid, int, string) : bool
+    - EliminarMedicamento(Guid, Guid) : bool
+    - ObtenerMedicamentosPorConsulta(Guid) : IEnumerable<MedicamentoRecetado>
+    - FinalizarConsulta(Guid, Guid) : bool
+
+ConsultaMedicaRepository.cs
+  Ruta: VetCareNegocio/DAL/Implementations/ConsultaMedicaRepository.cs
+  Responsabilidad:
+    - Implementación de IConsultaMedicaRepository
+    - Ejecución de Stored Procedures
+    - Uso de ConsultaMedicaAdapter
+  Patrón: Singleton (.Current)
+
+ConsultaMedicaAdapter.cs
+  Ruta: VetCareNegocio/DAL/Adapters/ConsultaMedicaAdapter.cs
+  Responsabilidad: Conversión DataRow → ConsultaMedica / MedicamentoRecetado
+
+CAPA DOMINIO:
+-------------
+ConsultaMedica.cs
+  Ruta: VetCareNegocio/DomainModel/ConsultaMedica.cs
+  Líneas: 131
+  Propiedades:
+    - IdConsulta : Guid (PK)
+    - IdCita : Guid (FK)
+    - IdVeterinario : Guid (FK)
+    - Sintomas : string
+    - Diagnostico : string
+    - Tratamiento : string
+    - Observaciones : string
+    - FechaConsulta : DateTime
+    - Activo : bool
+  Propiedades navegación:
+    - Cita : Cita
+    - Veterinario : Veterinario
+    - Medicamentos : List<MedicamentoRecetado>
+  Métodos:
+    - Validar() : string[] → Línea 59
+    - AgregarMedicamento(MedicamentoRecetado) → Línea 87
+
+MedicamentoRecetado.cs (clase auxiliar)
+  Líneas: 107-130
+  Propiedades:
+    - IdConsulta : Guid
+    - IdMedicamento : Guid
+    - Cantidad : int
+    - Indicaciones : string
+    - NombreMedicamento : string (hidratado)
+    - Presentacion : string (hidratado)
+  Propiedades calculadas:
+    - NombreCompleto : string → "{NombreMedicamento} {Presentacion}"
+
+BASE DE DATOS:
+--------------
+Stored Procedures (VetCareDB):
+  ConsultaMedica_Insert
+    Parámetros: @IdConsulta, @IdCita, @IdVeterinario, @Sintomas, @Diagnostico, @Tratamiento, @Observaciones, @FechaConsulta
+    Acción: INSERT INTO ConsultaMedica
+
+  ConsultaMedica_Update
+    Parámetros: @IdConsulta, @Sintomas, @Diagnostico, @Tratamiento, @Observaciones
+    Acción: UPDATE ConsultaMedica
+
+  ConsultaMedica_SelectOne
+    Parámetros: @IdConsulta
+    Acción: SELECT * FROM ConsultaMedica WHERE IdConsulta = @IdConsulta
+
+  ConsultaMedica_SelectByCita
+    Parámetros: @IdCita
+    Acción: SELECT * FROM ConsultaMedica WHERE IdCita = @IdCita
+
+  ConsultaMedicamento_Insert
+    Parámetros: @IdConsulta, @IdMedicamento, @Cantidad, @Indicaciones
+    Acción: INSERT INTO ConsultaMedicamento
+
+  ConsultaMedicamento_Delete
+    Parámetros: @IdConsulta, @IdMedicamento
+    Acción: DELETE FROM ConsultaMedicamento WHERE ...
+
+  ConsultaMedicamento_SelectByConsulta
+    Parámetros: @IdConsulta
+    Acción: SELECT cm.*, m.Nombre, m.Presentacion FROM ConsultaMedicamento cm INNER JOIN Medicamento m ON ...
+
+  ConsultaMedica_Finalizar (CRÍTICO - TRANSACCIONAL)
+    Parámetros: @IdConsulta, @IdCita
+    Acción:
+      1. BEGIN TRANSACTION
+      2. Verificar stock de TODOS medicamentos
+      3. IF stock insuficiente: ROLLBACK + RAISERROR
+      4. UPDATE Cita SET Estado = 'Completada'
+      5. UPDATE Medicamento SET Stock = Stock - Cantidad (para cada medicamento)
+      6. COMMIT TRANSACTION
+    Ubicación: Database/27_CrearSP_ConsultaMedica.sql (líneas 238-282)
+
+Tablas:
+  ConsultaMedica
+    - IdConsulta (uniqueidentifier, PK)
+    - IdCita (uniqueidentifier, FK → Cita)
+    - IdVeterinario (uniqueidentifier, FK → Veterinario)
+    - Sintomas (nvarchar(MAX), NOT NULL)
+    - Diagnostico (nvarchar(MAX), NOT NULL)
+    - Tratamiento (nvarchar(MAX), NULL)
+    - Observaciones (nvarchar(MAX), NULL)
+    - FechaConsulta (datetime, NOT NULL, DEFAULT GETDATE())
+    - Activo (bit, NOT NULL, DEFAULT 1)
+
+  ConsultaMedicamento (join table)
+    - IdConsulta (uniqueidentifier, FK → ConsultaMedica)
+    - IdMedicamento (uniqueidentifier, FK → Medicamento)
+    - Cantidad (int, NOT NULL)
+    - Indicaciones (nvarchar(500), NULL)
+    - PK: (IdConsulta, IdMedicamento)
+
+SERVICIOS:
+----------
+LoginService.cs
+  Método usado: GetUsuarioLogueado()
+
+Bitacora.cs
+  Métodos usados:
+    - RegistrarAlta() → IniciarConsulta
+    - RegistrarModificacion() → GuardarConsulta
+    - Registrar() → AgregarMedicamento, EliminarMedicamento, FinalizarConsulta
+
+LanguageManager.cs
+  Método usado: Translate(key)
+
+
+===============================================================================
+    PATRONES DE DISEÑO APLICADOS
+===============================================================================
+
+PATRÓN 1: SINGLETON
+-------------------
+Aplicado en:
+  - ConsultaMedicaBLL.Current
+  - ConsultaMedicaRepository.Current
+
+Justificación:
+  - Servicios sin estado
+  - Instancia única compartida
+
+PATRÓN 2: REPOSITORY
+--------------------
+Aplicado en:
+  - IConsultaMedicaRepository / ConsultaMedicaRepository
+
+Justificación:
+  - Abstracción de acceso a datos
+  - Desacoplamiento entre BLL y DAL
+
+PATRÓN 3: ADAPTER
+-----------------
+Aplicado en:
+  - ConsultaMedicaAdapter
+
+Justificación:
+  - Conversión DataRow → ConsultaMedica / MedicamentoRecetado
+  - Desacopla estructura BD de modelo dominio
+
+PATRÓN 4: TRANSACTION SCRIPT (Stored Procedure)
+-----------------------------------------------
+Aplicado en:
+  - SP ConsultaMedica_Finalizar
+
+Justificación:
+  - Lógica transaccional compleja (3 operaciones atómicas)
+  - Rendimiento: ejecuta en servidor BD
+  - Integridad: ROLLBACK automático ante error
+
+PATRÓN 5: MODAL DIALOG
+----------------------
+Aplicado en:
+  - FormCantidadMedicamento
+
+Justificación:
+  - Captura cantidad/indicaciones sin perder contexto
+  - ShowDialog() bloquea formulario padre
+  - DialogResult comunica resultado
+
+PATRÓN 6: DATA TRANSFER OBJECT (DTO)
+-------------------------------------
+Aplicado en:
+  - MedicamentoSeleccionado (clase auxiliar)
+
+Justificación:
+  - Transporta datos entre capas UI
+  - No es entidad de dominio
+  - Contiene propiedades específicas de UI (DisplayText)
+
+
+===============================================================================
+    TRAZABILIDAD
+===============================================================================
+
+RELACIONADO CON:
+----------------
+CU-N003: Gestionar Citas
+  - Consulta médica requiere cita en estado Agendada/Confirmada
+  - FinalizarConsulta actualiza estado cita a Completada
+  - Relación 1:1 entre Cita y ConsultaMedica
+
+CU-N005: Ver Mis Citas
+  - Botón "Iniciar Consulta" abre FormConsultaMedica
+  - Flujo: MisCitas → FormConsultaMedica → Finalizar → MisCitas (recarga)
+
+CU-N010: Gestionar Medicamentos
+  - Receta de medicamentos reduce stock
+  - FormConsultaMedica muestra stock disponible
+  - Validación stock insuficiente previene consumo excesivo
+
+CU-N007: Consultar Historial Clínico
+  - Consultas médicas forman historial de mascota
+  - Muestra síntomas, diagnósticos, medicamentos recetados
+
+CU-A004: Consultar Bitácora
+  - TODAS las operaciones registradas: Iniciar, Guardar, Agregar/Eliminar Med, Finalizar
+  - Criticidades: Info (mayoría), Advertencia (eliminar medicamento)
+
+TABLAS RELACIONADAS:
+--------------------
+Cita:
+  - IdCita (FK en ConsultaMedica)
+  - Estado actualizado a Completada al finalizar
+
+Veterinario:
+  - IdVeterinario (FK en ConsultaMedica)
+  - Veterinario que realiza consulta
+
+Medicamento:
+  - IdMedicamento (FK en ConsultaMedicamento)
+  - Stock reducido al finalizar consulta
+
+PATENTES REQUERIDAS:
+--------------------
+NO REQUIERE PATENTE ESPECÍFICA
+  - Solo requiere ROL_Veterinario
+  - Acceso desde MisCitas (que también requiere ROL_Veterinario)
+
+
+===============================================================================
+    NOTAS DE IMPLEMENTACIÓN
+===============================================================================
+
+NOTA 1: DOBLE VALIDACIÓN STOCK
+  - BLL valida stock ANTES de agregar a BD (prevención rápida)
+  - SP valida stock DENTRO de transacción (autoridad final)
+  - Previene condiciones de carrera en entornos concurrentes
+
+NOTA 2: LIMPIEZA + RE-AGREGADO DE MEDICAMENTOS
+  - Al finalizar: DELETE todos medicamentos actuales, INSERT nuevos
+  - Patrón "delete all + insert new" más simple que "diff + update"
+  - Garantiza sincronización exacta entre UI y BD
+
+NOTA 3: TRANSACCIÓN ACID EN SP
+  - BEGIN TRANSACTION ... COMMIT / ROLLBACK
+  - Atomicidad: TODO o NADA
+  - Consistencia: BD siempre en estado válido
+  - Aislamiento: Transacciones concurrentes no interfieren
+  - Durabilidad: COMMIT persiste cambios
+
+NOTA 4: MODO CREACIÓN VS EDICIÓN TRANSPARENTE
+  - Mismo formulario decide automáticamente según ObtenerConsultaPorCita()
+  - Si NULL: IniciarConsulta() (crear nueva)
+  - Si existe: CargarConsultaExistente() (modo edición)
+  - Usuario NO necesita saber qué modo está usando
+
+NOTA 5: BÚSQUEDA EN MEMORIA
+  - _medicamentosDisponibles cargado UNA VEZ al inicio
+  - txtBuscar filtra en memoria con LINQ
+  - NO llama BLL/DAL cada tecla (rendimiento)
+  - Limite 20 resultados para UX (evita scroll infinito)
+
+NOTA 6: FORMULARIO AUXILIAR MODAL
+  - FormCantidadMedicamento creado dinámicamente
+  - using(var form = new ...) { form.ShowDialog() }
+  - DialogResult.OK indica que usuario aceptó
+  - Propiedades públicas Cantidad/Indicaciones recuperadas después
+
+NOTA 7: CONSULTA INICIADA EN LOAD
+  - Si NO existe consulta: IniciarConsulta() ejecuta INSERT en BD
+  - Incluso si usuario cancela, consulta queda en BD (sin finalizar)
+  - Siguiente vez que abra: modo edición (recupera consulta)
+
+NOTA 8: VALIDACIONES MULTI-CAPA
+  - UI: campos requeridos, selección de items
+  - BLL: reglas de negocio (stock, existencia)
+  - Entidad: validaciones de dominio (longitud mínima)
+  - SP: validaciones transaccionales (stock final)
+  - Defensa en profundidad
+
+NOTA 9: AUDITORÍA GRANULAR
+  - NO solo "FinalizarConsulta" en bitácora
+  - TAMBIÉN: IniciarConsulta, GuardarConsulta, AgregarMedicamento
+  - Trazabilidad completa de TODA la operación
+
+NOTA 10: INDICACIONES CON TEXTO DEFECTO
+  - txtIndicaciones.Text = LanguageManager.Translate("indicaciones_default")
+  - Ejemplo: "Tomar cada 8 horas" (en español/inglés)
+  - Usuario puede modificar o aceptar sugerencia
+  - Mejora UX: no empieza vacío
+
+
+===============================================================================
+    METADATOS
+===============================================================================
+
+Autor:              Sistema VetCare
+Versión:            1.0
+Fecha Creación:     2025-01-16
+Última Actualización: 2025-01-16
+Revisado por:       Claude Code
+Estado:             ✅ COMPLETO
+
+Archivos relacionados:
+  - CU-N003_Template_EA.txt (Gestionar Citas)
+  - CU-N005_Template_EA.txt (Ver Mis Citas)
+  - CU-N010_Template_EA.txt (Gestionar Medicamentos)
+  - CU-N007_Template_EA.txt (Consultar Historial Clínico - pendiente)
+
+Casos de Uso dependientes:
+  - CU-N007: Consultar Historial Clínico (muestra consultas médicas registradas)
+  - CU-N008: Ver Historial Detallado (detalle de consulta específica)
+
+===============================================================================

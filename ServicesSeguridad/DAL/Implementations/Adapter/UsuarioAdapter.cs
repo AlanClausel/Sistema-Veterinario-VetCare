@@ -11,13 +11,19 @@ using BitacoraService = ServicesSecurity.Services.Bitacora;
 
 namespace ServicesSecurity.DAL.Implementations.Adapter
 {
-
-
+    /// <summary>
+    /// Adaptador para transformar filas de base de datos en objetos Usuario.
+    /// Implementa el patrón Adapter y Singleton.
+    /// Realiza hidratación en dos niveles: datos básicos y permisos (Familias) asociados.
+    /// </summary>
     public sealed class UsuarioAdapter : IAdapter<Usuario>
     {
         #region Singleton
         private readonly static UsuarioAdapter _instance = new UsuarioAdapter();
 
+        /// <summary>
+        /// Obtiene la instancia única del adaptador (patrón Singleton).
+        /// </summary>
         public static UsuarioAdapter Current
         {
             get
@@ -26,11 +32,21 @@ namespace ServicesSecurity.DAL.Implementations.Adapter
             }
         }
 
+        /// <summary>
+        /// Constructor privado para patrón Singleton.
+        /// </summary>
         private UsuarioAdapter()
         {
             //Implement here the initialization code
         }
         #endregion
+
+        /// <summary>
+        /// Adapta un array de valores de base de datos a un objeto Usuario.
+        /// Realiza hidratación en dos niveles:
+        /// Nivel 1: Datos básicos del usuario (Id, Nombre, Email, Clave, Activo, IdiomaPreferido, DVH)
+        /// Nivel 2: Carga de permisos (Familias) asociados al usuario desde UsuarioFamilia
+        /// </summary>
         public Usuario Adapt(object[] values)
         {
             //Hidratar el objeto usuario -> Nivel 1

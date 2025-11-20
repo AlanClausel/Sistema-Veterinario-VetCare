@@ -1,0 +1,288 @@
+@startuml CU-N006_RegistrarConsultaMedica
+title CU-N006: Registrar Consulta Médica (TRANSACCIONAL)
+
+actor "Veterinario" as Vet
+participant "FormConsultaMedica" as Form
+participant "FormCantidadMedicamento\n(Modal)" as Modal
+participant "CitaBLL" as CitaBLL
+participant "ConsultaMedicaBLL" as ConsBLL
+participant "MedicamentoBLL" as MedBLL
+participant "ConsultaMedicaRepository" as ConsRepo
+participant "CitaRepository" as CitaRepo
+database "VetCareDB\n(Transaccional)" as DB
+
+== Operación 1: Iniciar Consulta Médica (Modo Creación) ==
+
+Vet -> Form: Abre FormConsultaMedica(idCita, idVeterinario)\ndesde MisCitas
+activate Form
+
+Form -> Form: Constructor:\n_idCita = idCita\n_idVeterinario = idVeterinario\n_medicamentosSeleccionados = new List()
+
+Form -> CitaBLL: ObtenerCita(idCita)
+activate CitaBLL
+CitaBLL -> CitaRepo: ObtenerPorId(idCita)
+activate CitaRepo
+CitaRepo -> DB: EXEC Cita_SelectOne @IdCita
+activate DB
+DB --> CitaRepo: DataRow (Cita)
+deactivate DB
+CitaRepo --> CitaBLL: Cita entity
+deactivate CitaRepo
+CitaBLL --> Form: cita
+deactivate CitaBLL
+
+Form -> Form: CargarDatosCita():\ntxtFecha, txtHora, txtTipo,\ntxtCliente, txtMascota\n(solo lectura)
+
+Form -> ConsBLL: ObtenerConsultaPorCita(idCita)
+activate ConsBLL
+ConsBLL -> DB: EXEC ConsultaMedica_SelectByCita @IdCita
+activate DB
+DB --> ConsBLL: NULL (no existe consulta)
+deactivate DB
+ConsBLL --> Form: NULL
+deactivate ConsBLL
+
+alt ConsultaMedica NO existe (Modo Creación)
+
+    Form -> ConsBLL: IniciarConsulta(idCita, idVeterinario)
+    activate ConsBLL
+
+    ConsBLL -> ConsBLL: Valida cita existe
+    ConsBLL -> ConsBLL: Valida cita NO tiene consulta previa
+    ConsBLL -> ConsBLL: Valida estado cita (Agendada/Confirmada)
+
+    ConsBLL -> ConsBLL: Crea ConsultaMedica:\n{\n  IdConsulta: NEWID(),\n  IdCita: idCita,\n  IdVeterinario: idVeterinario,\n  Sintomas: "",\n  Diagnostico: "",\n  FechaConsulta: GETDATE()\n}
+
+    ConsBLL -> ConsRepo: Crear(consulta)
+    activate ConsRepo
+    ConsRepo -> DB: EXEC ConsultaMedica_Insert\n@IdConsulta, @IdCita, @IdVeterinario,\n@Sintomas, @Diagnostico, @Tratamiento,\n@Observaciones, @FechaConsulta
+    activate DB
+    DB --> ConsRepo: Filas insertadas: 1
+    deactivate DB
+    ConsRepo --> ConsBLL: void
+    deactivate ConsRepo
+
+    ConsBLL -> ConsBLL: Registra en Bitácora:\nMódulo="Consultas Médicas"\nAcción="Alta"
+
+    ConsBLL --> Form: consultaCreada
+    deactivate ConsBLL
+
+    Form -> Form: _consultaActual = consultaCreada
+
+else ConsultaMedica existe (Modo Edición)
+    Form -> Form: _consultaActual = consultaExistente
+    Form -> Form: CargarConsultaExistente():\ntxtSintomas, txtDiagnostico, etc.
+    Form -> ConsBLL: ObtenerMedicamentosDeConsulta(idConsulta)
+    activate ConsBLL
+    ConsBLL -> DB: EXEC ConsultaMedicamento_SelectByConsulta\n@IdConsulta
+    activate DB
+    DB --> ConsBLL: DataTable (medicamentos recetados)
+    deactivate DB
+    ConsBLL --> Form: List<MedicamentoRecetado>
+    deactivate ConsBLL
+    Form -> Form: Carga en _medicamentosSeleccionados\nActualiza lstSeleccionados
+end
+
+Form -> MedBLL: ListarMedicamentosDisponibles()
+activate MedBLL
+MedBLL -> DB: EXEC Medicamento_SelectDisponibles
+activate DB
+DB --> MedBLL: DataTable (Stock > 0)
+deactivate DB
+MedBLL --> Form: List<Medicamento>
+deactivate MedBLL
+
+Form -> Form: _medicamentosDisponibles = lista\nMuestra primeros 20 en lstResultados
+
+Form --> Vet: Formulario listo:\n- Datos cita (solo lectura)\n- Campos vacíos o cargados\n- Medicamentos disponibles
+
+deactivate Form
+
+== Operación 4: Agregar Medicamento a la Receta ==
+
+Vet -> Form: Selecciona medicamento en lstResultados:\n"Amoxicilina 500mg - Stock: 50"
+Vet -> Form: Clic en "Añadir"
+activate Form
+
+Form -> Form: Valida medicamento seleccionado != null
+Form -> Form: Valida NO esté ya en _medicamentosSeleccionados
+
+Form -> Modal: new FormCantidadMedicamento(medicamento)\nShowDialog()
+activate Modal
+
+Modal -> Modal: lblMedicamento: "Amoxicilina 500mg - Stock: 50"
+Modal -> Modal: numCantidad.Maximum = 50 (stock)
+Modal -> Modal: numCantidad.Value = 1
+Modal -> Modal: txtIndicaciones: "Tomar cada 8 horas" (default)
+
+Modal --> Vet: Formulario modal mostrado
+
+Vet -> Modal: Ingresa cantidad: 14
+Vet -> Modal: Modifica indicaciones:\n"Tomar cada 8 horas durante 7 días"
+Vet -> Modal: Clic en "Aceptar"
+
+Modal -> Modal: Cantidad = 14\nIndicaciones = "Tomar cada 8 horas..."\nDialogResult = OK
+
+Modal --> Form: DialogResult.OK
+deactivate Modal
+
+Form -> Form: _medicamentosSeleccionados.Add(\n  new MedicamentoSeleccionado {\n    IdMedicamento = guid,\n    Nombre = "Amoxicilina 500mg",\n    Cantidad = 14,\n    Indicaciones = "Tomar cada 8 horas..."\n  })
+
+Form -> Form: ActualizarListaSeleccionados():\nlstSeleccionados muestra:\n"Amoxicilina 500mg x 14 - Tomar cada 8 horas..."
+
+Form --> Vet: Medicamento agregado a receta
+
+deactivate Form
+
+== Operación 6: Finalizar Consulta (TRANSACCIONAL CRÍTICO) ==
+
+Vet -> Form: Completa campos:\n- Síntomas: "Fiebre alta, decaimiento, vómitos"\n- Diagnóstico: "Gastroenteritis bacteriana"
+Vet -> Form: Clic en "Finalizar Consulta"
+activate Form
+
+Form -> Form: Valida Síntomas NO vacío
+Form -> Form: Valida Diagnóstico NO vacío
+
+Form -> Form: Actualiza _consultaActual:\nSintomas = txtSintomas.Text\nDiagnostico = txtDiagnostico.Text
+
+Form -> ConsBLL: GuardarConsulta(_consultaActual)
+activate ConsBLL
+ConsBLL -> ConsBLL: Valida consulta.Validar()
+ConsBLL -> ConsRepo: Actualizar(consulta)
+activate ConsRepo
+ConsRepo -> DB: EXEC ConsultaMedica_Update\n@IdConsulta, @Sintomas, @Diagnostico,\n@Tratamiento, @Observaciones
+activate DB
+DB --> ConsRepo: Filas actualizadas: 1
+deactivate DB
+ConsRepo --> ConsBLL: void
+deactivate ConsRepo
+ConsBLL -> ConsBLL: Registra en Bitácora: "Modificación"
+ConsBLL --> Form: void
+deactivate ConsBLL
+
+Form -> ConsBLL: ObtenerMedicamentosDeConsulta(idConsulta)
+activate ConsBLL
+ConsBLL --> Form: List<MedicamentoRecetado> (actuales en BD)
+deactivate ConsBLL
+
+loop Para cada medicamento actual en BD
+    Form -> ConsBLL: EliminarMedicamento(idConsulta, idMed)
+    activate ConsBLL
+    ConsBLL -> DB: EXEC ConsultaMedicamento_Delete\n@IdConsulta, @IdMedicamento
+    activate DB
+    DB --> ConsBLL: Eliminado
+    deactivate DB
+    ConsBLL --> Form: void
+    deactivate ConsBLL
+end
+
+loop Para cada medicamento en _medicamentosSeleccionados
+    Form -> ConsBLL: AgregarMedicamento(idConsulta,\nidMed, cantidad, indicaciones)
+    activate ConsBLL
+
+    ConsBLL -> ConsBLL: Valida cantidad > 0
+
+    ConsBLL -> MedBLL: ObtenerMedicamento(idMed)
+    activate MedBLL
+    MedBLL --> ConsBLL: Medicamento
+    deactivate MedBLL
+
+    ConsBLL -> ConsBLL: Valida medicamento.Stock >= cantidad
+
+    alt Stock insuficiente (validación BLL)
+        ConsBLL --> Form: throw InvalidOperationException\n"Stock insuficiente. Disponible: X, Solicitado: Y"
+        Form -> Form: Catch exception\nMuestra MessageBox error
+        Form --> Vet: Error: Stock insuficiente
+        note right
+            NO continúa
+            Veterinario debe ajustar cantidades
+        end note
+    else Stock OK (validación BLL pasa)
+        ConsBLL -> ConsRepo: AgregarMedicamento(idConsulta,\nidMed, cantidad, indicaciones)
+        activate ConsRepo
+        ConsRepo -> DB: EXEC ConsultaMedicamento_Insert\n@IdConsulta, @IdMedicamento,\n@Cantidad, @Indicaciones
+        activate DB
+        DB --> ConsRepo: Insertado
+        deactivate DB
+        ConsRepo --> ConsBLL: void
+        deactivate ConsRepo
+
+        ConsBLL -> ConsBLL: Registra en Bitácora: "AgregarMedicamento"
+        ConsBLL --> Form: void
+    end
+    deactivate ConsBLL
+end
+
+Form -> ConsBLL: FinalizarConsulta(idConsulta)
+activate ConsBLL
+
+ConsBLL -> ConsBLL: Valida consulta existe
+ConsBLL -> ConsBLL: Valida consulta.Validar():\n- Sintomas >= 3 chars\n- Diagnostico >= 3 chars
+
+ConsBLL -> ConsRepo: FinalizarConsulta(idConsulta, idCita)
+activate ConsRepo
+
+ConsRepo -> DB: EXEC ConsultaMedica_Finalizar\n@IdConsulta, @IdCita
+activate DB
+
+note over DB #LightYellow
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    STORED PROCEDURE TRANSACCIONAL
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+end note
+
+DB -> DB: BEGIN TRANSACTION
+
+DB -> DB: Verifica stock TODOS los medicamentos:\nIF EXISTS (\n  SELECT 1\n  FROM ConsultaMedicamento cm\n  INNER JOIN Medicamento m\n    ON cm.IdMedicamento = m.IdMedicamento\n  WHERE cm.IdConsulta = @IdConsulta\n    AND m.Stock < cm.Cantidad\n)
+
+alt Stock insuficiente (validación SP final)
+    DB -> DB: ROLLBACK TRANSACTION
+    DB -> DB: RAISERROR('Stock insuficiente para...')
+    DB --> ConsRepo: Error: Stock insuficiente
+    deactivate DB
+    ConsRepo --> ConsBLL: throw SqlException
+    deactivate ConsRepo
+    ConsBLL --> Form: throw Exception
+    deactivate ConsBLL
+    Form -> Form: Catch exception\nMuestra MessageBox error
+    Form --> Vet: Error: Stock insuficiente\n(ROLLBACK completo)
+    note right
+        ✗ Cita NO actualizada a Completada
+        ✗ Stock NO reducido
+        ✗ Consulta sigue en estado borrador
+        INTEGRIDAD GARANTIZADA
+    end note
+
+else Stock OK (validación SP pasa)
+    DB -> DB: UPDATE Cita\nSET Estado = 'Completada'\nWHERE IdCita = @IdCita
+
+    DB -> DB: UPDATE Medicamento m\nSET m.Stock = m.Stock - cm.Cantidad\nFROM Medicamento m\nINNER JOIN ConsultaMedicamento cm\n  ON m.IdMedicamento = cm.IdMedicamento\nWHERE cm.IdConsulta = @IdConsulta
+
+    DB -> DB: COMMIT TRANSACTION
+
+    DB -> DB: SELECT 1 AS Resultado (éxito)
+
+    DB --> ConsRepo: Resultado = 1 (éxito)
+    deactivate DB
+    ConsRepo --> ConsBLL: true
+    deactivate ConsRepo
+
+    ConsBLL -> ConsBLL: Registra en Bitácora:\nMódulo="Consultas Médicas"\nAcción="FinalizarConsulta"\nCriticidad=Info
+
+    ConsBLL --> Form: void (éxito)
+    deactivate ConsBLL
+
+    Form -> Form: Muestra MessageBox:\n"Consulta médica finalizada exitosamente"
+
+    Form -> Form: this.Close()
+
+    Form --> Vet: ✓ Consulta finalizada\n✓ Cita estado: Completada\n✓ Stock reducido\n✓ Bitácora registrada
+    note right
+        TRANSACCIÓN EXITOSA
+        ACID garantizado
+    end note
+end
+
+deactivate Form
+
+@enduml
